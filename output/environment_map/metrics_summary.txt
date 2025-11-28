@@ -1,0 +1,28 @@
+============================================================
+3D GAUSSIAN SPLATTING - ENVIRONMENT MAP
+============================================================
+
+Mode: MAPPING
+Dataset: rgbd_dataset_freiburg1_desk
+Quality preset: fast
+Resolution: 640x480
+
+PERFORMANCE:
+  Frames processed: 150
+  Total time: 92.9s
+  Average FPS: 1.61
+  Total iterations: 2,600
+  Refinement iterations: 800
+
+MODEL:
+  Final Gaussians: 162,480
+  Max Gaussians: 150,000
+  SH Degree: 2
+  Recency weight: 0.0
+
+OUTPUT FILES:
+  1. 1_live_rendering.mp4 - Live rendering with metrics
+  2. 2_splat_visualization.mp4 - Splat visualization
+  3. 3_model_flythrough.mp4 - Model flythrough
+  4. final_map_renders/ - Renders from all viewpoints
+  final/ - Saved Gaussian model (.ply)

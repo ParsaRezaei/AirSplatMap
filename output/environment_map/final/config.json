@@ -1,0 +1,42 @@
+{
+  "intrinsics": {
+    "fx": 517.3,
+    "fy": 516.5,
+    "cx": 318.6,
+    "cy": 255.3,
+    "width": 640,
+    "height": 480
+  },
+  "config": {
+    "sh_degree": 2,
+    "white_background": false,
+    "optimizer_type": "default",
+    "position_lr_init": 0.0003,
+    "position_lr_final": 3e-06,
+    "position_lr_delay_mult": 0.01,
+    "position_lr_max_steps": 30000,
+    "feature_lr": 0.004,
+    "opacity_lr": 0.05,
+    "scaling_lr": 0.008,
+    "rotation_lr": 0.002,
+    "densify_from_iter": 100,
+    "densify_until_iter": 100000,
+    "densify_grad_threshold": 0.0002,
+    "densification_interval": 100,
+    "opacity_reset_interval": 1000,
+    "percent_dense": 0.01,
+    "lambda_dssim": 0.2,
+    "depth_l1_weight_init": 0.0,
+    "depth_l1_weight_final": 0.0,
+    "recency_weight": 0.0,
+    "depth_subsample": 4,
+    "add_gaussians_per_frame": true,
+    "add_gaussians_every": 5,
+    "add_gaussians_subsample": 12,
+    "max_gaussians": 150000
+  },
+  "iteration": 2396,
+  "num_cameras": 150,
+  "spatial_lr_scale": 1.264119267463684,
+  "cameras_extent": 1.264119267463684
+}
