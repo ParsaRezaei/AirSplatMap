@@ -197,7 +197,7 @@ class TumRGBDSource(FrameSource):
         self,
         dataset_root: str,
         sequence: Optional[str] = None,
-        max_time_diff: float = 0.05,
+        max_time_diff: float = 0.1,  # Increased from 0.05 to handle TUM dataset stream offsets
         depth_scale: float = 5000.0,
         intrinsics: Optional[Dict[str, float]] = None,
     ):

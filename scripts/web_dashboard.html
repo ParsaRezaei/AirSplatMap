@@ -1,0 +1,751 @@
+<!DOCTYPE html><html><head><meta charset="UTF-8"><title>AirSplatMap Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+<style>
+:root{--bg:#080b10;--s1:#0d1117;--s2:#161b22;--br:#30363d;--tx:#e6edf3;--dm:#7d8590;--ac:#58a6ff;--gn:#3fb950;--rd:#f85149;--or:#d29922;--cy:#39c5cf}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--tx);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--s2)}::-webkit-scrollbar-thumb{background:var(--br);border-radius:3px}
+
+/* Top bar */
+.topbar{height:32px;background:var(--s1);border-bottom:1px solid var(--br);display:flex;align-items:center;padding:0 10px;gap:10px}
+.logo{font-weight:600;font-size:11px;color:var(--ac)}
+.current-run{display:flex;align-items:center;gap:6px;padding:3px 8px;background:var(--s2);border-radius:3px;font-size:9px;max-width:200px}
+.current-run .eng{color:var(--gn);font-weight:600;white-space:nowrap}
+.current-run .ds{color:var(--tx);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px}
+.current-run .replay-badge{color:var(--or);font-size:7px}
+.stats{display:flex;gap:10px;margin-left:auto}
+.stat{display:flex;flex-direction:column;align-items:center}
+.stat-val{font-size:10px;font-weight:600}
+.stat-val.fps{color:var(--ac)}.stat-val.loss{color:var(--or)}.stat-val.gauss{color:var(--gn)}.stat-val.psnr{color:var(--cy)}
+.stat-lbl{font-size:6px;color:var(--dm);text-transform:uppercase}
+.prog-wrap{display:flex;align-items:center;gap:4px}
+.prog-bar{width:50px;height:4px;background:var(--s2);border-radius:2px;overflow:hidden}
+.prog-fill{height:100%;background:var(--ac);transition:width .1s}
+.prog-txt{font-size:8px;color:var(--dm)}
+.conn .dot{width:6px;height:6px;border-radius:50%;background:var(--rd)}.conn .dot.ok{background:var(--gn)}
+
+/* Main layout */
+.main{flex:1;display:flex;overflow:hidden}
+
+/* Sidebar */
+.sidebar{width:170px;background:var(--s1);border-right:1px solid var(--br);display:flex;flex-direction:column;font-size:9px}
+.sidebar-section{padding:6px;border-bottom:1px solid var(--br)}
+.sidebar-section.grow{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.sidebar-title{font-size:7px;font-weight:600;color:var(--dm);text-transform:uppercase;margin-bottom:3px}
+.sidebar input[type=text],.sidebar select{width:100%;padding:3px 5px;background:var(--bg);border:1px solid var(--br);border-radius:2px;color:var(--tx);font-size:8px;margin-bottom:3px}
+#datasetList,#engineList{overflow-y:auto;flex:1}
+.list-item{padding:3px 4px;border-radius:2px;cursor:pointer;display:flex;justify-content:space-between;margin-bottom:1px}
+.list-item:hover{background:var(--s2)}
+.list-item.selected{background:rgba(88,166,255,.15);color:var(--ac)}
+.list-item .fr{color:var(--dm);font-size:7px}
+.btn-row{display:flex;gap:3px;margin-top:3px}
+.btn{flex:1;padding:4px;border:none;border-radius:2px;font-size:8px;cursor:pointer;font-weight:500}
+.btn-primary{background:var(--ac);color:#fff}.btn-primary:disabled{opacity:.5}
+.btn-success{background:var(--gn);color:#fff}
+.btn-danger{background:var(--rd);color:#fff}
+.btn-outline{background:transparent;border:1px solid var(--br);color:var(--tx)}
+
+/* History table */
+.history-wrap{flex:1;overflow-y:auto;margin-top:3px}
+.hist-tbl{width:100%;border-collapse:collapse;font-size:7px}
+.hist-tbl tr{cursor:pointer;background:var(--bg);border-bottom:1px solid var(--br)}
+.hist-tbl tr:hover{background:var(--s2)}
+.hist-tbl tr.disabled{opacity:0.5;cursor:not-allowed}
+.hist-tbl td{padding:4px 3px;vertical-align:middle}
+.hist-tbl .eng{color:var(--ac);font-weight:600;width:40px;white-space:nowrap}
+.hist-tbl .ds{color:var(--tx);max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-tbl .ds:hover{white-space:normal;word-break:break-all}
+.hist-tbl .num{color:var(--dm);text-align:right;width:28px;font-size:6px}
+.hist-tbl .num.fps{color:var(--gn)}
+
+/* Replay bar - fixed at bottom of sidebar */
+.replay-section{background:var(--s2);border-top:1px solid var(--br);padding:8px;display:none}
+.replay-section.active{display:block}
+.replay-section .title{font-size:8px;color:var(--dm);margin-bottom:2px;display:flex;justify-content:space-between}
+.replay-section .slider-row{margin:8px 0 10px 0}
+.replay-section input[type=range]{width:100%;height:6px;cursor:pointer;-webkit-appearance:none;appearance:none;background:var(--bg);border-radius:3px}
+.replay-section input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;background:var(--ac);border-radius:50%;cursor:pointer}
+.replay-section .ctrls{display:flex;gap:4px;margin-top:6px}
+.replay-section .ctrls button{flex:1;padding:6px;background:var(--bg);border:1px solid var(--br);color:var(--tx);border-radius:3px;font-size:9px;cursor:pointer}
+.replay-section .ctrls button:hover{background:var(--s1)}
+.replay-section .ctrls button.active{background:var(--ac);color:#fff}
+
+/* Workspace */
+.workspace{flex:1;display:flex;flex-direction:column;gap:1px;background:var(--br);padding:1px}
+.panel-row{display:flex;gap:1px;flex:1;min-height:0}
+.panel{background:var(--s1);display:flex;flex-direction:column;overflow:hidden;position:relative;flex:1;min-width:80px}
+.panel-header{height:22px;background:var(--s2);border-bottom:1px solid var(--br);display:flex;align-items:center;padding:0 6px;gap:4px}
+.panel-header .drag{cursor:grab;color:var(--dm);font-size:8px;padding:0 2px;user-select:none}
+.panel-header .drag:hover{color:var(--ac)}
+.panel-header .title{font-size:8px;font-weight:500;flex:1}
+.panel-header select,.panel-header input{background:var(--bg);border:1px solid var(--br);color:var(--tx);font-size:7px;padding:2px 3px;border-radius:2px}
+.panel-header input[type=number]{width:50px}
+.panel-header input[type=range]{width:40px;height:3px}
+.panel-header .size-lbl{font-size:6px;color:var(--dm);min-width:22px}
+.panel-content{flex:1;position:relative;overflow:hidden}
+
+/* 3D viewers */
+.viewer-3d{width:100%;height:100%;background:var(--bg)}
+.viewer-3d canvas{width:100%!important;height:100%!important;display:block}
+.viewer-info{position:absolute;bottom:3px;left:3px;background:rgba(0,0,0,.85);padding:2px 5px;border-radius:2px;font-size:7px;color:var(--dm)}
+
+/* Image views */
+.img-view{width:100%;height:100%;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.img-view img{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}
+.img-view .ph{color:var(--dm);font-size:8px}
+
+/* Chart */
+.chart-wrap{width:100%;height:100%;padding:4px}
+.chart-wrap canvas{width:100%!important;height:100%!important}
+</style></head><body>
+
+<div class="topbar">
+  <div class="logo">🛰️ AirSplatMap</div>
+  <div class="current-run">
+    <span class="eng" id="curEng">—</span>
+    <span class="ds" id="curDs" title=""></span>
+    <span class="replay-badge" id="replayBadge" style="display:none">⏪</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><span class="stat-val fps" id="vFps">0</span><span class="stat-lbl">FPS</span></div>
+    <div class="stat"><span class="stat-val loss" id="vLoss">0</span><span class="stat-lbl">Loss</span></div>
+    <div class="stat"><span class="stat-val gauss" id="vGauss">0</span><span class="stat-lbl">Splats</span></div>
+    <div class="stat"><span class="stat-val psnr" id="vPsnr">0</span><span class="stat-lbl">PSNR</span></div>
+    <div class="prog-wrap">
+      <div class="prog-bar"><div class="prog-fill" id="vProg"></div></div>
+      <span class="prog-txt" id="vFrame">0/0</span>
+    </div>
+  </div>
+  <div class="conn"><div class="dot" id="connDot"></div></div>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-title">Engine</div>
+      <div id="engineList"></div>
+    </div>
+    <div class="sidebar-section grow">
+      <div class="sidebar-title">Dataset</div>
+      <input type="text" id="datasetFilter" placeholder="Search...">
+      <div id="datasetList"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnStart" disabled>▶ Start</button>
+        <button class="btn btn-danger" id="btnStop">⏹ Stop</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-outline" id="btnClear">Clear</button>
+      </div>
+    </div>
+    <div class="sidebar-section">
+      <div class="sidebar-title">Renderer</div>
+      <select id="renderEngine">
+        <option value="auto">Auto</option>
+        <option value="native">Native</option>
+        <option value="sw">Software</option>
+      </select>
+    </div>
+    <div class="sidebar-section grow" style="min-height:80px">
+      <div class="sidebar-title">History <span id="histNote" style="color:var(--or)"></span></div>
+      <div class="history-wrap" id="historyList"></div>
+    </div>
+    <div class="replay-section" id="replayBar">
+      <div class="title"><span id="rInfo">0/0</span><span id="rKey"></span></div>
+      <div class="slider-row">
+        <input type="range" id="replaySlider" min="0" max="100" value="0">
+      </div>
+      <div class="ctrls">
+        <button id="rPlay">▶ Play</button>
+        <button id="rPrev">◀</button>
+        <button id="rNext">▶</button>
+        <button id="rClose">✕ Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="workspace" id="workspace">
+    <div class="panel-row" id="row0">
+      <div class="panel" id="p0">
+        <div class="panel-header">
+          <span class="drag">⋮⋮</span>
+          <span class="title">3D Points</span>
+          <input type="number" id="pts3d" value="20000" min="1000" max="100000" step="1000" title="Max points">
+        </div>
+        <div class="panel-content viewer-3d" id="v3d"></div>
+      </div>
+      <div class="panel" id="p1">
+        <div class="panel-header">
+          <span class="drag">⋮⋮</span>
+          <span class="title">3D Splats</span>
+          <input type="range" id="splatSize" min="0.5" max="5" step="0.1" value="2" title="Size">
+          <span class="size-lbl" id="sizeLbl">2x</span>
+          <input type="range" id="splatOpacity" min="0.1" max="1" step="0.05" value="0.7" title="Opacity">
+        </div>
+        <div class="panel-content viewer-3d" id="vSplat"></div>
+      </div>
+      <div class="panel" id="p2">
+        <div class="panel-header">
+          <span class="drag">⋮⋮</span>
+          <span class="title">Camera</span>
+          <select id="fpsMode"><option value="30">30fps</option><option value="15">15fps</option><option value="60">60fps</option><option value="0">Max</option></select>
+        </div>
+        <div class="panel-content img-view"><img id="camImg" style="display:none"><div class="ph" id="camPh">Waiting...</div></div>
+      </div>
+      <div class="panel" id="p3">
+        <div class="panel-header">
+          <span class="drag">⋮⋮</span>
+          <span class="title">Rendered</span>
+        </div>
+        <div class="panel-content img-view"><img id="rendImg" style="display:none"><div class="ph" id="rendPh">Waiting...</div></div>
+      </div>
+    </div>
+    <div class="panel-row" id="row1" style="flex:0.4">
+      <div class="panel">
+        <div class="panel-header">
+          <span class="drag">⋮⋮</span>
+          <span class="title">Metrics</span>
+          <select id="chartY1"><option value="fps">FPS</option><option value="psnr">PSNR</option></select>
+          <select id="chartY2"><option value="loss">Loss</option><option value="gaussians">Splats</option></select>
+        </div>
+        <div class="panel-content chart-wrap"><canvas id="chart"></canvas></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let engines=[],datasets=[],history=[],ws;
+let settings={target_fps:30,unlimited:false,pts_3d:20000,splat_size:2.0,splat_opacity:0.7,render_engine:'auto'};
+let selEng=null,selDs=null,curKey=null,isRunning=false;
+let chartData={},chart,v3d,vSplat;
+let rKey=null,rTotal=0,rPlaying=false,rTimer=null,isReplaying=false;
+let lastPts=null,lastCols=null;
+let cumPtPos=new Float32Array(0);
+let cumSplatPts=new Float32Array(0),cumSplatCols=new Float32Array(0);
+
+function connect(){
+  ws=new WebSocket(`ws://${location.hostname}:WS_PORT`);
+  ws.onopen=()=>$('connDot').classList.add('ok');
+  ws.onclose=()=>{$('connDot').classList.remove('ok');setTimeout(connect,2000)};
+  ws.onmessage=e=>handleMsg(JSON.parse(e.data));
+}
+
+function handleMsg(m){
+  if(m.type==='init'){
+    engines=m.engines||[];datasets=m.datasets||[];history=m.history||[];
+    if(m.settings){settings={...settings,...m.settings};syncUI()}
+    if(m.current){setCur(m.current);isRunning=true;}
+    render();
+    renderHist();
+  }
+  else if(m.type==='current'){
+    setCur(m.key);
+    isRunning=true;
+    cumPtPos=new Float32Array(0);
+    cumSplatPts=new Float32Array(0);cumSplatCols=new Float32Array(0);
+    chartData[m.key]={fps:[],loss:[],gaussians:[],psnr:[]};
+    renderHist();
+  }
+  else if(m.type==='update'){
+    updateStats(m);
+    updateViewersCumulative(m);
+    if(m.image)updImg('camImg','camPh',m.image);
+    if(m.rendered)updImg('rendImg','rendPh',m.rendered);
+    updateChartPt(m.key,m);
+  }
+  else if(m.type==='complete'){
+    isRunning=false;
+    if(m.run){
+      history.unshift(m.run);
+      renderHist();
+      if(m.run.key && m.run.total_frames>0){
+        setTimeout(()=>openReplay(m.run.key, m.run.total_frames), 500);
+      }
+    }
+  }
+  else if(m.type==='stopped'){
+    isRunning=false;
+    renderHist();
+  }
+  else if(m.type==='cleared'){
+    chartData={};if(chart){chart.data.datasets=[];chart.update()}
+    updateStats({});setCur(null);clearViews();
+    isRunning=false;
+    cumPtPos=new Float32Array(0);
+    cumSplatPts=new Float32Array(0);cumSplatCols=new Float32Array(0);
+  }
+  else if(m.type==='settings'){settings={...settings,...m.data};syncUI()}
+  else if(m.type==='snap_info'){m.total>0?openReplay(m.key,m.total):alert('No replay data')}
+  else if(m.type==='replay_frame'){showReplay(m);if(m.rendered)updImg('rendImg','rendPh',m.rendered)}
+  else if(m.type==='replay_metrics'){loadReplayMetrics(m)}
+}
+
+function syncUI(){
+  $('pts3d').value=settings.pts_3d||20000;
+  $('fpsMode').value=settings.unlimited?'0':String(settings.target_fps||30);
+  $('splatSize').value=settings.splat_size||2.0;
+  $('sizeLbl').textContent=(settings.splat_size||2.0).toFixed(1)+'x';
+  $('splatOpacity').value=settings.splat_opacity||0.7;
+  $('renderEngine').value=settings.render_engine||'auto';
+}
+
+function setCur(k){
+  curKey=k;
+  if(k){
+    const p=k.split('_');
+    $('curEng').textContent=p[0];
+    const dsName=p.slice(1).join('_').replace('rgbd_dataset_','');
+    $('curDs').textContent=dsName;
+    $('curDs').title=dsName;
+  }else{
+    $('curEng').textContent='—';
+    $('curDs').textContent='';
+    $('curDs').title='';
+  }
+  $('replayBadge').style.display='none';
+}
+
+function updateStats(m){
+  $('vFps').textContent=(m.fps||0).toFixed(1);
+  $('vLoss').textContent=(m.loss||0).toFixed(4);
+  $('vGauss').textContent=((m.gaussians||0)/1000).toFixed(1)+'k';
+  $('vPsnr').textContent=(m.psnr||0).toFixed(1);
+  $('vFrame').textContent=(m.frame||0)+'/'+(m.total||0);
+  $('vProg').style.width=m.total?(m.frame/m.total*100)+'%':'0%';
+}
+
+function render(){
+  $('engineList').innerHTML=engines.filter(e=>e.available).map(e=>{
+    const cls=selEng===e.name?' selected':'';
+    return '<div class="list-item'+cls+'" onclick="selEng=\''+e.name+'\';render();updBtn()">'+e.name+'</div>';
+  }).join('');
+  const flt=$('datasetFilter').value.toLowerCase();
+  $('datasetList').innerHTML=datasets.filter(d=>d.name.toLowerCase().includes(flt)).map(d=>{
+    const cls=selDs===d.name?' selected':'';
+    const name=d.name.replace('rgbd_dataset_','');
+    return '<div class="list-item'+cls+'" onclick="selDs=\''+d.name+'\';render();updBtn()"><span title="'+d.name+'">'+name+'</span><span class="fr">'+d.frames+'</span></div>';
+  }).join('');
+}
+
+function renderHist(){
+  $('histNote').textContent=isRunning?'(running)':'';
+  const sorted=[...history].sort((a,b)=>new Date(b.timestamp||0)-new Date(a.timestamp||0));
+  let html='<table class="hist-tbl">';
+  sorted.slice(0,25).forEach(h=>{
+    const cls=isRunning?' class="disabled"':'';
+    const dsName=h.dataset.replace('rgbd_dataset_','');
+    const frames=h.total_frames||h.frames||'?';
+    const fps=(h.avg_fps||0).toFixed(1);
+    if(isRunning){
+      html+='<tr'+cls+'><td class="eng">'+h.engine+'</td><td class="ds" title="'+dsName+'">'+dsName+'</td><td class="num">'+frames+'</td><td class="num fps">'+fps+'</td></tr>';
+    }else{
+      html+='<tr onclick="reqReplay(\''+h.key+'\')"><td class="eng">'+h.engine+'</td><td class="ds" title="'+dsName+'">'+dsName+'</td><td class="num">'+frames+'</td><td class="num fps">'+fps+'</td></tr>';
+    }
+  });
+  html+='</table>';
+  $('historyList').innerHTML=html;
+}
+
+function updBtn(){$('btnStart').disabled=!(selEng&&selDs)}
+function clearViews(){
+  v3d.geo.setAttribute('position',new THREE.Float32BufferAttribute([],3));
+  vSplat.geo.setAttribute('position',new THREE.Float32BufferAttribute([],3));
+  v3d.info.textContent='0';vSplat.info.textContent='0';
+  $('camImg').style.display='none';$('camPh').style.display='block';
+  $('rendImg').style.display='none';$('rendPh').style.display='block';
+}
+
+// Event handlers
+$('datasetFilter').oninput=render;
+$('btnStart').onclick=()=>{if(selEng&&selDs)ws.send(JSON.stringify({cmd:'start',engine:selEng,dataset:selDs}))};
+$('btnStop').onclick=()=>{
+  if(curKey)ws.send(JSON.stringify({cmd:'stop',key:curKey}));
+  ws.send(JSON.stringify({cmd:'stop_all'}));
+};
+$('btnClear').onclick=()=>ws.send(JSON.stringify({cmd:'clear'}));
+
+// Settings handlers
+$('pts3d').onchange=function(){settings.pts_3d=parseInt(this.value)||20000;sendSettings()};
+$('fpsMode').onchange=function(){settings.target_fps=parseInt(this.value)||30;settings.unlimited=this.value==='0';sendSettings()};
+$('splatSize').oninput=function(){
+  settings.splat_size=parseFloat(this.value);
+  $('sizeLbl').textContent=settings.splat_size.toFixed(1)+'x';
+  if(vSplat)vSplat.mat.size=0.02*settings.splat_size;
+};
+$('splatSize').onchange=function(){sendSettings()};
+$('splatOpacity').oninput=function(){
+  settings.splat_opacity=parseFloat(this.value);
+  if(vSplat)vSplat.mat.opacity=settings.splat_opacity;
+};
+$('splatOpacity').onchange=function(){sendSettings()};
+$('renderEngine').onchange=function(){settings.render_engine=this.value;sendSettings()};
+function sendSettings(){ws.send(JSON.stringify({cmd:'settings',data:settings}))}
+
+// 3D Viewers
+function initViewer(id,isSplat=false){
+  const c=$(id);
+  c.innerHTML='<canvas></canvas><div class="viewer-info">0</div>';
+  const canvas=c.querySelector('canvas');
+  const scene=new THREE.Scene();
+  scene.background=new THREE.Color(0x080b10);
+  const cam=new THREE.PerspectiveCamera(60,c.clientWidth/c.clientHeight,0.01,100);
+  const rend=new THREE.WebGLRenderer({canvas,antialias:true});
+  rend.setSize(c.clientWidth,c.clientHeight);
+  scene.add(new THREE.GridHelper(4,20,0x30363d,0x252d3a));
+  scene.add(new THREE.AxesHelper(0.1));
+  
+  const mat=new THREE.PointsMaterial({
+    size:isSplat?0.02:0.004,
+    vertexColors:isSplat,
+    color:isSplat?undefined:0x88ccff,
+    transparent:true,
+    opacity:isSplat?(settings.splat_opacity||0.7):0.7,
+    sizeAttenuation:true,
+    depthWrite:true,
+    depthTest:true
+  });
+  const geo=new THREE.BufferGeometry();
+  const pts=new THREE.Points(geo,mat);
+  scene.add(pts);
+  
+  let sph={r:2.5,t:Math.PI/4,p:Math.PI/2.5},tgt=new THREE.Vector3(),drag=0,pan=0,pm={x:0,y:0};
+  function upd(){
+    cam.position.set(
+      tgt.x+sph.r*Math.sin(sph.p)*Math.cos(sph.t),
+      tgt.y+sph.r*Math.cos(sph.p),
+      tgt.z+sph.r*Math.sin(sph.p)*Math.sin(sph.t)
+    );
+    cam.lookAt(tgt);
+  }
+  upd();
+  
+  canvas.onmousedown=e=>{drag=e.button===0?1:0;pan=e.button===2?1:0;pm={x:e.clientX,y:e.clientY}};
+  window.addEventListener('mouseup',()=>{drag=0;pan=0});
+  canvas.onmousemove=e=>{
+    if(drag){sph.t+=(e.clientX-pm.x)*.01;sph.p=Math.max(.1,Math.min(Math.PI-.1,sph.p+(e.clientY-pm.y)*.01));upd()}
+    if(pan){const dx=(e.clientX-pm.x)*.002*sph.r,dy=(e.clientY-pm.y)*.002*sph.r;
+      const r=new THREE.Vector3().subVectors(cam.position,tgt).normalize();
+      const u=new THREE.Vector3(0,1,0);const rt=new THREE.Vector3().crossVectors(u,r);
+      tgt.add(rt.multiplyScalar(-dx)).add(u.multiplyScalar(dy));upd()}
+    pm={x:e.clientX,y:e.clientY};
+  };
+  canvas.onwheel=e=>{e.preventDefault();sph.r=Math.max(.1,Math.min(20,sph.r*(1+e.deltaY*.001)));upd()};
+  canvas.oncontextmenu=e=>e.preventDefault();
+  
+  (function anim(){requestAnimationFrame(anim);rend.render(scene,cam)})();
+  new ResizeObserver(()=>{
+    if(c.clientWidth>0&&c.clientHeight>0){
+      cam.aspect=c.clientWidth/c.clientHeight;
+      cam.updateProjectionMatrix();
+      rend.setSize(c.clientWidth,c.clientHeight);
+    }
+  }).observe(c);
+  
+  return{scene,cam,rend,pts,geo,mat,tgt,sph,upd,info:c.querySelector('.viewer-info'),ok:false,isSplat};
+}
+
+function updateViewersCumulative(m){
+  if(!m.points||m.points.length<10)return;
+  try{
+    const newPts=dec(m.points);
+    const newCols=m.colors?dec(m.colors):null;
+    const newN=newPts.length/3;
+    lastPts=newPts;lastCols=newCols;
+    
+    const pos=new Float32Array(newN*3);
+    for(let i=0;i<newN;i++){
+      pos[i*3]=newPts[i*3];
+      pos[i*3+1]=newPts[i*3+2];
+      pos[i*3+2]=newPts[i*3+1];
+    }
+    
+    // 3D Points: cumulative - halve old data when max reached
+    const maxPts=settings.pts_3d||20000;
+    if(cumPtPos.length===0){
+      cumPtPos=new Float32Array(pos);
+    }else{
+      // Only halve when we're significantly over the limit (1.5x)
+      const currentN=cumPtPos.length/3;
+      const totalAfter=currentN+newN;
+      if(totalAfter>maxPts*1.5){
+        // Halve old data by keeping every other point
+        const halfN=Math.floor(currentN/2);
+        const halved=new Float32Array(halfN*3);
+        for(let i=0;i<halfN;i++){
+          const src=i*2;  // Take every other point
+          halved[i*3]=cumPtPos[src*3];
+          halved[i*3+1]=cumPtPos[src*3+1];
+          halved[i*3+2]=cumPtPos[src*3+2];
+        }
+        // Merge halved old + all new
+        const merged=new Float32Array(halved.length+pos.length);
+        merged.set(halved);merged.set(pos,halved.length);
+        cumPtPos=merged;
+      }else{
+        const merged=new Float32Array(cumPtPos.length+pos.length);
+        merged.set(cumPtPos);merged.set(pos,cumPtPos.length);
+        cumPtPos=merged;
+      }
+    }
+    v3d.geo.setAttribute('position',new THREE.Float32BufferAttribute(cumPtPos,3));
+    v3d.geo.attributes.position.needsUpdate=true;
+    v3d.geo.computeBoundingSphere();
+    if(!v3d.ok&&v3d.geo.boundingSphere&&v3d.geo.boundingSphere.radius>0){
+      v3d.tgt.copy(v3d.geo.boundingSphere.center);
+      v3d.sph.r=Math.max(1,v3d.geo.boundingSphere.radius*2.5);
+      v3d.upd();v3d.ok=true;
+    }
+    v3d.info.textContent=(cumPtPos.length/3).toLocaleString();
+    
+    // 3D Splats: cumulative with color - halve old data when significantly over max
+    const maxSplats=50000;
+    if(cumSplatPts.length===0){
+      cumSplatPts=new Float32Array(pos);
+      cumSplatCols=newCols?new Float32Array(newCols):null;
+    }else{
+      const currentSN=cumSplatPts.length/3;
+      const totalAfter=currentSN+newN;
+      if(totalAfter>maxSplats*1.5){
+        // Halve old data by keeping every other point
+        const halfN=Math.floor(currentSN/2);
+        const halvedP=new Float32Array(halfN*3);
+        const halvedC=cumSplatCols?new Float32Array(halfN*3):null;
+        for(let i=0;i<halfN;i++){
+          const src=i*2;
+          halvedP[i*3]=cumSplatPts[src*3];
+          halvedP[i*3+1]=cumSplatPts[src*3+1];
+          halvedP[i*3+2]=cumSplatPts[src*3+2];
+          if(halvedC&&cumSplatCols){
+            halvedC[i*3]=cumSplatCols[src*3];
+            halvedC[i*3+1]=cumSplatCols[src*3+1];
+            halvedC[i*3+2]=cumSplatCols[src*3+2];
+          }
+        }
+        // Merge halved old + all new
+        const merged=new Float32Array(halvedP.length+pos.length);
+        merged.set(halvedP);merged.set(pos,halvedP.length);
+        cumSplatPts=merged;
+        if(newCols||halvedC){
+          const mc=new Float32Array((halvedC?halvedC.length:0)+(newCols?newCols.length:0));
+          if(halvedC)mc.set(halvedC);
+          if(newCols)mc.set(newCols,halvedC?halvedC.length:0);
+          cumSplatCols=mc;
+        }
+      }else{
+        const merged=new Float32Array(cumSplatPts.length+pos.length);
+        merged.set(cumSplatPts);merged.set(pos,cumSplatPts.length);
+        cumSplatPts=merged;
+        if(newCols){
+          const mc=new Float32Array((cumSplatCols?cumSplatCols.length:0)+newCols.length);
+          if(cumSplatCols)mc.set(cumSplatCols);
+          mc.set(newCols,cumSplatCols?cumSplatCols.length:0);
+          cumSplatCols=mc;
+        }
+      }
+    }
+    updateSplatViewer();
+  }catch(e){console.error('View update error:',e)}
+}
+
+function updateSplatViewer(){
+  if(!vSplat||cumSplatPts.length===0)return;
+  const n=cumSplatPts.length/3;
+  const sclr=getColors(n,cumSplatCols);
+  vSplat.geo.setAttribute('position',new THREE.Float32BufferAttribute(cumSplatPts,3));
+  vSplat.geo.setAttribute('color',new THREE.Float32BufferAttribute(sclr,3));
+  vSplat.geo.attributes.position.needsUpdate=true;
+  vSplat.geo.attributes.color.needsUpdate=true;
+  vSplat.geo.computeBoundingSphere();
+  vSplat.mat.size=0.02*(settings.splat_size||2.0);
+  vSplat.mat.opacity=settings.splat_opacity||0.7;
+  if(!vSplat.ok&&vSplat.geo.boundingSphere&&vSplat.geo.boundingSphere.radius>0){
+    vSplat.tgt.copy(vSplat.geo.boundingSphere.center);
+    vSplat.sph.r=Math.max(1,vSplat.geo.boundingSphere.radius*2.5);
+    vSplat.upd();vSplat.ok=true;
+  }
+  vSplat.info.textContent=n.toLocaleString();
+}
+
+function getColors(n,cols){
+  const clr=new Float32Array(n*3);
+  if(cols&&cols.length>=n*3){
+    for(let i=0;i<n*3;i++)clr[i]=Math.min(1,Math.max(0,cols[i]));
+  }else{
+    for(let i=0;i<n;i++){clr[i*3]=.4;clr[i*3+1]=.7;clr[i*3+2]=.9}
+  }
+  return clr;
+}
+
+function dec(b64){const bin=atob(b64),bytes=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i);return new Float32Array(bytes.buffer)}
+function updImg(imgId,phId,b64){$(imgId).src='data:image/jpeg;base64,'+b64;$(imgId).style.display='block';$(phId).style.display='none'}
+
+// Chart
+function initChart(){
+  chart=new Chart($('chart').getContext('2d'),{
+    type:'line',data:{labels:[],datasets:[]},
+    options:{
+      responsive:true,maintainAspectRatio:false,animation:false,
+      scales:{
+        x:{display:false},
+        y:{position:'left',grid:{color:'#30363d'},ticks:{color:'#7d8590',font:{size:8}}},
+        y1:{position:'right',grid:{display:false},ticks:{color:'#7d8590',font:{size:8}}}
+      },
+      plugins:{legend:{display:true,position:'top',labels:{boxWidth:8,font:{size:7},color:'#e6edf3'}}}
+    }
+  });
+}
+
+function updateChartPt(key,m){
+  if(!chartData[key])chartData[key]={fps:[],loss:[],gaussians:[],psnr:[]};
+  chartData[key].fps.push(m.fps||0);
+  chartData[key].loss.push(m.loss||0);
+  chartData[key].gaussians.push((m.gaussians||0)/1000);
+  chartData[key].psnr.push(m.psnr||0);
+  rebuildChart();
+}
+
+function rebuildChart(){
+  const y1=$('chartY1').value,y2=$('chartY2').value;
+  const colors=['#58a6ff','#3fb950','#d29922','#f85149','#a371f7'];
+  let ci=0;
+  chart.data.labels=[];chart.data.datasets=[];
+  for(const key in chartData){
+    const d=chartData[key];
+    const n=d.fps.length;
+    if(chart.data.labels.length<n)chart.data.labels=Array.from({length:n},(_,i)=>i);
+    const c=colors[ci%colors.length];ci++;
+    // Just show metric name, not the full key
+    const y1Label=y1.charAt(0).toUpperCase()+y1.slice(1);
+    const y2Label=y2.charAt(0).toUpperCase()+y2.slice(1);
+    chart.data.datasets.push({label:y1Label,data:d[y1],borderColor:c,backgroundColor:c+'40',tension:.3,pointRadius:0,borderWidth:1,yAxisID:'y'});
+    chart.data.datasets.push({label:y2Label,data:d[y2],borderColor:c,backgroundColor:'transparent',borderDash:[3,3],tension:.3,pointRadius:0,borderWidth:1,yAxisID:'y1'});
+  }
+  chart.update();
+}
+
+$('chartY1').onchange=rebuildChart;
+$('chartY2').onchange=rebuildChart;
+
+// Replay
+function reqReplay(k){if(!isRunning)ws.send(JSON.stringify({cmd:'get_snaps',key:k}))}
+
+function openReplay(k,total){
+  rKey=k;rTotal=total;isReplaying=true;
+  $('replayBar').classList.add('active');
+  $('replaySlider').max=total-1;
+  $('replaySlider').value=total-1;
+  $('rKey').textContent=k.split('_')[0];
+  $('replayBadge').style.display='inline';
+  const p=k.split('_');
+  $('curEng').textContent=p[0];
+  const dsName=p.slice(1).join('_').replace('rgbd_dataset_','');
+  $('curDs').textContent=dsName;
+  $('curDs').title=dsName;
+  ws.send(JSON.stringify({cmd:'replay_range',key:k,end_frame:total-1}));
+}
+
+function loadReplayMetrics(m){
+  if(!chartData[m.key])chartData[m.key]={fps:[],loss:[],gaussians:[],psnr:[]};
+  const d=chartData[m.key];
+  d.fps=m.metrics.map(x=>x.fps);
+  d.loss=m.metrics.map(x=>x.loss);
+  d.gaussians=m.metrics.map(x=>(x.gaussians||0)/1000);
+  d.psnr=m.metrics.map(x=>x.psnr);
+  rebuildChart();
+  ws.send(JSON.stringify({cmd:'replay',key:m.key,frame:m.frame}));
+}
+
+function showReplay(m){
+  if(m.points){
+    const pts=dec(m.points);
+    const cols=m.colors?dec(m.colors):null;
+    lastPts=pts;lastCols=cols;
+    const n=pts.length/3;
+    
+    const pos=new Float32Array(n*3);
+    for(let i=0;i<n;i++){
+      pos[i*3]=pts[i*3];pos[i*3+1]=pts[i*3+2];pos[i*3+2]=pts[i*3+1];
+    }
+    
+    v3d.geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+    v3d.geo.attributes.position.needsUpdate=true;
+    v3d.geo.computeBoundingSphere();
+    v3d.info.textContent=n.toLocaleString();
+    
+    const clr=getColors(n,cols);
+    vSplat.geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+    vSplat.geo.setAttribute('color',new THREE.Float32BufferAttribute(clr,3));
+    vSplat.geo.attributes.position.needsUpdate=true;
+    vSplat.geo.attributes.color.needsUpdate=true;
+    vSplat.geo.computeBoundingSphere();
+    vSplat.mat.size=0.02*(settings.splat_size||2.0);
+    vSplat.mat.opacity=settings.splat_opacity||0.7;
+    vSplat.info.textContent=n.toLocaleString();
+    
+    if(m.frame<=1 && v3d.geo.boundingSphere && v3d.geo.boundingSphere.radius>0){
+      v3d.tgt.copy(v3d.geo.boundingSphere.center);
+      v3d.sph.r=Math.max(1,v3d.geo.boundingSphere.radius*2.5);
+      v3d.upd();
+      vSplat.tgt.copy(vSplat.geo.boundingSphere.center);
+      vSplat.sph.r=Math.max(1,vSplat.geo.boundingSphere.radius*2.5);
+      vSplat.upd();
+    }
+  }
+  if(m.image)updImg('camImg','camPh',m.image);
+  $('rInfo').textContent=`${m.frame+1}/${m.total}`;
+  $('replaySlider').value=m.frame;
+  updateStats(m);
+}
+
+$('replaySlider').oninput=function(){
+  if(rKey){
+    const f=parseInt(this.value);
+    ws.send(JSON.stringify({cmd:'replay',key:rKey,frame:f}));
+  }
+};
+
+$('rPlay').onclick=togglePlay;
+$('rPrev').onclick=()=>rStep(-1);
+$('rNext').onclick=()=>rStep(1);
+$('rClose').onclick=closeReplay;
+
+function togglePlay(){
+  rPlaying=!rPlaying;
+  $('rPlay').textContent=rPlaying?'⏸ Pause':'▶ Play';
+  $('rPlay').classList.toggle('active',rPlaying);
+  if(rPlaying)rTimer=setInterval(()=>rStep(1),100);
+  else clearInterval(rTimer);
+}
+
+function rStep(d){
+  if(!rKey)return;
+  let f=parseInt($('replaySlider').value)+d;
+  if(f<0)f=0;if(f>=rTotal)f=rTotal-1;
+  $('replaySlider').value=f;
+  ws.send(JSON.stringify({cmd:'replay',key:rKey,frame:f}));
+}
+
+function closeReplay(){
+  rPlaying=false;clearInterval(rTimer);
+  $('replayBar').classList.remove('active');
+  $('replayBadge').style.display='none';
+  isReplaying=false;rKey=null;
+}
+
+// Init
+window.onload=()=>{
+  v3d=initViewer('v3d',false);
+  vSplat=initViewer('vSplat',true);
+  initChart();
+  connect();
+  
+  // Panel drag
+  document.querySelectorAll('.panel-row').forEach(row=>{
+    new Sortable(row,{animation:150,handle:'.drag',ghostClass:'sortable-ghost'});
+  });
+};
+</script>
+</body></html>

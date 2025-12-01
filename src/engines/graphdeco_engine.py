@@ -191,18 +191,26 @@ class GraphdecoEngine(BaseGSEngine):
             graphdeco_path: Optional path to the gaussian-splatting repository.
                 If not provided, will search standard locations.
         """
+        # Track availability
+        self._graphdeco_available = False
+        
         # Find and setup Graphdeco imports
-        if graphdeco_path is not None:
-            self._graphdeco_path = Path(graphdeco_path)
-        else:
-            self._graphdeco_path = _find_graphdeco_path()
-        
-        _setup_graphdeco_imports(self._graphdeco_path)
-        logger.info(f"Using Graphdeco from: {self._graphdeco_path}")
-        
-        # Import Graphdeco modules (after path setup)
-        # These imports are deferred to avoid import errors if path isn't set
-        self._import_graphdeco_modules()
+        try:
+            if graphdeco_path is not None:
+                self._graphdeco_path = Path(graphdeco_path)
+            else:
+                self._graphdeco_path = _find_graphdeco_path()
+            
+            _setup_graphdeco_imports(self._graphdeco_path)
+            logger.info(f"Using Graphdeco from: {self._graphdeco_path}")
+            
+            # Import Graphdeco modules (after path setup)
+            # These imports are deferred to avoid import errors if path isn't set
+            self._import_graphdeco_modules()
+            self._graphdeco_available = True
+        except (RuntimeError, ImportError) as e:
+            logger.warning(f"Graphdeco not available: {e}")
+            self._graphdeco_path = None
         
         # Engine state
         self._initialized = False
@@ -1062,12 +1070,6 @@ class GraphdecoEngine(BaseGSEngine):
         ply_path = load_path / "point_cloud.ply"
         if ply_path.exists():
             self._gaussians.load_ply(str(ply_path))
-            # Setup exposure before training_setup
-            if not hasattr(self._gaussians, '_exposure') or self._gaussians._exposure is None:
-                num_cameras = max(1, len(self._cameras))
-                self._gaussians._exposure = torch.nn.Parameter(
-                    torch.eye(3, 4, device="cuda")[None].repeat(num_cameras, 1, 1)
-                )
             self._gaussians.training_setup(self._opt_params)
         
         # Load checkpoint
@@ -1108,7 +1110,52 @@ class GraphdecoEngine(BaseGSEngine):
             return None
         return self._gaussians.get_xyz.detach().cpu().numpy()
     
+    def get_gaussian_colors(self) -> Optional[np.ndarray]:
+        """Get RGB colors for each Gaussian from SH coefficients."""
+        if self._gaussians is None:
+            return None
+        try:
+            features = self._gaussians.get_features
+            if features is None or len(features) == 0:
+                return None
+            # DC component (degree 0)
+            C0 = 0.28209479177387814
+            colors = features[:, 0, :3].detach() * C0 + 0.5
+            return torch.clamp(colors, 0, 1).cpu().numpy()
+        except:
+            return None
+    
+    def get_gaussian_scales(self) -> Optional[np.ndarray]:
+        """Get scales for each Gaussian."""
+        if self._gaussians is None:
+            return None
+        try:
+            scales = self._gaussians.get_scaling
+            if scales is None:
+                return None
+            return scales.detach().cpu().numpy()
+        except:
+            return None
+    
+    def get_gaussian_opacities(self) -> Optional[np.ndarray]:
+        """Get opacities for each Gaussian."""
+        if self._gaussians is None:
+            return None
+        try:
+            opacities = self._gaussians.get_opacity
+            if opacities is None:
+                return None
+            return opacities.detach().cpu().numpy().flatten()
+        except:
+            return None
+
+    
     @property
     def is_initialized(self) -> bool:
         """Check if the engine has been initialized."""
         return self._initialized
+    
+    @property
+    def is_available(self) -> bool:
+        """Check if Graphdeco modules are available."""
+        return self._graphdeco_available
