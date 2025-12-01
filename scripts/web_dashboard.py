@@ -19,6 +19,8 @@ class Server:
         s._cl,s._run=set(),False
         s._st,s._eng,s._th,s._stop={},{},{},{}
         s._q=queue.Queue()
+        s._live_sources=[]  # Custom live sources (RTSP, webcam, video) - init before _scan
+        s._preview_stop=False  # Flag to stop preview streaming
         s._ds=s._scan()
         s._lk=threading.Lock()
         s._hist=s._loadh()
@@ -35,7 +37,109 @@ class Server:
                 if not d.is_dir():continue
                 fr=sum(1 for l in open(d/"rgb.txt")if l.strip()and not l.startswith('#'))if(d/"rgb.txt").exists()else 0
                 ds.append({'name':d.name,'path':str(d),'frames':fr,'type':cat})
+        # Add any registered live sources
+        for src in s._live_sources:
+            ds.append(src)
         return ds
+
+    def add_live_source(s, name: str, source: str, source_type: str = 'live', 
+                        pose_method: str = 'robust_flow', depth_method: str = 'depth_anything_v3'):
+        """Add a live video source (RTSP, webcam, video file) with pose/depth estimation."""
+        s._live_sources.append({
+            'name': name,
+            'path': source,  # RTSP URL, webcam index, or video path
+            'frames': -1,  # Unknown for live
+            'type': source_type,
+            'live': True,
+            'pose_method': pose_method,
+            'depth_method': depth_method
+        })
+        s._ds = s._scan()
+        logger.info(f"Added live source: {name} -> {source} (pose={pose_method}, depth={depth_method})")
+
+    def remove_live_source(s, name: str):
+        """Remove a live video source by name."""
+        s._live_sources = [src for src in s._live_sources if src['name'] != name]
+        s._ds = s._scan()
+        logger.info(f"Removed live source: {name}")
+
+    def update_live_source(s, old_name: str, new_name: str = None, new_source: str = None,
+                           pose_method: str = None, depth_method: str = None):
+        """Update a live video source settings."""
+        for src in s._live_sources:
+            if src['name'] == old_name:
+                if new_name:
+                    src['name'] = new_name
+                if new_source:
+                    src['path'] = new_source
+                if pose_method:
+                    src['pose_method'] = pose_method
+                if depth_method:
+                    src['depth_method'] = depth_method
+                break
+        s._ds = s._scan()
+        logger.info(f"Updated live source: {old_name} -> {new_name or old_name}")
+
+    async def _preview_live(s, ws, name: str):
+        """Stream preview frames from a live source."""
+        import cv2
+        import base64
+        import asyncio
+        
+        # Find the live source
+        src = next((d for d in s._live_sources if d['name'] == name), None)
+        if not src:
+            await ws.send(json.dumps({'type': 'preview_frame', 'error': f'Source {name} not found'}))
+            return
+        
+        s._preview_stop = False
+        source = src['path']
+        
+        # Handle webcam index
+        if source.isdigit():
+            source = int(source)
+        
+        try:
+            cap = cv2.VideoCapture(source)
+            if not cap.isOpened():
+                await ws.send(json.dumps({'type': 'preview_frame', 'error': f'Cannot open {source}'}))
+                return
+            
+            frame_count = 0
+            t0 = time.time()
+            
+            # Stream preview frames
+            while not s._preview_stop and frame_count < 300:  # Max 300 frames (~10s at 30fps)
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Resize for preview
+                h, w = frame.shape[:2]
+                if w > 640:
+                    scale = 640 / w
+                    frame = cv2.resize(frame, (640, int(h * scale)))
+                
+                # Encode to JPEG
+                _, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+                img_b64 = base64.b64encode(buf).decode('ascii')
+                
+                frame_count += 1
+                elapsed = time.time() - t0
+                fps = frame_count / elapsed if elapsed > 0 else 0
+                
+                await ws.send(json.dumps({
+                    'type': 'preview_frame',
+                    'name': name,
+                    'image': img_b64,
+                    'fps': fps
+                }))
+                
+                await asyncio.sleep(0.033)  # ~30 FPS
+                
+            cap.release()
+        except Exception as e:
+            await ws.send(json.dumps({'type': 'preview_frame', 'error': str(e)}))
 
     def _loadh(s):
         h=[]
@@ -94,6 +198,42 @@ class Server:
                 elif cmd=='replay':await s._replay(ws,d.get('key'),d.get('frame',0))
                 elif cmd=='replay_range':await s._replay_range(ws,d.get('key'),d.get('end_frame',0))
                 elif cmd=='get_snaps':await s._snapi(ws,d.get('key'))
+                elif cmd=='add_live':
+                    # Add a live video source with pose and depth methods
+                    name=d.get('name','live')
+                    source=d.get('source','0')  # RTSP URL, webcam index, or video path
+                    pose_method=d.get('pose_method','robust_flow')
+                    depth_method=d.get('depth_method','depth_anything_v3')
+                    s.add_live_source(name, source, source_type=d.get('type','LIVE'), 
+                                     pose_method=pose_method, depth_method=depth_method)
+                    await ws.send(json.dumps({'type':'datasets','datasets':s._ds}))
+                elif cmd=='remove_live':
+                    # Remove a live video source
+                    name=d.get('name')
+                    s.remove_live_source(name)
+                    await ws.send(json.dumps({'type':'live_removed','datasets':s._ds}))
+                elif cmd=='update_live':
+                    # Update a live video source settings
+                    old_name=d.get('old_name')
+                    s.update_live_source(
+                        old_name,
+                        new_name=d.get('name'),
+                        new_source=d.get('source'),
+                        pose_method=d.get('pose_method'),
+                        depth_method=d.get('depth_method')
+                    )
+                    await ws.send(json.dumps({'type':'datasets','datasets':s._ds}))
+                elif cmd=='preview_live':
+                    # Preview live video source
+                    name=d.get('name')
+                    await s._preview_live(ws, name)
+                elif cmd=='stop_preview':
+                    # Stop preview streaming
+                    s._preview_stop = True
+                elif cmd=='refresh':
+                    # Refresh dataset list
+                    s._ds=s._scan()
+                    await ws.send(json.dumps({'type':'datasets','datasets':s._ds}))
         except:pass
         finally:s._cl.discard(ws)
 
@@ -299,31 +439,83 @@ class Server:
     def _run_eng(s,eng,ds,key):
         try:
             from src.engines import get_engine
-            from src.pipeline.frames import TumRGBDSource
+            from src.pipeline.frames import TumRGBDSource, LiveVideoSource
             
             di=next((d for d in s._ds if d['name']==ds),None)
             if not di:raise ValueError(f"Dataset {ds} not found")
             engine=get_engine(eng)
             s._eng[key]=engine
-            src=TumRGBDSource(di['path'])
-            frames=list(src)
-            total=len(frames)
-            if total==0:raise ValueError("Empty")
-            intr=frames[0].intrinsics
-            # Get actual image dimensions for proper aspect ratio
-            img_h,img_w=frames[0].rgb.shape[:2]
+            
+            # Check if this is a live source or TUM dataset
+            is_live = di.get('live', False)
+            
+            if is_live:
+                # Live video source (RTSP, webcam, video file)
+                # Check if pose_method is 'ground_truth' for server-based pose
+                pose_method = di.get('pose_method', 'robust_flow')
+                depth_method = di.get('depth_method', 'depth_anything_v3')
+                use_server_pose = (pose_method == 'ground_truth')
+                use_server_depth = (depth_method == 'ground_truth')
+                
+                # Use 0 for target_fps to use source's native FPS
+                target_fps = s._settings['target_fps'] if not s._settings.get('use_source_fps') else 0
+                
+                # When using GT depth, set depth_model to 'none' since we fetch from server
+                actual_depth_model = 'none' if use_server_depth else depth_method
+                
+                src=LiveVideoSource(
+                    di['path'],
+                    fov_deg=di.get('fov', 60.0),
+                    target_fps=target_fps,
+                    resize=(640, 480),
+                    depth_model=actual_depth_model,
+                    pose_model='robust_flow' if use_server_pose else pose_method,
+                    max_frames=di.get('max_frames', None),
+                    use_server_pose=use_server_pose,
+                )
+                # Override _use_server_depth if explicitly requested
+                if use_server_depth:
+                    src._use_server_depth = True
+                    # Also set up the depth server URL if not already set
+                    if not hasattr(src, '_depth_server_url') or not src._depth_server_url:
+                        base_url = di['path'].rsplit('/', 1)[0]
+                        src._depth_server_url = f"{base_url}/depth"
+                        logger.info(f"Using server depth from: {src._depth_server_url}")
+                
+                intr=src.get_intrinsics()
+                img_h, img_w = 480, 640  # Default size
+                total = -1  # Unknown for live
+                status_parts = []
+                if use_server_pose: status_parts.append('GT pose')
+                if use_server_depth: status_parts.append('GT depth')
+                status_msg = f'running (live, {", ".join(status_parts)})' if status_parts else 'running (live)'
+                with s._lk:s._st[key]['total']=total;s._st[key]['status']=status_msg
+                engine.initialize_scene(intr,{'num_frames':10000})  # Estimate
+            else:
+                # TUM dataset
+                src=TumRGBDSource(di['path'])
+                frames=list(src)
+                total=len(frames)
+                if total==0:raise ValueError("Empty dataset")
+                intr=frames[0].intrinsics
+                img_h,img_w=frames[0].rgb.shape[:2]
+                with s._lk:s._st[key]['total']=total;s._st[key]['status']='running'
+                engine.initialize_scene(intr,{'num_frames':total})
+                # Convert to iterator for unified processing
+                src = iter(frames)
+            
             # Calculate thumbnail size maintaining aspect ratio
             thumb_w=400
             thumb_h=int(thumb_w*img_h/img_w)
             snap_w=320
             snap_h=int(snap_w*img_h/img_w)
-            with s._lk:s._st[key]['total']=total;s._st[key]['status']='running'
-            engine.initialize_scene(intr,{'num_frames':total})
+            
             t0=time.time()
             lb=0
             frame_time=1.0/s._settings['target_fps'] if not s._settings['unlimited'] else 0
+            i = 0
             
-            for i,fr in enumerate(frames):
+            for fr in src:
                 ft_start=time.time()
                 if s._stop[key].is_set():
                     with s._lk:s._st[key]['status']='stopped'
@@ -383,6 +575,12 @@ class Server:
                 if frame_time>0:
                     elapsed=time.time()-ft_start
                     if elapsed<frame_time:time.sleep(frame_time-elapsed)
+                
+                i += 1  # Increment frame counter
+            
+            # Release live source if applicable
+            if is_live and hasattr(src, 'release'):
+                src.release()
             
             # Refine
             if not s._stop[key].is_set():
@@ -447,17 +645,27 @@ HTML=""
 
 def main():
     import argparse
-    p=argparse.ArgumentParser()
-    p.add_argument("--http-port",type=int,default=9002)
-    p.add_argument("--ws-port",type=int,default=9003)
+    p=argparse.ArgumentParser(description='AirSplatMap Dashboard - Real-time 3D Gaussian Splatting')
+    p.add_argument("--http-port",type=int,default=9002,help='HTTP port for web UI')
+    p.add_argument("--ws-port",type=int,default=9003,help='WebSocket port')
+    p.add_argument("--source",type=str,default=None,help='Add live source: RTSP URL, webcam index (0,1,..), or video file path')
+    p.add_argument("--source-name",type=str,default='live',help='Name for the live source')
     a=p.parse_args()
     logging.basicConfig(level=logging.INFO)
     global HTML
     HTML=HTML_PATH.read_text()if HTML_PATH.exists()else"<h1>HTML not found</h1>"
     HTML=HTML.replace('WS_PORT',str(a.ws_port))
     s=Server(a.http_port,a.ws_port)
+    
+    # Add live source if specified
+    if a.source:
+        s.add_live_source(a.source_name, a.source)
+    
     s.start()
-    print(f"\n  AirSplatMap Dashboard: http://localhost:{a.http_port}\n")
+    print(f"\n  AirSplatMap Dashboard: http://localhost:{a.http_port}")
+    if a.source:
+        print(f"  Live source: {a.source_name} -> {a.source}")
+    print()
     try:
         while True:time.sleep(1)
     except KeyboardInterrupt:

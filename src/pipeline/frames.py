@@ -500,3 +500,463 @@ class VideoSource(FrameSource):
     
     def __len__(self) -> int:
         return -1  # Unknown for streaming
+
+
+class LiveVideoSource(FrameSource):
+    """
+    Live video source from RTSP streams, webcams, or video files.
+    
+    Integrates:
+    - Video capture (OpenCV)
+    - Modular depth estimation (src.depth)
+    - Modular pose estimation (src.pose)
+    
+    Args:
+        source: Video source - RTSP URL, webcam index (0,1,..), or video file path
+        fov_deg: Camera field of view in degrees (used to estimate intrinsics)
+        target_fps: Target processing frame rate
+        resize: Optional (width, height) to resize frames
+        depth_model: Depth estimation model ('depth_anything', 'midas', 'zoedepth', 'none')
+        pose_model: Pose estimation model ('orb', 'sift', 'loftr', 'flow', 'hybrid')
+        max_frames: Maximum frames to process (None = unlimited)
+        
+    Example:
+        # RTSP stream with LoFTR pose estimation
+        source = LiveVideoSource(
+            "rtsp://192.168.1.100:554/stream",
+            pose_model='loftr',
+            depth_model='midas'
+        )
+        
+        # Webcam with fast ORB
+        source = LiveVideoSource(0, pose_model='orb')
+        
+        # HTTP MJPEG stream
+        source = LiveVideoSource("http://localhost:8554/tum")
+    """
+    
+    def __init__(
+        self,
+        source,
+        fov_deg: float = 60.0,
+        target_fps: float = 15.0,
+        resize: Optional[Tuple[int, int]] = (640, 480),
+        depth_model: str = 'depth_anything_v3',
+        pose_model: str = 'robust_flow',
+        max_frames: Optional[int] = None,
+        scale_pose_to_depth: bool = True,
+        smooth_pose: bool = True,
+        use_server_pose: bool = False,
+        pose_server_url: Optional[str] = None,
+    ):
+        import cv2
+        
+        self._source = source
+        self._fov_deg = fov_deg
+        self._target_fps = target_fps  # 0 or None means use source FPS
+        self._resize = resize
+        self._depth_model_name = depth_model
+        self._pose_model_name = pose_model
+        self._max_frames = max_frames
+        self._scale_pose_to_depth = scale_pose_to_depth
+        self._enable_smooth_pose = smooth_pose
+        
+        # Server-based pose and depth (e.g., from TUM simulator with ground truth)
+        self._use_server_pose = use_server_pose
+        self._pose_server_url = pose_server_url
+        self._use_server_depth = (depth_model == 'ground_truth')  # Explicit GT depth request
+        
+        # Auto-detect server URLs from HTTP stream source
+        if (self._use_server_pose or self._use_server_depth) and self._pose_server_url is None:
+            if isinstance(source, str) and source.startswith('http'):
+                # Extract base URL: http://localhost:8554/stream -> http://localhost:8554
+                base_url = source.rsplit('/', 1)[0]
+                self._pose_server_url = f"{base_url}/pose"
+                self._depth_server_url = f"{base_url}/depth"
+                self._intrinsics_url = f"{base_url}/intrinsics"
+                if self._use_server_pose:
+                    logger.info(f"Auto-detected pose server: {self._pose_server_url}")
+                if self._use_server_depth:
+                    logger.info(f"Auto-detected depth server: {self._depth_server_url}")
+        
+        # Pose history for smoothing and scale estimation
+        self._pose_history = []
+        self._depth_scale_factor = 1.0
+        self._scale_initialized = False
+        
+        # Detect source type
+        self._is_rtsp = isinstance(source, str) and source.startswith('rtsp://')
+        self._is_webcam = isinstance(source, int) or (isinstance(source, str) and source.isdigit())
+        self._is_file = isinstance(source, str) and Path(source).exists()
+        self._is_http = isinstance(source, str) and source.startswith('http')
+        
+        # Initialize capture
+        src = int(source) if self._is_webcam else source
+        self._cap = cv2.VideoCapture(src)
+        
+        if self._is_rtsp or self._is_http:
+            # Reduce RTSP/HTTP latency
+            self._cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        
+        if not self._cap.isOpened():
+            raise RuntimeError(f"Failed to open video source: {source}")
+        
+        # Get video properties
+        self._width = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        self._height = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self._fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
+        self._frame_count = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT)) if self._is_file else -1
+        
+        if resize:
+            self._width, self._height = resize
+        
+        # Calculate intrinsics from FOV
+        self._intrinsics = self._compute_intrinsics()
+        
+        # Initialize estimators (lazy loaded)
+        self._depth_estimator = None
+        self._pose_estimator = None
+        
+        logger.info(f"LiveVideoSource: {self._width}x{self._height} @ {self._fps:.1f} FPS")
+        logger.info(f"  Source: {source}")
+        logger.info(f"  Pose: {pose_model}, Depth: {depth_model}")
+    
+    def _compute_intrinsics(self) -> Dict[str, float]:
+        """Compute intrinsics from FOV."""
+        fx = self._width / (2 * np.tan(np.radians(self._fov_deg) / 2))
+        fy = fx  # Assume square pixels
+        return {
+            'fx': fx, 'fy': fy,
+            'cx': self._width / 2,
+            'cy': self._height / 2,
+            'width': self._width,
+            'height': self._height,
+        }
+    
+    def _init_estimators(self):
+        """Initialize depth and pose estimators."""
+        # Import here to avoid circular imports
+        try:
+            from src.pose import get_pose_estimator
+            from src.depth import get_depth_estimator
+            
+            # Initialize pose estimator
+            self._pose_estimator = get_pose_estimator(self._pose_model_name)
+            self._pose_estimator.set_intrinsics_from_dict(self._intrinsics)
+            logger.info(f"Initialized pose estimator: {self._pose_model_name}")
+            
+            # Initialize depth estimator
+            self._depth_estimator = get_depth_estimator(self._depth_model_name)
+            logger.info(f"Initialized depth estimator: {self._depth_model_name}")
+            
+        except ImportError as e:
+            logger.warning(f"Could not import estimators: {e}, using fallback")
+            self._use_fallback = True
+            self._init_fallback()
+    
+    def _smooth_pose(self, pose: np.ndarray, alpha: float = 0.7) -> np.ndarray:
+        """Apply exponential moving average smoothing to pose."""
+        if len(self._pose_history) == 0:
+            self._pose_history.append(pose.copy())
+            return pose
+        
+        # Smooth translation with EMA
+        prev_pose = self._pose_history[-1]
+        smoothed = pose.copy()
+        smoothed[:3, 3] = alpha * pose[:3, 3] + (1 - alpha) * prev_pose[:3, 3]
+        
+        # Keep rotation from current pose (rotation smoothing is tricky)
+        self._pose_history.append(smoothed.copy())
+        
+        # Keep only last 10 poses for memory
+        if len(self._pose_history) > 10:
+            self._pose_history = self._pose_history[-10:]
+        
+        return smoothed
+    
+    def _estimate_depth_scale(self, depth: np.ndarray, pose: np.ndarray) -> float:
+        """
+        Estimate scale factor to align monocular pose with depth.
+        
+        Uses median depth at image center as reference.
+        """
+        if depth is None:
+            return 1.0
+        
+        # Get median depth in center region
+        h, w = depth.shape
+        center_region = depth[h//3:2*h//3, w//3:2*w//3]
+        valid_depths = center_region[(center_region > 0.1) & (center_region < 10.0)]
+        
+        if len(valid_depths) < 100:
+            return self._depth_scale_factor
+        
+        median_depth = np.median(valid_depths)
+        
+        # For first few frames, establish baseline
+        if not self._scale_initialized and len(self._pose_history) > 3:
+            # Estimate scale from pose translation magnitude vs depth
+            translations = [p[:3, 3] for p in self._pose_history[-5:]]
+            avg_translation = np.mean([np.linalg.norm(t) for t in translations])
+            
+            if avg_translation > 0.001:  # Avoid divide by zero
+                # Assume median depth corresponds to typical scene depth
+                self._depth_scale_factor = median_depth / max(avg_translation * 10, 0.1)
+                self._depth_scale_factor = np.clip(self._depth_scale_factor, 0.1, 10.0)
+                self._scale_initialized = True
+                logger.info(f"Initialized depth scale factor: {self._depth_scale_factor:.3f}")
+        
+        return self._depth_scale_factor
+    
+    def _scale_pose(self, pose: np.ndarray, scale: float) -> np.ndarray:
+        """Scale pose translation by given factor."""
+        scaled = pose.copy()
+        scaled[:3, 3] *= scale
+        return scaled
+    
+    def _fetch_server_pose(self) -> Optional[np.ndarray]:
+        """Fetch ground truth pose from server (e.g., TUM simulator)."""
+        if not self._pose_server_url:
+            return None
+        
+        try:
+            import urllib.request
+            import json
+            
+            with urllib.request.urlopen(self._pose_server_url, timeout=0.5) as response:
+                data = json.loads(response.read().decode())
+                
+            if data.get('has_pose') and data.get('pose'):
+                pose = np.array(data['pose'], dtype=np.float64)
+                return pose
+        except Exception as e:
+            logger.debug(f"Failed to fetch pose from server: {e}")
+        
+        return None
+    
+    def _fetch_server_depth(self) -> Optional[np.ndarray]:
+        """Fetch ground truth depth from server (e.g., TUM simulator)."""
+        if not hasattr(self, '_depth_server_url'):
+            return None
+        
+        try:
+            import urllib.request
+            import json
+            import base64
+            import cv2
+            
+            with urllib.request.urlopen(self._depth_server_url, timeout=0.5) as response:
+                data = json.loads(response.read().decode())
+                
+            if data.get('has_depth') and data.get('depth_png_b64'):
+                # Decode base64 PNG
+                depth_bytes = base64.b64decode(data['depth_png_b64'])
+                depth_arr = np.frombuffer(depth_bytes, dtype=np.uint8)
+                depth_uint16 = cv2.imdecode(depth_arr, cv2.IMREAD_UNCHANGED)
+                
+                if depth_uint16 is not None:
+                    # Convert back to meters
+                    scale = data.get('scale_factor', 5000)
+                    depth = depth_uint16.astype(np.float32) / scale
+                    return depth
+        except Exception as e:
+            logger.debug(f"Failed to fetch depth from server: {e}")
+        
+        return None
+    
+    def _fetch_server_intrinsics(self) -> Optional[Dict]:
+        """Fetch camera intrinsics from server."""
+        if not hasattr(self, '_intrinsics_url'):
+            return None
+        
+        try:
+            import urllib.request
+            import json
+            
+            with urllib.request.urlopen(self._intrinsics_url, timeout=1.0) as response:
+                data = json.loads(response.read().decode())
+                return data
+        except Exception as e:
+            logger.debug(f"Failed to fetch intrinsics from server: {e}")
+        
+        return None
+    
+    def _init_fallback(self):
+        """Initialize fallback ORB-based estimation."""
+        import cv2
+        self._orb = cv2.ORB_create(nfeatures=2000)
+        self._bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+        self._K = np.array([
+            [self._intrinsics['fx'], 0, self._intrinsics['cx']],
+            [0, self._intrinsics['fy'], self._intrinsics['cy']],
+            [0, 0, 1]
+        ])
+        self._prev_gray = None
+        self._prev_kp = None
+        self._prev_desc = None
+        self._current_pose = np.eye(4)
+    
+    def _estimate_fallback(self, rgb: np.ndarray) -> Tuple[Optional[np.ndarray], np.ndarray]:
+        """Fallback pose estimation using ORB."""
+        import cv2
+        
+        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        kp, desc = self._orb.detectAndCompute(gray, None)
+        
+        if self._prev_desc is None or desc is None or len(kp) < 10:
+            self._prev_gray = gray
+            self._prev_kp = kp
+            self._prev_desc = desc
+            return None, self._current_pose.copy()
+        
+        matches = self._bf.match(self._prev_desc, desc)
+        matches = sorted(matches, key=lambda x: x.distance)[:100]
+        
+        if len(matches) >= 8:
+            pts1 = np.float32([self._prev_kp[m.queryIdx].pt for m in matches])
+            pts2 = np.float32([kp[m.trainIdx].pt for m in matches])
+            
+            E, mask = cv2.findEssentialMat(pts1, pts2, self._K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
+            
+            if E is not None:
+                _, R, t, _ = cv2.recoverPose(E, pts1, pts2, self._K)
+                T_rel = np.eye(4)
+                T_rel[:3, :3] = R
+                T_rel[:3, 3] = t.flatten()
+                self._current_pose = self._current_pose @ np.linalg.inv(T_rel)
+        
+        self._prev_gray = gray
+        self._prev_kp = kp
+        self._prev_desc = desc
+        
+        return None, self._current_pose.copy()  # No depth in fallback
+    
+    def __iter__(self) -> Iterator[Frame]:
+        """Iterate over frames from video source."""
+        import cv2
+        
+        # Initialize estimators on first iteration
+        if self._pose_estimator is None and self._depth_estimator is None:
+            self._use_fallback = False
+            self._init_estimators()
+        
+        frame_idx = 0
+        # Use source FPS if target_fps is 0 or None
+        effective_fps = self._target_fps if self._target_fps and self._target_fps > 0 else self._fps
+        frame_interval = 1.0 / effective_fps
+        last_frame_time = 0
+        
+        logger.info(f"Streaming at {effective_fps:.1f} FPS (source: {self._fps:.1f}, target: {self._target_fps})")
+        
+        # Try to get intrinsics from server if using server pose
+        if self._use_server_pose:
+            server_intrinsics = self._fetch_server_intrinsics()
+            if server_intrinsics:
+                self._intrinsics.update(server_intrinsics)
+                logger.info(f"Using server intrinsics: fx={self._intrinsics['fx']:.1f}")
+        
+        while True:
+            if self._max_frames and frame_idx >= self._max_frames:
+                break
+            
+            # Rate limiting
+            now = time.time()
+            if now - last_frame_time < frame_interval:
+                time.sleep(0.001)
+                continue
+            
+            ret, frame = self._cap.read()
+            
+            if not ret:
+                if self._is_file:
+                    break  # End of file
+                elif self._is_rtsp or self._is_http:
+                    logger.warning("Frame grab failed, reconnecting...")
+                    time.sleep(1.0)
+                    src = int(self._source) if self._is_webcam else self._source
+                    self._cap = cv2.VideoCapture(src)
+                    continue
+                else:
+                    continue
+            
+            last_frame_time = now
+            
+            # Resize if needed
+            if self._resize:
+                frame = cv2.resize(frame, self._resize)
+            
+            # Convert BGR to RGB
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            
+            # Get pose - prefer server ground truth if available
+            pose = None
+            if self._use_server_pose:
+                pose = self._fetch_server_pose()
+                if pose is not None:
+                    logger.debug(f"Using server pose for frame {frame_idx}")
+            
+            # Fall back to estimation if no server pose
+            if pose is None:
+                if hasattr(self, '_use_fallback') and self._use_fallback:
+                    _, pose = self._estimate_fallback(rgb)
+                else:
+                    pose_result = self._pose_estimator.estimate(rgb)
+                    pose = pose_result.pose
+                
+                # Apply pose improvements only for estimated poses
+                if pose is not None:
+                    if self._scale_pose_to_depth:
+                        # Get depth for scaling
+                        depth_result = self._depth_estimator.estimate(rgb)
+                        depth_for_scale = depth_result.depth if depth_result else None
+                        if depth_for_scale is not None:
+                            scale = self._estimate_depth_scale(depth_for_scale, pose)
+                            pose = self._scale_pose(pose, scale)
+                    
+                    if self._enable_smooth_pose:
+                        pose = self._smooth_pose(pose, alpha=0.7)
+            
+            # Get depth - prefer server ground truth if available
+            depth = None
+            if self._use_server_depth:
+                depth = self._fetch_server_depth()
+                if depth is not None:
+                    logger.debug(f"Using server depth for frame {frame_idx}")
+            
+            # Fall back to depth estimation if no server depth
+            if depth is None:
+                if hasattr(self, '_use_fallback') and self._use_fallback:
+                    depth = None
+                else:
+                    depth_result = self._depth_estimator.estimate(rgb)
+                    depth = depth_result.depth if depth_result else None
+            
+            yield Frame(
+                idx=frame_idx,
+                timestamp=now,
+                rgb=rgb,
+                depth=depth,
+                pose=pose,
+                intrinsics=self._intrinsics.copy(),
+            )
+            
+            frame_idx += 1
+    
+    def __len__(self) -> int:
+        """Return frame count (-1 for live streams)."""
+        if self._max_frames:
+            return self._max_frames
+        return self._frame_count if self._frame_count > 0 else -1
+    
+    def get_intrinsics(self) -> Dict[str, float]:
+        """Get camera intrinsics."""
+        return self._intrinsics.copy()
+    
+    def release(self):
+        """Release video capture."""
+        if self._cap:
+            self._cap.release()
+
+
+# Need time module for LiveVideoSource
+import time
