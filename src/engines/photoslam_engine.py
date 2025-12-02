@@ -124,7 +124,7 @@ class PhotoSLAMEngine:
         }
     
     def render_view(self, pose: np.ndarray, img_size: Tuple[int, int]) -> Optional[np.ndarray]:
-        """Render view from given camera pose using accumulated depth data."""
+        """Render view from given camera pose using GPU-accelerated point rendering."""
         width, height = img_size
         
         # Get point cloud and colors
@@ -134,12 +134,31 @@ class PhotoSLAMEngine:
         if pts is None or len(pts) == 0:
             return np.zeros((height, width, 3), dtype=np.uint8)
         
-        # Project points to camera
-        return self._project_points(pts, cols, pose, (width, height))
+        # Normalize colors to 0-1 if needed
+        if cols is not None and cols.max() > 1.0:
+            cols = cols / 255.0
+        elif cols is None:
+            cols = np.full((len(pts), 3), 0.6)
+        
+        try:
+            from src.engines.base import render_points_gsplat
+            
+            return render_points_gsplat(
+                points=pts,
+                colors=cols,
+                pose=pose,
+                intrinsics=self._intrinsics,
+                image_size=img_size,
+                point_size=0.01,
+                device="cuda"
+            )
+        except Exception as e:
+            logger.debug(f"GPU render failed ({e}), using software fallback")
+            return self._project_points(pts, cols, pose, img_size)
     
     def _project_points(self, pts: np.ndarray, cols: Optional[np.ndarray], 
                         pose: np.ndarray, img_size: Tuple[int, int]) -> np.ndarray:
-        """Project 3D points to image plane."""
+        """Software fallback: Project 3D points to image plane."""
         width, height = img_size
         img = np.zeros((height, width, 3), dtype=np.uint8)
         
@@ -183,7 +202,8 @@ class PhotoSLAMEngine:
         u, v = u[order], v[order]
         if cols is not None:
             cols = cols[order]
-            img[v, u] = (cols * 255).astype(np.uint8)
+            cols_uint8 = (np.clip(cols, 0, 1) * 255).astype(np.uint8)
+            img[v, u] = cols_uint8
         else:
             img[v, u] = [128, 200, 255]  # Default cyan
         

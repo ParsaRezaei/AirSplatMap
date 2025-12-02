@@ -260,3 +260,153 @@ class BaseGSEngine(ABC):
             True if initialize_scene() has been called successfully.
         """
         return False
+
+
+def render_points_gsplat(
+    points: np.ndarray,
+    colors: np.ndarray,
+    pose: np.ndarray,
+    intrinsics: Dict[str, float],
+    image_size: Tuple[int, int],
+    point_size: float = 0.01,
+    device: str = "cuda"
+) -> np.ndarray:
+    """
+    Render point cloud using gsplat's rasterizer for GPU-accelerated rendering.
+    
+    This creates small spherical Gaussians from points for efficient rendering.
+    
+    Args:
+        points: Nx3 array of 3D positions
+        colors: Nx3 array of RGB colors (0-1)
+        pose: 4x4 world-to-camera transformation
+        intrinsics: Camera intrinsics dict
+        image_size: (width, height) tuple
+        point_size: Size of each point as a Gaussian
+        device: CUDA device
+        
+    Returns:
+        HxWx3 uint8 image
+    """
+    import torch
+    import math
+    
+    width, height = image_size
+    
+    if len(points) == 0:
+        return np.zeros((height, width, 3), dtype=np.uint8)
+    
+    try:
+        import gsplat
+        
+        # Convert to tensors
+        means = torch.from_numpy(points.astype(np.float32)).to(device)
+        rgbs = torch.from_numpy(colors.astype(np.float32)).to(device)
+        
+        # Create uniform small scales (spherical Gaussians)
+        n = len(means)
+        scales = torch.full((n, 3), point_size, device=device)
+        
+        # Identity rotations (quaternions: w, x, y, z)
+        quats = torch.zeros((n, 4), device=device)
+        quats[:, 0] = 1.0  # w = 1 for identity
+        
+        # Full opacity
+        opacities = torch.ones((n,), device=device)
+        
+        # Camera parameters
+        fx = intrinsics['fx'] * width / intrinsics['width']
+        fy = intrinsics['fy'] * height / intrinsics['height']
+        cx = intrinsics['cx'] * width / intrinsics['width']
+        cy = intrinsics['cy'] * height / intrinsics['height']
+        
+        # View matrix (world to camera)
+        viewmat = torch.from_numpy(np.linalg.inv(pose).astype(np.float32)).to(device)
+        
+        # Camera intrinsics matrix
+        K = torch.tensor([
+            [fx, 0, cx],
+            [0, fy, cy],
+            [0, 0, 1]
+        ], dtype=torch.float32, device=device)
+        
+        # Render using gsplat
+        with torch.no_grad():
+            # Use gsplat's rasterization
+            renders, alphas, meta = gsplat.rasterization(
+                means=means,
+                quats=quats,
+                scales=scales,
+                opacities=opacities,
+                colors=rgbs,
+                viewmats=viewmat.unsqueeze(0),
+                Ks=K.unsqueeze(0),
+                width=width,
+                height=height,
+                near_plane=0.01,
+                far_plane=100.0,
+                sh_degree=None,  # Using direct colors, not SH
+            )
+            
+            # renders is (1, H, W, 3)
+            img = renders[0].clamp(0, 1)
+            img = (img.cpu().numpy() * 255).astype(np.uint8)
+            return img
+            
+    except Exception as e:
+        # Fallback to software rendering
+        return _software_render_points(points, colors, pose, intrinsics, image_size)
+
+
+def _software_render_points(
+    points: np.ndarray,
+    colors: np.ndarray,
+    pose: np.ndarray,
+    intrinsics: Dict[str, float],
+    image_size: Tuple[int, int]
+) -> np.ndarray:
+    """Software fallback for point rendering."""
+    width, height = image_size
+    
+    if len(points) == 0:
+        return np.zeros((height, width, 3), dtype=np.uint8)
+    
+    # Transform to camera frame
+    pose_inv = np.linalg.inv(pose)
+    pts_h = np.hstack([points, np.ones((len(points), 1))])
+    pts_cam = (pose_inv @ pts_h.T).T[:, :3]
+    
+    # Filter behind camera
+    valid = pts_cam[:, 2] > 0.1
+    pts_cam = pts_cam[valid]
+    cols = colors[valid] if colors is not None else np.full((len(pts_cam), 3), 0.6)
+    
+    if len(pts_cam) == 0:
+        return np.zeros((height, width, 3), dtype=np.uint8)
+    
+    # Project
+    fx = intrinsics['fx'] * width / intrinsics['width']
+    fy = intrinsics['fy'] * height / intrinsics['height']
+    cx = intrinsics['cx'] * width / intrinsics['width']
+    cy = intrinsics['cy'] * height / intrinsics['height']
+    
+    u = (pts_cam[:, 0] * fx / pts_cam[:, 2] + cx).astype(int)
+    v = (pts_cam[:, 1] * fy / pts_cam[:, 2] + cy).astype(int)
+    
+    # Filter to image bounds
+    valid = (u >= 0) & (u < width) & (v >= 0) & (v < height)
+    u, v = u[valid], v[valid]
+    cols = cols[valid]
+    depths = pts_cam[valid, 2]
+    
+    # Sort by depth (back to front)
+    order = np.argsort(-depths)
+    u, v, cols = u[order], v[order], cols[order]
+    
+    # Render
+    img = np.zeros((height, width, 3), dtype=np.uint8)
+    if len(cols) > 0:
+        cols_uint8 = (np.clip(cols, 0, 1) * 255).astype(np.uint8)
+        img[v, u] = cols_uint8
+    
+    return img

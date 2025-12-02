@@ -253,18 +253,113 @@ class MonoGSEngine:
             self._cols_cache = [self._cols_cache[i] for i in idx]
     
     def render_view(self, pose: np.ndarray, img_size: Tuple[int, int]) -> Optional[np.ndarray]:
-        """Render view from given camera pose using software rendering fallback."""
-        if not self._initialized:
+        """Render view from given camera pose using native Gaussian rasterization."""
+        if not self._initialized or self._gaussians is None:
             return None
         
         width, height = img_size
         
-        # Use cached points or gaussians
+        if self._gaussians.get_xyz.shape[0] == 0:
+            return np.zeros((height, width, 3), dtype=np.uint8)
+        
         try:
-            if hasattr(self, '_pts_cache') and self._pts_cache:
-                xyz = np.array(self._pts_cache)
-                colors = np.array(self._cols_cache) if hasattr(self, '_cols_cache') else None
-            elif self._gaussians is not None:
+            # Try native rendering with diff-gaussian-rasterization
+            from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
+            import math
+            
+            # Compute camera parameters
+            fx = self._intrinsics['fx'] * width / self._intrinsics['width']
+            fy = self._intrinsics['fy'] * height / self._intrinsics['height']
+            FoVx = 2 * math.atan(width / (2 * fx))
+            FoVy = 2 * math.atan(height / (2 * fy))
+            
+            # World to camera transform
+            pose_inv = np.linalg.inv(pose)
+            R = pose_inv[:3, :3].T  # Transpose for diff-gaussian convention
+            T = pose_inv[:3, 3]
+            
+            # Create view matrices
+            world_view = torch.zeros((4, 4), dtype=torch.float32, device=self.device)
+            world_view[:3, :3] = torch.from_numpy(R.T).float()
+            world_view[:3, 3] = torch.from_numpy(T).float()
+            world_view[3, 3] = 1.0
+            
+            # Projection matrix
+            znear, zfar = 0.01, 100.0
+            tanHalfFovY = math.tan(FoVy / 2)
+            tanHalfFovX = math.tan(FoVx / 2)
+            top = tanHalfFovY * znear
+            bottom = -top
+            right = tanHalfFovX * znear
+            left = -right
+            
+            P = torch.zeros((4, 4), dtype=torch.float32, device=self.device)
+            P[0, 0] = 2.0 * znear / (right - left)
+            P[1, 1] = 2.0 * znear / (top - bottom)
+            P[0, 2] = (right + left) / (right - left)
+            P[1, 2] = (top + bottom) / (top - bottom)
+            P[2, 2] = -(zfar + znear) / (zfar - znear)
+            P[2, 3] = -2.0 * zfar * znear / (zfar - znear)
+            P[3, 2] = -1.0
+            
+            full_proj = world_view @ P
+            
+            # Camera center
+            cam_center = torch.from_numpy(pose[:3, 3]).float().to(self.device)
+            
+            # Rasterization settings
+            raster_settings = GaussianRasterizationSettings(
+                image_height=height,
+                image_width=width,
+                tanfovx=math.tan(FoVx * 0.5),
+                tanfovy=math.tan(FoVy * 0.5),
+                bg=torch.zeros(3, device=self.device),
+                scale_modifier=1.0,
+                viewmatrix=world_view.T,
+                projmatrix=full_proj.T,
+                sh_degree=self._gaussians.active_sh_degree,
+                campos=cam_center,
+                prefiltered=False,
+                debug=False
+            )
+            
+            rasterizer = GaussianRasterizer(raster_settings=raster_settings)
+            
+            # Get gaussian properties
+            means3D = self._gaussians.get_xyz
+            opacity = self._gaussians.get_opacity
+            scales = self._gaussians.get_scaling
+            rotations = self._gaussians.get_rotation
+            shs = self._gaussians.get_features
+            
+            # Render
+            with torch.no_grad():
+                rendered_image, _ = rasterizer(
+                    means3D=means3D,
+                    means2D=torch.zeros_like(means3D[:, :2]),
+                    shs=shs,
+                    colors_precomp=None,
+                    opacities=opacity,
+                    scales=scales,
+                    rotations=rotations,
+                    cov3D_precomp=None
+                )
+            
+            # Convert to numpy
+            img = rendered_image.permute(1, 2, 0).clamp(0, 1)
+            img = (img.cpu().numpy() * 255).astype(np.uint8)
+            return img
+            
+        except Exception as e:
+            logger.debug(f"Native render failed ({e}), using software fallback")
+            return self._software_render(pose, img_size)
+    
+    def _software_render(self, pose: np.ndarray, img_size: Tuple[int, int]) -> np.ndarray:
+        """Software fallback renderer using point projection."""
+        width, height = img_size
+        
+        try:
+            if self._gaussians is not None:
                 xyz = self._gaussians.get_xyz.detach().cpu().numpy()
                 features = self._gaussians._features_dc.detach().cpu().numpy()
                 if features.ndim == 3:
@@ -322,7 +417,7 @@ class MonoGSEngine:
             return img
             
         except Exception as e:
-            logger.warning(f"Render failed: {e}")
+            logger.warning(f"Software render failed: {e}")
             return np.zeros((height, width, 3), dtype=np.uint8)
     
     def optimize_step(self, n_steps: int = 1, **kwargs) -> Dict:

@@ -511,7 +511,7 @@ class GSLAMEngine(BaseGSEngine):
         pose_world_cam: np.ndarray,
         image_size: Tuple[int, int]
     ) -> np.ndarray:
-        """Render a view from the Gaussian map."""
+        """Render a view from the Gaussian map using GPU-accelerated rendering."""
         if not self._initialized:
             raise RuntimeError("Scene not initialized")
         
@@ -520,8 +520,33 @@ class GSLAMEngine(BaseGSEngine):
         if self._gaussians is None:
             return np.zeros((height, width, 3), dtype=np.uint8)
         
-        # Simple point cloud rendering (Gaussian-SLAM doesn't expose easy rendering)
-        # This is a placeholder - full implementation would use the rasterizer
+        try:
+            from src.engines.base import render_points_gsplat
+            
+            xyz = self._gaussians['xyz'].cpu().numpy()
+            colors = self._gaussians['colors'].cpu().numpy()
+            
+            if len(xyz) == 0:
+                return np.zeros((height, width, 3), dtype=np.uint8)
+            
+            return render_points_gsplat(
+                points=xyz,
+                colors=colors,
+                pose=pose_world_cam,
+                intrinsics=self._intrinsics,
+                image_size=image_size,
+                point_size=0.008,
+                device=str(self.device)
+            )
+            
+        except Exception as e:
+            logger.debug(f"GPU render failed ({e}), using software fallback")
+            return self._software_render(pose_world_cam, image_size)
+    
+    def _software_render(self, pose_world_cam: np.ndarray, image_size: Tuple[int, int]) -> np.ndarray:
+        """Software fallback renderer."""
+        width, height = image_size
+        
         try:
             xyz = self._gaussians['xyz'].cpu().numpy()
             colors = self._gaussians['colors'].cpu().numpy()
@@ -565,7 +590,7 @@ class GSLAMEngine(BaseGSEngine):
             return img
             
         except Exception as e:
-            logger.debug(f"Render failed: {e}")
+            logger.debug(f"Software render failed: {e}")
             return np.zeros((height, width, 3), dtype=np.uint8)
     
     def get_num_gaussians(self) -> int:
