@@ -28,24 +28,53 @@ AirSplatMap provides a modular framework for incremental 3D Gaussian Splatting (
 
 ## Installation
 
-### Quick Start (Recommended)
+### Quick Start - Cross-Platform (Windows/Linux)
 
 ```bash
 # Clone with all submodules
 git clone --recursive https://github.com/ParsaRezaei/AirSplatMap.git
 cd AirSplatMap
 
-# Create conda environment
-conda env create -f environment.yml
+# Create conda environment (includes PyTorch + CUDA + all dependencies)
+conda env create -f environment_crossplatform.yml
 conda activate airsplatmap
 
-# Build CUDA extensions (required for graphdeco engine)
+# Verify installation
+python -c "import torch; print(f'PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
+python -c "from src.pipeline import RealSenseSource; print('RealSenseSource OK')"
+```
+
+That's it! The `environment_crossplatform.yml` includes everything:
+- PyTorch with CUDA 12.1
+- OpenCV, NumPy, SciPy, etc.
+- pyrealsense2 for RealSense cameras
+- gsplat for fast 3DGS
+
+### Linux-Only: Build CUDA Extensions (Optional)
+
+Only needed if you want to use the `graphdeco` engine (original 3DGS):
+
+```bash
 cd submodules/gaussian-splatting/submodules/diff-gaussian-rasterization
 pip install --no-build-isolation -e .
 cd ../simple-knn
 pip install --no-build-isolation -e .
 cd ../../../..
 ```
+
+### RealSense Camera Setup
+
+```bash
+# Test camera detection
+python scripts/demos/live_realsense_demo.py --list-devices
+
+# Run live demo
+python scripts/demos/live_realsense_demo.py
+```
+
+**Tips:**
+- Use USB 3.0 ports (blue connector)
+- On Windows, install [Intel RealSense Viewer](https://github.com/IntelRealSense/librealsense/releases) to verify camera works
 
 ### If Already Cloned Without Submodules
 
