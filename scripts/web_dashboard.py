@@ -238,14 +238,22 @@ class Server:
         finally:s._cl.discard(ws)
 
     async def _replay(s,ws,key,fr):
+        logger.info(f"Replay request: key={key}, frame={fr}")
         if key not in s._snaps:
             sf=HIST/f"{key}_snaps.pkl"
+            logger.info(f"Loading snaps from {sf}, exists={sf.exists()}")
             if sf.exists():
-                try:s._snaps[key]=pickle.load(open(sf,'rb'))
-                except:pass
+                try:
+                    s._snaps[key]=pickle.load(open(sf,'rb'))
+                    logger.info(f"Loaded {len(s._snaps[key])} snaps for {key}")
+                except Exception as e:
+                    logger.error(f"Failed to load snaps: {e}")
         if key in s._snaps and 0<=fr<len(s._snaps[key]):
             sn=s._snaps[key][fr]
+            logger.info(f"Sending replay_frame: frame={fr}, has_points={len(sn.get('points',''))>0}, has_image={len(sn.get('image',''))>0}")
             await ws.send(json.dumps({'type':'replay_frame','key':key,'frame':fr,'total':len(s._snaps[key]),**sn}))
+        else:
+            logger.warning(f"Replay failed: key_in_snaps={key in s._snaps}, fr={fr}, snaps_len={len(s._snaps.get(key,[]))}")
 
     async def _replay_range(s,ws,key,end_fr):
         if key not in s._snaps:
@@ -460,8 +468,9 @@ class Server:
                 # Use 0 for target_fps to use source's native FPS
                 target_fps = s._settings['target_fps'] if not s._settings.get('use_source_fps') else 0
                 
-                # When using GT depth, set depth_model to 'none' since we fetch from server
-                actual_depth_model = 'none' if use_server_depth else depth_method
+                # When using GT depth, pass 'ground_truth' to enable synchronized fetching
+                # This triggers the _use_synchronized_fetch path in LiveVideoSource
+                actual_depth_model = 'ground_truth' if use_server_depth else depth_method
                 
                 src=LiveVideoSource(
                     di['path'],
@@ -473,14 +482,10 @@ class Server:
                     max_frames=di.get('max_frames', None),
                     use_server_pose=use_server_pose,
                 )
-                # Override _use_server_depth if explicitly requested
-                if use_server_depth:
-                    src._use_server_depth = True
-                    # Also set up the depth server URL if not already set
-                    if not hasattr(src, '_depth_server_url') or not src._depth_server_url:
-                        base_url = di['path'].rsplit('/', 1)[0]
-                        src._depth_server_url = f"{base_url}/depth"
-                        logger.info(f"Using server depth from: {src._depth_server_url}")
+                
+                # Log if using synchronized fetching
+                if hasattr(src, '_use_synchronized_fetch') and src._use_synchronized_fetch:
+                    logger.info(f"Using synchronized frame fetching (GT pose + GT depth)")
                 
                 intr=src.get_intrinsics()
                 img_h, img_w = 480, 640  # Default size
@@ -597,9 +602,11 @@ class Server:
             ft=time.time()-t0
             fg=engine.get_num_gaussians()
             status='stopped'if s._stop[key].is_set()else'complete'
+            # Use actual frames processed (i) instead of estimated total for live sources
+            actual_frames = i if is_live else total
             with s._lk:s._st[key].update({'status':status,'elapsed':round(ft,1),'gaussians':fg})
             
-            run={'key':key,'engine':eng,'dataset':ds,'timestamp':datetime.now().isoformat(),'total_frames':total,'final_gaussians':fg,'avg_fps':round(total/ft,2)if ft>0 else 0,'elapsed_sec':round(ft,1),'status':status}
+            run={'key':key,'engine':eng,'dataset':ds,'timestamp':datetime.now().isoformat(),'total_frames':actual_frames,'final_gaussians':fg,'avg_fps':round(actual_frames/ft,2)if ft>0 else 0,'elapsed_sec':round(ft,1),'status':status,'is_live':is_live}
             s._hist.insert(0,run)
             try:
                 with open(HIST/f"{key}_{datetime.now().strftime('%H%M%S')}.json",'w')as f:json.dump(run,f)

@@ -565,6 +565,9 @@ class LiveVideoSource(FrameSource):
         self._use_server_pose = use_server_pose
         self._pose_server_url = pose_server_url
         self._use_server_depth = (depth_model == 'ground_truth')  # Explicit GT depth request
+        # Use synchronized frame fetching when both GT pose and depth are needed
+        self._use_synchronized_fetch = self._use_server_pose and self._use_server_depth
+
         
         # Auto-detect server URLs from HTTP stream source
         if (self._use_server_pose or self._use_server_depth) and self._pose_server_url is None:
@@ -574,10 +577,13 @@ class LiveVideoSource(FrameSource):
                 self._pose_server_url = f"{base_url}/pose"
                 self._depth_server_url = f"{base_url}/depth"
                 self._intrinsics_url = f"{base_url}/intrinsics"
+                self._frame_server_url = f"{base_url}/frame"  # Synchronized bundle
                 if self._use_server_pose:
                     logger.info(f"Auto-detected pose server: {self._pose_server_url}")
                 if self._use_server_depth:
                     logger.info(f"Auto-detected depth server: {self._depth_server_url}")
+                if self._use_synchronized_fetch:
+                    logger.info(f"Mode: Synchronized GT from {self._frame_server_url}")
         
         # Pose history for smoothing and scale estimation
         self._pose_history = []
@@ -713,6 +719,64 @@ class LiveVideoSource(FrameSource):
         scaled = pose.copy()
         scaled[:3, 3] *= scale
         return scaled
+    
+    def _fetch_synchronized_frame(self) -> Optional[Dict]:
+        """Fetch synchronized frame bundle (image + pose + depth) from server.
+        
+        This ensures all data is from the same moment, avoiding desync issues.
+        Returns dict with 'rgb', 'pose', 'depth', 'intrinsics' or None on failure.
+        """
+        if not hasattr(self, '_frame_server_url') or not self._frame_server_url:
+            return None
+        
+        try:
+            import urllib.request
+            import json
+            import base64
+            import cv2
+            
+            with urllib.request.urlopen(self._frame_server_url, timeout=2.0) as response:
+                data = json.loads(response.read().decode())
+            
+            result = {}
+            
+            # Decode RGB frame
+            if data.get('has_frame') and data.get('frame_jpg_b64'):
+                jpg_bytes = base64.b64decode(data['frame_jpg_b64'])
+                jpg_arr = np.frombuffer(jpg_bytes, dtype=np.uint8)
+                bgr = cv2.imdecode(jpg_arr, cv2.IMREAD_COLOR)
+                if bgr is not None:
+                    result['rgb'] = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+            
+            # Decode pose
+            if data.get('has_pose') and data.get('pose'):
+                result['pose'] = np.array(data['pose'], dtype=np.float64)
+            
+            # Decode depth
+            if data.get('has_depth') and data.get('depth_png_b64'):
+                depth_bytes = base64.b64decode(data['depth_png_b64'])
+                depth_arr = np.frombuffer(depth_bytes, dtype=np.uint8)
+                depth_uint16 = cv2.imdecode(depth_arr, cv2.IMREAD_UNCHANGED)
+                if depth_uint16 is not None:
+                    scale = data.get('depth_scale', 5000)
+                    result['depth'] = depth_uint16.astype(np.float32) / scale
+            
+            # Get intrinsics
+            if data.get('intrinsics'):
+                result['intrinsics'] = data['intrinsics']
+            
+            result['timestamp'] = data.get('timestamp')
+            result['frame_idx'] = data.get('frame_idx')
+            
+            if result.get('rgb') is None:
+                return None
+            
+            return result
+            
+        except Exception as e:
+            logger.debug(f"Sync fetch failed: {e}")
+        
+        return None
     
     def _fetch_server_pose(self) -> Optional[np.ndarray]:
         """Fetch ground truth pose from server (e.g., TUM simulator)."""
@@ -865,41 +929,67 @@ class LiveVideoSource(FrameSource):
                 time.sleep(0.001)
                 continue
             
-            ret, frame = self._cap.read()
+            rgb = None
+            pose = None
+            depth = None
             
-            if not ret:
-                if self._is_file:
-                    break  # End of file
-                elif self._is_rtsp or self._is_http:
-                    logger.warning("Frame grab failed, reconnecting...")
-                    time.sleep(1.0)
-                    src = int(self._source) if self._is_webcam else self._source
-                    self._cap = cv2.VideoCapture(src)
-                    continue
+            # Use synchronized fetching when both GT pose and depth are needed
+            if self._use_synchronized_fetch:
+                sync_data = self._fetch_synchronized_frame()
+                if sync_data:
+                    rgb = sync_data.get('rgb')
+                    pose = sync_data.get('pose')
+                    depth = sync_data.get('depth')
+                    if sync_data.get('intrinsics'):
+                        self._intrinsics.update(sync_data['intrinsics'])
+                    if frame_idx < 3:
+                        logger.info(f"Frame {frame_idx}: sync OK - rgb={rgb.shape if rgb is not None else None}, pose={pose is not None}, depth={depth is not None}")
                 else:
+                    logger.warning(f"Frame {frame_idx}: sync fetch failed")
                     continue
+            else:
+                # Traditional: read MJPEG then fetch pose/depth separately
+                ret, frame = self._cap.read()
+                
+                if not ret:
+                    if self._is_file:
+                        break  # End of file
+                    elif self._is_rtsp or self._is_http:
+                        logger.warning("Frame grab failed, reconnecting...")
+                        time.sleep(1.0)
+                        src = int(self._source) if self._is_webcam else self._source
+                        self._cap = cv2.VideoCapture(src)
+                        continue
+                    else:
+                        continue
+                
+                # Resize if needed
+                if self._resize:
+                    frame = cv2.resize(frame, self._resize)
+                
+                # Convert BGR to RGB
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                
+                # Get pose - prefer server ground truth if available
+                if self._use_server_pose:
+                    pose = self._fetch_server_pose()
+                    if pose is not None:
+                        logger.debug(f"Using server pose for frame {frame_idx}")
+                
+                # Get depth - prefer server ground truth if available  
+                if self._use_server_depth:
+                    depth = self._fetch_server_depth()
             
+            if rgb is None:
+                continue
+                
             last_frame_time = now
             
-            # Resize if needed
-            if self._resize:
-                frame = cv2.resize(frame, self._resize)
-            
-            # Convert BGR to RGB
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            
-            # Get pose - prefer server ground truth if available
-            pose = None
-            if self._use_server_pose:
-                pose = self._fetch_server_pose()
-                if pose is not None:
-                    logger.debug(f"Using server pose for frame {frame_idx}")
-            
-            # Fall back to estimation if no server pose
-            if pose is None:
+            # Fall back to estimation if no server pose (and not using sync fetch)
+            if pose is None and not self._use_synchronized_fetch:
                 if hasattr(self, '_use_fallback') and self._use_fallback:
                     _, pose = self._estimate_fallback(rgb)
-                else:
+                elif self._pose_estimator is not None:
                     pose_result = self._pose_estimator.estimate(rgb)
                     pose = pose_result.pose
                 
@@ -916,18 +1006,11 @@ class LiveVideoSource(FrameSource):
                     if self._enable_smooth_pose:
                         pose = self._smooth_pose(pose, alpha=0.7)
             
-            # Get depth - prefer server ground truth if available
-            depth = None
-            if self._use_server_depth:
-                depth = self._fetch_server_depth()
-                if depth is not None:
-                    logger.debug(f"Using server depth for frame {frame_idx}")
-            
-            # Fall back to depth estimation if no server depth
-            if depth is None:
+            # Fall back to depth estimation if no server depth (and no sync depth)
+            if depth is None and not self._use_synchronized_fetch:
                 if hasattr(self, '_use_fallback') and self._use_fallback:
                     depth = None
-                else:
+                elif self._depth_estimator is not None:
                     depth_result = self._depth_estimator.estimate(rgb)
                     depth = depth_result.depth if depth_result else None
             

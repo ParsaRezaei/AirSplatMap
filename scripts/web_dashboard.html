@@ -5,6 +5,7 @@
   <meta charset="UTF-8">
   <title>AirSplatMap Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
   <style>
@@ -1004,12 +1005,14 @@
       sorted.slice(0, 25).forEach(h => {
         const cls = isRunning ? ' class="disabled"' : '';
         const dsName = h.dataset.replace('rgbd_dataset_', '');
+        const isLive = h.is_live || dsName.includes('live') || dsName.includes('LIVE');
         const frames = h.total_frames || h.frames || '?';
+        const frameDisplay = isLive ? '<span style=\"color:#f85149\">●</span>' + frames : frames;
         const fps = (h.avg_fps || 0).toFixed(1);
         if (isRunning) {
-          html += '<tr' + cls + '><td class="eng">' + h.engine + '</td><td class="ds" title="' + dsName + '">' + dsName + '</td><td class="num">' + frames + '</td><td class="num fps">' + fps + '</td></tr>';
+          html += '<tr' + cls + '><td class="eng">' + h.engine + '</td><td class="ds" title="' + dsName + '">' + dsName + '</td><td class="num">' + frameDisplay + '</td><td class="num fps">' + fps + '</td></tr>';
         } else {
-          html += '<tr onclick="reqReplay(\'' + h.key + '\')"><td class="eng">' + h.engine + '</td><td class="ds" title="' + dsName + '">' + dsName + '</td><td class="num">' + frames + '</td><td class="num fps">' + fps + '</td></tr>';
+          html += '<tr onclick="reqReplay(\'' + h.key + '\')"><td class="eng">' + h.engine + '</td><td class="ds" title="' + dsName + '">' + dsName + '</td><td class="num">' + frameDisplay + '</td><td class="num fps">' + fps + '</td></tr>';
         }
       });
       html += '</table>';
@@ -1444,13 +1447,45 @@
         options: {
           responsive: true, maintainAspectRatio: false, animation: false,
           scales: {
-            x: { display: false },
+            x: { display: true, title: { display: true, text: 'Frame', color: '#7d8590', font: { size: 9 } }, grid: { color: '#30363d' }, ticks: { color: '#7d8590', font: { size: 8 }, maxTicksLimit: 10 } },
             y: { position: 'left', grid: { color: '#30363d' }, ticks: { color: '#7d8590', font: { size: 8 } } },
             y1: { position: 'right', grid: { display: false }, ticks: { color: '#7d8590', font: { size: 8 } } }
           },
-          plugins: { legend: { display: true, position: 'top', labels: { boxWidth: 8, font: { size: 7 }, color: '#e6edf3' } } }
+          plugins: { 
+            legend: { display: true, position: 'top', labels: { boxWidth: 8, font: { size: 7 }, color: '#e6edf3' } },
+            annotation: { annotations: {} }
+          }
         }
       });
+    }
+
+    let replayFrame = -1; // Current replay frame position (-1 = not replaying)
+
+    function updateReplayLine(frame) {
+      replayFrame = frame;
+      if (chart && chart.options.plugins.annotation) {
+        if (frame >= 0 && isReplaying) {
+          chart.options.plugins.annotation.annotations.replayLine = {
+            type: 'line',
+            xMin: frame + 1,  // 1-indexed labels
+            xMax: frame + 1,
+            borderColor: '#f85149',
+            borderWidth: 2,
+            borderDash: [4, 4],
+            label: {
+              display: true,
+              content: 'Frame ' + (frame + 1),
+              position: 'start',
+              backgroundColor: '#f8514980',
+              color: '#fff',
+              font: { size: 9 }
+            }
+          };
+        } else {
+          delete chart.options.plugins.annotation.annotations.replayLine;
+        }
+        chart.update('none');
+      }
     }
 
     function updateChartPt(key, m) {
@@ -1467,12 +1502,17 @@
       const colors = ['#58a6ff', '#3fb950', '#d29922', '#f85149', '#a371f7'];
       let ci = 0;
       chart.data.labels = []; chart.data.datasets = [];
+      let maxN = 0;
       for (const key in chartData) {
         const d = chartData[key];
         const n = d.fps.length;
-        if (chart.data.labels.length < n) chart.data.labels = Array.from({ length: n }, (_, i) => i);
+        if (n > maxN) maxN = n;
+      }
+      // Frame numbers as x-axis labels (1-indexed for display)
+      chart.data.labels = Array.from({ length: maxN }, (_, i) => i + 1);
+      for (const key in chartData) {
+        const d = chartData[key];
         const c = colors[ci % colors.length]; ci++;
-        // Just show metric name, not the full key
         const y1Label = y1.charAt(0).toUpperCase() + y1.slice(1);
         const y2Label = y2.charAt(0).toUpperCase() + y2.slice(1);
         chart.data.datasets.push({ label: y1Label, data: d[y1], borderColor: c, backgroundColor: c + '40', tension: .3, pointRadius: 0, borderWidth: 1, yAxisID: 'y' });
@@ -1487,78 +1527,175 @@
     // Replay
     function reqReplay(k) { if (!isRunning) ws.send(JSON.stringify({ cmd: 'get_snaps', key: k })) }
 
+    // Track if we need to recenter camera on next replay frame
+    let needsRecenter = false;
+    
     function openReplay(k, total) {
-      rKey = k; rTotal = total; isReplaying = true;
+      // Stop any existing playback
+      if (rPlaying) {
+        rPlaying = false;
+        clearInterval(rTimer);
+        $('rPlay').textContent = '▶ Play';
+        $('rPlay').classList.remove('active');
+      }
+      
+      // Reset state
+      sliderDragging = false;
+      rKey = k; 
+      rTotal = total; 
+      isReplaying = true;
+      needsRecenter = true;  // Recenter camera when first frame loads
+      
+      // Update UI
       $('replayBar').classList.add('active');
       $('replaySlider').max = total - 1;
-      $('replaySlider').value = total - 1;
+      $('replaySlider').value = total - 1;  // Start at last frame
       $('rKey').textContent = k.split('_')[0];
       $('replayBadge').style.display = 'inline';
+      $('rInfo').textContent = `${total}/${total}`;
+      
       const p = k.split('_');
       $('curEng').textContent = p[0];
       const dsName = p.slice(1).join('_').replace('rgbd_dataset_', '');
       $('curDs').textContent = dsName;
       $('curDs').title = dsName;
+      
+      // Clear old chart data and 3D viewers
+      chartData = {};
+      clearViews();
+      
+      // Clear camera and rendered images
+      $('camImg').style.display = 'none'; $('camPh').style.display = 'block';
+      $('rendImg').style.display = 'none'; $('rendPh').style.display = 'block';
+      
+      // Update replay line to last frame
+      updateReplayLine(total - 1);
+      
+      // Load replay metrics (will also request the last frame)
       ws.send(JSON.stringify({ cmd: 'replay_range', key: k, end_frame: total - 1 }));
     }
 
     function loadReplayMetrics(m) {
-      if (!chartData[m.key]) chartData[m.key] = { fps: [], loss: [], gaussians: [], psnr: [] };
+      // Load all metrics from replay into chart
+      chartData[m.key] = { fps: [], loss: [], gaussians: [], psnr: [] };
       const d = chartData[m.key];
-      d.fps = m.metrics.map(x => x.fps);
-      d.loss = m.metrics.map(x => x.loss);
+      d.fps = m.metrics.map(x => x.fps || 0);
+      d.loss = m.metrics.map(x => x.loss || 0);
       d.gaussians = m.metrics.map(x => (x.gaussians || 0) / 1000);
-      d.psnr = m.metrics.map(x => x.psnr);
+      d.psnr = m.metrics.map(x => x.psnr || 0);
       rebuildChart();
-      ws.send(JSON.stringify({ cmd: 'replay', key: m.key, frame: m.frame }));
+      
+      // Update stats display with final values using updateStats
+      if (m.metrics.length > 0) {
+        const last = m.metrics[m.metrics.length - 1];
+        updateStats({
+          fps: last.fps || 0,
+          loss: last.loss || 0,
+          gaussians: last.gaussians || 0,
+          psnr: last.psnr || 0,
+          frame: m.metrics.length,
+          total: m.metrics.length
+        });
+      }
+      
+      // Request the last frame (use actual metrics length, not m.frame which might be out of bounds)
+      const lastFrame = Math.max(0, m.metrics.length - 1);
+      console.log('Loading replay frame:', m.key, 'frame:', lastFrame, 'total metrics:', m.metrics.length);
+      ws.send(JSON.stringify({ cmd: 'replay', key: m.key, frame: lastFrame }));
     }
 
     function showReplay(m) {
-      if (m.points) {
-        const pts = dec(m.points);
-        const cols = m.colors ? dec(m.colors) : null;
-        lastPts = pts; lastCols = cols;
-        const n = pts.length / 3;
+      console.log('showReplay received:', m.key, 'frame:', m.frame, 'hasPoints:', !!m.points, 'hasImage:', !!m.image, 'hasRendered:', !!m.rendered);
+      try {
+        if (m.points) {
+          const pts = dec(m.points);
+          const cols = m.colors ? dec(m.colors) : null;
+          lastPts = pts; lastCols = cols;
+          const n = pts.length / 3;
+          console.log('Decoded points:', n);
 
-        const pos = new Float32Array(n * 3);
-        for (let i = 0; i < n; i++) {
-          pos[i * 3] = pts[i * 3]; pos[i * 3 + 1] = pts[i * 3 + 2]; pos[i * 3 + 2] = pts[i * 3 + 1];
+          const pos = new Float32Array(n * 3);
+          for (let i = 0; i < n; i++) {
+            pos[i * 3] = pts[i * 3]; pos[i * 3 + 1] = pts[i * 3 + 2]; pos[i * 3 + 2] = pts[i * 3 + 1];
+          }
+
+          v3d.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+          v3d.geo.attributes.position.needsUpdate = true;
+          v3d.geo.computeBoundingSphere();
+          v3d.info.textContent = n.toLocaleString();
+          console.log('Updated v3d with', n, 'points');
+
+          const clr = getColors(n, cols);
+          vSplat.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+          vSplat.geo.setAttribute('color', new THREE.Float32BufferAttribute(clr, 3));
+          vSplat.geo.attributes.position.needsUpdate = true;
+          vSplat.geo.attributes.color.needsUpdate = true;
+          vSplat.geo.computeBoundingSphere();
+          vSplat.mat.size = 0.02 * (settings.splat_size || 2.0);
+          vSplat.mat.opacity = settings.splat_opacity || 0.7;
+          vSplat.info.textContent = n.toLocaleString();
+          console.log('Updated vSplat with', n, 'points');
+
+          // Recenter camera when switching replays or on first frame
+          if ((needsRecenter || m.frame <= 1) && v3d.geo.boundingSphere && v3d.geo.boundingSphere.radius > 0) {
+            console.log('Recentering camera, boundingSphere:', v3d.geo.boundingSphere);
+            v3d.tgt.copy(v3d.geo.boundingSphere.center);
+            v3d.sph.r = Math.max(1, v3d.geo.boundingSphere.radius * 2.5);
+            v3d.upd();
+            vSplat.tgt.copy(vSplat.geo.boundingSphere.center);
+            vSplat.sph.r = Math.max(1, vSplat.geo.boundingSphere.radius * 2.5);
+            vSplat.upd();
+            needsRecenter = false;
+          }
+        } else {
+          console.warn('No points in replay frame');
         }
-
-        v3d.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-        v3d.geo.attributes.position.needsUpdate = true;
-        v3d.geo.computeBoundingSphere();
-        v3d.info.textContent = n.toLocaleString();
-
-        const clr = getColors(n, cols);
-        vSplat.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-        vSplat.geo.setAttribute('color', new THREE.Float32BufferAttribute(clr, 3));
-        vSplat.geo.attributes.position.needsUpdate = true;
-        vSplat.geo.attributes.color.needsUpdate = true;
-        vSplat.geo.computeBoundingSphere();
-        vSplat.mat.size = 0.02 * (settings.splat_size || 2.0);
-        vSplat.mat.opacity = settings.splat_opacity || 0.7;
-        vSplat.info.textContent = n.toLocaleString();
-
-        if (m.frame <= 1 && v3d.geo.boundingSphere && v3d.geo.boundingSphere.radius > 0) {
-          v3d.tgt.copy(v3d.geo.boundingSphere.center);
-          v3d.sph.r = Math.max(1, v3d.geo.boundingSphere.radius * 2.5);
-          v3d.upd();
-          vSplat.tgt.copy(vSplat.geo.boundingSphere.center);
-          vSplat.sph.r = Math.max(1, vSplat.geo.boundingSphere.radius * 2.5);
-          vSplat.upd();
-        }
+      } catch (err) {
+        console.error('Error in showReplay:', err);
       }
       if (m.image) updImg('camImg', 'camPh', m.image);
       $('rInfo').textContent = `${m.frame + 1}/${m.total}`;
-      $('replaySlider').value = m.frame;
+      // Only update slider if user isn't dragging it
+      if (!sliderDragging) {
+        $('replaySlider').value = m.frame;
+      }
       updateStats(m);
+      updateReplayLine(m.frame);  // Update chart replay position
     }
+
+    let sliderDragging = false;  // Track if user is dragging slider
+    let lastReplayRequest = 0;   // Timestamp of last request (for throttling)
+    const THROTTLE_MS = 50;      // Minimum ms between requests while dragging
+
+    $('replaySlider').onmousedown = () => { sliderDragging = true; };
+    $('replaySlider').ontouchstart = () => { sliderDragging = true; };
+    
+    function endSliderDrag() {
+      if (sliderDragging && rKey) {
+        sliderDragging = false;
+        // Send final frame request on release
+        const f = parseInt($('replaySlider').value);
+        ws.send(JSON.stringify({ cmd: 'replay', key: rKey, frame: f }));
+      }
+      sliderDragging = false;
+    }
+    
+    $('replaySlider').onmouseup = endSliderDrag;
+    $('replaySlider').ontouchend = endSliderDrag;
+    document.addEventListener('mouseup', endSliderDrag);
 
     $('replaySlider').oninput = function () {
       if (rKey) {
         const f = parseInt(this.value);
-        ws.send(JSON.stringify({ cmd: 'replay', key: rKey, frame: f }));
+        updateReplayLine(f);  // Update chart immediately
+        $('rInfo').textContent = `${f + 1}/${rTotal}`;
+        
+        // Throttled live updates while dragging
+        const now = Date.now();
+        if (now - lastReplayRequest >= THROTTLE_MS) {
+          lastReplayRequest = now;
+          ws.send(JSON.stringify({ cmd: 'replay', key: rKey, frame: f }));
+        }
       }
     };
 
@@ -1571,23 +1708,46 @@
       rPlaying = !rPlaying;
       $('rPlay').textContent = rPlaying ? '⏸ Pause' : '▶ Play';
       $('rPlay').classList.toggle('active', rPlaying);
-      if (rPlaying) rTimer = setInterval(() => rStep(1), 100);
-      else clearInterval(rTimer);
+      if (rPlaying) {
+        // If at the end, start from beginning
+        const currentFrame = parseInt($('replaySlider').value);
+        if (currentFrame >= rTotal - 1) {
+          $('replaySlider').value = 0;
+          ws.send(JSON.stringify({ cmd: 'replay', key: rKey, frame: 0 }));
+          updateReplayLine(0);
+        }
+        rTimer = setInterval(() => rStep(1), 100);
+      } else {
+        clearInterval(rTimer);
+      }
     }
 
     function rStep(d) {
-      if (!rKey) return;
+      if (!rKey || sliderDragging) return;  // Don't step while dragging
       let f = parseInt($('replaySlider').value) + d;
-      if (f < 0) f = 0; if (f >= rTotal) f = rTotal - 1;
+      if (f < 0) f = 0; 
+      if (f >= rTotal) {
+        f = rTotal - 1;
+        // Stop playing when reaching the end
+        if (rPlaying) {
+          rPlaying = false;
+          clearInterval(rTimer);
+          $('rPlay').textContent = '▶ Play';
+          $('rPlay').classList.remove('active');
+        }
+      }
       $('replaySlider').value = f;
+      updateReplayLine(f);
       ws.send(JSON.stringify({ cmd: 'replay', key: rKey, frame: f }));
     }
 
     function closeReplay() {
       rPlaying = false; clearInterval(rTimer);
+      sliderDragging = false;
       $('replayBar').classList.remove('active');
       $('replayBadge').style.display = 'none';
       isReplaying = false; rKey = null;
+      updateReplayLine(-1);  // Clear the replay line from chart
     }
 
     // Init
