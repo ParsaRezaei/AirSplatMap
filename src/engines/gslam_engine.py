@@ -10,9 +10,8 @@ Key features:
 - Joint tracking and mapping
 - Works with TUM, Replica, ScanNet datasets
 
-To use this engine, you need Gaussian-SLAM installed:
-    cd ~/parsa/Gaussian-SLAM
-    pip install -e .
+To use this engine, ensure the submodule is initialized:
+    git submodule update --init --recursive
 """
 
 import torch
@@ -32,17 +31,22 @@ from .base import BaseGSEngine
 logger = logging.getLogger(__name__)
 
 
-# Try to find Gaussian-SLAM
-GSLAM_PATHS = [
-    Path.home() / "parsa" / "Gaussian-SLAM",
-    Path("/home/past/parsa/Gaussian-SLAM"),
-    Path.home() / "Gaussian-SLAM",
-]
-
-
 def _find_gslam_path() -> Optional[Path]:
     """Find Gaussian-SLAM installation."""
-    for path in GSLAM_PATHS:
+    this_dir = Path(__file__).parent.resolve()
+    airsplatmap_root = this_dir.parent.parent
+    workspace_root = airsplatmap_root.parent
+    
+    candidates = [
+        # Primary: submodules directory (git submodule)
+        airsplatmap_root / "submodules" / "Gaussian-SLAM",
+        # Legacy paths
+        workspace_root / "Gaussian-SLAM",
+        Path.home() / "parsa" / "Gaussian-SLAM",
+        Path.home() / "Gaussian-SLAM",
+    ]
+    
+    for path in candidates:
         if path.exists() and (path / "src" / "entities" / "gaussian_slam.py").exists():
             return path
     return None

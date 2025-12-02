@@ -19,7 +19,27 @@ from typing import Dict, Optional, Tuple, Any
 
 logger = logging.getLogger(__name__)
 
-PHOTOSLAM_PATH = Path(__file__).parent.parent.parent.parent / "Photo-SLAM"
+
+def _find_photoslam_path() -> Optional[Path]:
+    """Find Photo-SLAM installation."""
+    this_dir = Path(__file__).parent.resolve()
+    airsplatmap_root = this_dir.parent.parent
+    workspace_root = airsplatmap_root.parent
+    
+    candidates = [
+        # Primary: submodules directory (git submodule)
+        airsplatmap_root / "submodules" / "Photo-SLAM",
+        # Legacy: workspace root
+        workspace_root / "Photo-SLAM",
+    ]
+    
+    for path in candidates:
+        if path.exists() and (path / "src").is_dir():
+            return path
+    return None
+
+
+PHOTOSLAM_PATH = _find_photoslam_path()
 
 
 class PhotoSLAMEngine:
@@ -46,16 +66,16 @@ class PhotoSLAMEngine:
         self._output_dir = None
         
         # Check if Photo-SLAM is available
-        self._photoslam_available = PHOTOSLAM_PATH.exists()
-        self._binary_path = PHOTOSLAM_PATH / "bin" / "tum_rgbd"
-        self._binary_available = self._binary_path.exists()
+        self._photoslam_available = PHOTOSLAM_PATH is not None and PHOTOSLAM_PATH.exists()
+        self._binary_path = PHOTOSLAM_PATH / "bin" / "tum_rgbd" if PHOTOSLAM_PATH else None
+        self._binary_available = self._binary_path and self._binary_path.exists()
         
         if not self._photoslam_available:
-            logger.warning(f"Photo-SLAM not found at {PHOTOSLAM_PATH}")
-            logger.warning("Please clone: git clone https://github.com/HuajianUP/Photo-SLAM.git --recursive")
+            logger.warning("Photo-SLAM not found")
+            logger.warning("Please run: git submodule update --init --recursive")
         elif not self._binary_available:
             logger.warning(f"Photo-SLAM binary not found at {self._binary_path}")
-            logger.warning("Please build Photo-SLAM: cd Photo-SLAM && ./build.sh")
+            logger.warning("Please build Photo-SLAM: cd submodules/Photo-SLAM && ./build.sh")
         
         logger.info(f"Photo-SLAM engine initialized (binary available: {self._binary_available})")
     

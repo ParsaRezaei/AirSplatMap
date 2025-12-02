@@ -74,13 +74,34 @@ class SplaTAMConfig:
     mean_sq_dist_method: str = "projective"
 
 
+def _find_splatam_path() -> Optional[Path]:
+    """Find SplaTAM installation."""
+    this_dir = Path(__file__).parent.resolve()
+    airsplatmap_root = this_dir.parent.parent
+    workspace_root = airsplatmap_root.parent
+    
+    candidates = [
+        # Primary: submodules directory (git submodule)
+        airsplatmap_root / "submodules" / "SplaTAM",
+        # Legacy: workspace root or home
+        workspace_root / "SplaTAM",
+        Path.home() / "SplaTAM",
+    ]
+    
+    for path in candidates:
+        if path.exists() and (path / "scripts").is_dir():
+            return path
+    return None
+
+
 def _check_splatam_available() -> bool:
     """Check if SplaTAM is installed."""
-    splatam_path = Path.home() / "SplaTAM"
-    if not splatam_path.exists():
+    splatam_path = _find_splatam_path()
+    if not splatam_path:
         return False
     try:
-        sys.path.insert(0, str(splatam_path))
+        if str(splatam_path) not in sys.path:
+            sys.path.insert(0, str(splatam_path))
         # Try importing the diff-gaussian-rasterization with depth
         from diff_gaussian_rasterization import GaussianRasterizer
         return True
@@ -90,6 +111,7 @@ def _check_splatam_available() -> bool:
 
 # Check availability at module load
 _SPLATAM_AVAILABLE = _check_splatam_available()
+SPLATAM_PATH = _find_splatam_path()
 
 
 class SplaTAMEngine(BaseGSEngine):
@@ -106,8 +128,6 @@ class SplaTAMEngine(BaseGSEngine):
     4. Densify/prune Gaussians periodically
     """
     
-    SPLATAM_PATH = Path.home() / "SplaTAM"
-    
     def __init__(
         self,
         device: str = "cuda:0",
@@ -119,7 +139,7 @@ class SplaTAMEngine(BaseGSEngine):
         
         Args:
             device: CUDA device to use
-            splatam_path: Path to SplaTAM installation (default: ~/SplaTAM)
+            splatam_path: Path to SplaTAM installation (default: submodules/SplaTAM)
             config: SplaTAM configuration
         """
         self.device = torch.device(device)
@@ -127,8 +147,7 @@ class SplaTAMEngine(BaseGSEngine):
         self._intrinsics = None
         self._intrinsics_tensor = None
         
-        if splatam_path:
-            self.SPLATAM_PATH = Path(splatam_path)
+        self._splatam_path = Path(splatam_path) if splatam_path else SPLATAM_PATH
         
         self.config = config or SplaTAMConfig()
         

@@ -43,8 +43,8 @@ def _find_graphdeco_path() -> Path:
     
     Search order:
     1. GRAPHDECO_PATH environment variable
-    2. Relative to this file: ../../gaussian-splatting
-    3. Parent directory's gaussian-splatting folder
+    2. AirSplatMap/submodules/gaussian-splatting (git submodule)
+    3. Workspace root gaussian-splatting folder (legacy)
     
     Returns:
         Path to the gaussian-splatting directory
@@ -60,12 +60,18 @@ def _find_graphdeco_path() -> Path:
     # Try relative paths from this file's location
     this_dir = Path(__file__).parent.resolve()
     
-    # Go up from: AirSplatMap/src/engines -> AirSplatMap -> workspace root
-    workspace_root = this_dir.parent.parent.parent  # /home/past/parsa
+    # AirSplatMap root: src/engines -> src -> AirSplatMap
+    airsplatmap_root = this_dir.parent.parent
+    
+    # Workspace root (parent of AirSplatMap)
+    workspace_root = airsplatmap_root.parent
     
     candidates = [
+        # Primary: submodules directory (git submodule)
+        airsplatmap_root / "submodules" / "gaussian-splatting",
+        # Legacy: workspace root
         workspace_root / "gaussian-splatting",
-        this_dir.parent.parent / "gaussian-splatting",  # AirSplatMap/gaussian-splatting
+        # Home directory
         Path.home() / "gaussian-splatting",
     ]
     
@@ -75,8 +81,8 @@ def _find_graphdeco_path() -> Path:
     
     raise RuntimeError(
         "Could not find Graphdeco gaussian-splatting repository. "
-        "Please set GRAPHDECO_PATH environment variable or ensure it's at "
-        f"one of: {[str(c) for c in candidates]}"
+        "Please run: git submodule update --init --recursive\n"
+        f"Or set GRAPHDECO_PATH environment variable. Searched: {[str(c) for c in candidates]}"
     )
 
 

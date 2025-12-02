@@ -16,9 +16,29 @@ import torch
 from pathlib import Path
 from typing import Dict, Optional, Tuple, Any
 
+
+def _find_monogs_path() -> Optional[Path]:
+    """Find MonoGS repository path."""
+    this_dir = Path(__file__).parent.resolve()
+    airsplatmap_root = this_dir.parent.parent
+    workspace_root = airsplatmap_root.parent
+    
+    candidates = [
+        # Primary: submodules directory (git submodule)
+        airsplatmap_root / "submodules" / "MonoGS",
+        # Legacy: workspace root
+        workspace_root / "MonoGS",
+    ]
+    
+    for candidate in candidates:
+        if candidate.is_dir() and (candidate / "gaussian_splatting").is_dir():
+            return candidate
+    return None
+
+
 # Add MonoGS to path
-MONOGS_PATH = Path(__file__).parent.parent.parent.parent / "MonoGS"
-if MONOGS_PATH.exists():
+MONOGS_PATH = _find_monogs_path()
+if MONOGS_PATH and str(MONOGS_PATH) not in sys.path:
     sys.path.insert(0, str(MONOGS_PATH))
 
 logger = logging.getLogger(__name__)
@@ -51,10 +71,10 @@ class MonoGSEngine:
         self._frame_idx = 0
         
         # Check if MonoGS is available
-        self._monogs_available = MONOGS_PATH.exists()
+        self._monogs_available = MONOGS_PATH is not None and MONOGS_PATH.exists()
         if not self._monogs_available:
-            logger.warning(f"MonoGS not found at {MONOGS_PATH}")
-            logger.warning("Please clone: git clone https://github.com/muskie82/MonoGS.git --recursive")
+            logger.warning(f"MonoGS not found")
+            logger.warning("Please run: git submodule update --init --recursive")
         
         logger.info(f"MonoGS engine initialized on {device}")
     
