@@ -32,21 +32,32 @@ logger = logging.getLogger(__name__)
 
 
 def _find_gslam_path() -> Optional[Path]:
-    """Find Gaussian-SLAM installation."""
+    """Find Gaussian-SLAM installation.
+    
+    Set AIRSPLAT_USE_SUBMODULES=1 to force submodule-only mode.
+    """
+    use_submodules_only = os.environ.get("AIRSPLAT_USE_SUBMODULES", "").lower() in ("1", "true", "yes")
+    
     this_dir = Path(__file__).parent.resolve()
     airsplatmap_root = this_dir.parent.parent
     workspace_root = airsplatmap_root.parent
     
-    candidates = [
-        # Primary: submodules directory (git submodule)
-        airsplatmap_root / "submodules" / "Gaussian-SLAM",
-        # Legacy paths
+    # Primary: submodules directory (git submodule)
+    submodule_path = airsplatmap_root / "submodules" / "Gaussian-SLAM"
+    if submodule_path.exists() and (submodule_path / "src" / "entities" / "gaussian_slam.py").exists():
+        return submodule_path
+    
+    if use_submodules_only:
+        return None  # Don't fall back to legacy
+    
+    # Legacy paths
+    legacy_candidates = [
         workspace_root / "Gaussian-SLAM",
         Path.home() / "parsa" / "Gaussian-SLAM",
         Path.home() / "Gaussian-SLAM",
     ]
     
-    for path in candidates:
+    for path in legacy_candidates:
         if path.exists() and (path / "src" / "entities" / "gaussian_slam.py").exists():
             return path
     return None

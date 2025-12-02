@@ -11,12 +11,11 @@ SplaTAM advantages:
 - Battle-tested on TUM, Replica, ScanNet
 - Proper keyframe selection and loop management
 
-To use this engine, you need to install SplaTAM:
-    git clone https://github.com/spla-tam/SplaTAM.git ~/SplaTAM
-    cd ~/SplaTAM
-    pip install -e .
+To use this engine, ensure the submodule is initialized:
+    git submodule update --init --recursive
 """
 
+import os
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -75,20 +74,31 @@ class SplaTAMConfig:
 
 
 def _find_splatam_path() -> Optional[Path]:
-    """Find SplaTAM installation."""
+    """Find SplaTAM installation.
+    
+    Set AIRSPLAT_USE_SUBMODULES=1 to force submodule-only mode.
+    """
+    use_submodules_only = os.environ.get("AIRSPLAT_USE_SUBMODULES", "").lower() in ("1", "true", "yes")
+    
     this_dir = Path(__file__).parent.resolve()
     airsplatmap_root = this_dir.parent.parent
     workspace_root = airsplatmap_root.parent
     
-    candidates = [
-        # Primary: submodules directory (git submodule)
-        airsplatmap_root / "submodules" / "SplaTAM",
-        # Legacy: workspace root or home
+    # Primary: submodules directory (git submodule)
+    submodule_path = airsplatmap_root / "submodules" / "SplaTAM"
+    if submodule_path.exists() and (submodule_path / "scripts").is_dir():
+        return submodule_path
+    
+    if use_submodules_only:
+        return None  # Don't fall back to legacy
+    
+    # Legacy: workspace root or home
+    legacy_candidates = [
         workspace_root / "SplaTAM",
         Path.home() / "SplaTAM",
     ]
     
-    for path in candidates:
+    for path in legacy_candidates:
         if path.exists() and (path / "scripts").is_dir():
             return path
     return None

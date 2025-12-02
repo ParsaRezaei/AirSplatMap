@@ -1,15 +1,15 @@
 [submodule "submodules/gaussian-splatting"]
 	path = submodules/gaussian-splatting
-	url = https://github.com/graphdeco-inria/gaussian-splatting
+	url = https://github.com/ParsaRezaei/gaussian-splatting.git
 [submodule "submodules/MonoGS"]
 	path = submodules/MonoGS
-	url = https://github.com/muskie82/MonoGS.git
+	url = https://github.com/ParsaRezaei/MonoGS.git
 [submodule "submodules/Gaussian-SLAM"]
 	path = submodules/Gaussian-SLAM
-	url = https://github.com/VladimirYugay/Gaussian-SLAM.git
+	url = https://github.com/ParsaRezaei/Gaussian-SLAM.git
 [submodule "submodules/Photo-SLAM"]
 	path = submodules/Photo-SLAM
-	url = https://github.com/HuajianUP/Photo-SLAM.git
+	url = https://github.com/ParsaRezaei/Photo-SLAM.git
 [submodule "submodules/SplaTAM"]
 	path = submodules/SplaTAM
-	url = https://github.com/spla-tam/SplaTAM.git
+	url = https://github.com/ParsaRezaei/SplaTAM.git

@@ -21,21 +21,28 @@ logger = logging.getLogger(__name__)
 
 
 def _find_photoslam_path() -> Optional[Path]:
-    """Find Photo-SLAM installation."""
+    """Find Photo-SLAM installation.
+    
+    Set AIRSPLAT_USE_SUBMODULES=1 to force submodule-only mode.
+    """
+    use_submodules_only = os.environ.get("AIRSPLAT_USE_SUBMODULES", "").lower() in ("1", "true", "yes")
+    
     this_dir = Path(__file__).parent.resolve()
     airsplatmap_root = this_dir.parent.parent
     workspace_root = airsplatmap_root.parent
     
-    candidates = [
-        # Primary: submodules directory (git submodule)
-        airsplatmap_root / "submodules" / "Photo-SLAM",
-        # Legacy: workspace root
-        workspace_root / "Photo-SLAM",
-    ]
+    # Primary: submodules directory (git submodule)
+    submodule_path = airsplatmap_root / "submodules" / "Photo-SLAM"
+    if submodule_path.exists() and (submodule_path / "src").is_dir():
+        return submodule_path
     
-    for path in candidates:
-        if path.exists() and (path / "src").is_dir():
-            return path
+    if use_submodules_only:
+        return None  # Don't fall back to legacy
+    
+    # Legacy: workspace root
+    legacy_path = workspace_root / "Photo-SLAM"
+    if legacy_path.exists() and (legacy_path / "src").is_dir():
+        return legacy_path
     return None
 
 

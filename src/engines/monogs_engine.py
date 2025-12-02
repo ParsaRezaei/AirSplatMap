@@ -18,21 +18,29 @@ from typing import Dict, Optional, Tuple, Any
 
 
 def _find_monogs_path() -> Optional[Path]:
-    """Find MonoGS repository path."""
+    """Find MonoGS repository path.
+    
+    Set AIRSPLAT_USE_SUBMODULES=1 to force submodule-only mode.
+    """
+    use_submodules_only = os.environ.get("AIRSPLAT_USE_SUBMODULES", "").lower() in ("1", "true", "yes")
+    
     this_dir = Path(__file__).parent.resolve()
     airsplatmap_root = this_dir.parent.parent
     workspace_root = airsplatmap_root.parent
     
-    candidates = [
-        # Primary: submodules directory (git submodule)
-        airsplatmap_root / "submodules" / "MonoGS",
-        # Legacy: workspace root
-        workspace_root / "MonoGS",
-    ]
+    # Primary: submodules directory (git submodule)
+    submodule_path = airsplatmap_root / "submodules" / "MonoGS"
+    if submodule_path.is_dir() and (submodule_path / "gaussian_splatting").is_dir():
+        return submodule_path
     
-    for candidate in candidates:
-        if candidate.is_dir() and (candidate / "gaussian_splatting").is_dir():
-            return candidate
+    if use_submodules_only:
+        return None  # Don't fall back to legacy
+    
+    # Legacy: workspace root
+    legacy_path = workspace_root / "MonoGS"
+    if legacy_path.is_dir() and (legacy_path / "gaussian_splatting").is_dir():
+        return legacy_path
+    
     return None
 
 

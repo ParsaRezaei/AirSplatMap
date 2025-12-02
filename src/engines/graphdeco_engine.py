@@ -44,7 +44,9 @@ def _find_graphdeco_path() -> Path:
     Search order:
     1. GRAPHDECO_PATH environment variable
     2. AirSplatMap/submodules/gaussian-splatting (git submodule)
-    3. Workspace root gaussian-splatting folder (legacy)
+    3. Workspace root gaussian-splatting folder (legacy, unless AIRSPLAT_USE_SUBMODULES=1)
+    
+    Set AIRSPLAT_USE_SUBMODULES=1 to force submodule-only mode.
     
     Returns:
         Path to the gaussian-splatting directory
@@ -57,6 +59,9 @@ def _find_graphdeco_path() -> Path:
     if env_path and os.path.isdir(env_path):
         return Path(env_path)
     
+    # Check if we should use submodules only
+    use_submodules_only = os.environ.get("AIRSPLAT_USE_SUBMODULES", "").lower() in ("1", "true", "yes")
+    
     # Try relative paths from this file's location
     this_dir = Path(__file__).parent.resolve()
     
@@ -66,23 +71,32 @@ def _find_graphdeco_path() -> Path:
     # Workspace root (parent of AirSplatMap)
     workspace_root = airsplatmap_root.parent
     
-    candidates = [
-        # Primary: submodules directory (git submodule)
-        airsplatmap_root / "submodules" / "gaussian-splatting",
-        # Legacy: workspace root
+    # Primary: submodules directory (git submodule)
+    submodule_path = airsplatmap_root / "submodules" / "gaussian-splatting"
+    if submodule_path.is_dir() and (submodule_path / "scene").is_dir():
+        return submodule_path
+    
+    if use_submodules_only:
+        raise RuntimeError(
+            "AIRSPLAT_USE_SUBMODULES=1 but submodule not found at: "
+            f"{submodule_path}\nRun: git submodule update --init --recursive"
+        )
+    
+    # Legacy fallbacks
+    legacy_candidates = [
         workspace_root / "gaussian-splatting",
-        # Home directory
         Path.home() / "gaussian-splatting",
     ]
     
-    for candidate in candidates:
+    for candidate in legacy_candidates:
         if candidate.is_dir() and (candidate / "scene").is_dir():
+            logger.info(f"Using legacy path: {candidate} (set AIRSPLAT_USE_SUBMODULES=1 to disable)")
             return candidate
     
     raise RuntimeError(
         "Could not find Graphdeco gaussian-splatting repository. "
         "Please run: git submodule update --init --recursive\n"
-        f"Or set GRAPHDECO_PATH environment variable. Searched: {[str(c) for c in candidates]}"
+        f"Searched: {[str(submodule_path)] + [str(c) for c in legacy_candidates]}"
     )
 
 
