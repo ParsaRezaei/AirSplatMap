@@ -5,6 +5,15 @@
 #   conda env create -f environment_crossplatform.yml
 #   conda activate airsplatmap
 #
+# For graphdeco/monogs/splatam engines (optional, requires C++ compiler):
+#   Windows: Install Visual Studio Build Tools 2019 first
+#            https://aka.ms/vs/16/release/vs_buildtools.exe
+#   Then:
+#     cd submodules/gaussian-splatting/submodules/diff-gaussian-rasterization
+#     pip install .
+#     cd ../simple-knn
+#     pip install .
+#
 name: airsplatmap
 channels:
   - pytorch
@@ -54,3 +63,5 @@ dependencies:
       - wandb>=0.15.0
       # Web dashboard
       - websockets>=12.0
+      # MonoGS dependency
+      - munch>=4.0.0

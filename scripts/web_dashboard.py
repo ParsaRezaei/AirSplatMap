@@ -352,6 +352,9 @@ class Server:
             if pc is None:return None,None
             pc=np.asarray(pc)
             if len(pc)==0:return None,None
+            # Flip Y axis for Three.js (Y-up) vs OpenCV (Y-down) convention
+            pc = pc.copy()
+            pc[:, 1] = -pc[:, 1]
             idx=None
             if len(pc)>max_pts:
                 idx=np.random.choice(len(pc),max_pts,replace=False)
@@ -560,9 +563,11 @@ class Server:
                 try:engine.add_frame(fr.idx,fr.rgb,fr.depth,fr.pose)
                 except:continue
                 mt={}
-                try:mt=engine.optimize_step(n_steps=5)
+                # Use fewer optimization steps for live (speed) vs TUM (quality)
+                opt_steps = 2 if is_live else 5
+                try:mt=engine.optimize_step(n_steps=opt_steps)
                 except TypeError:
-                    try:mt=engine.optimize_step(num_steps=5)
+                    try:mt=engine.optimize_step(num_steps=opt_steps)
                     except:
                         try:mt=engine.optimize_step()
                         except:pass

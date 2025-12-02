@@ -10,6 +10,27 @@ Code: https://github.com/muskie82/MonoGS
 
 import os
 import sys
+# Setup DLL directories for Windows before importing CUDA modules
+if sys.platform == 'win32':
+    cuda_paths = [
+        os.path.join(os.environ.get('CUDA_PATH', ''), 'bin'),
+        r'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\bin',
+        r'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\bin',
+    ]
+    for cuda_bin in cuda_paths:
+        if os.path.exists(cuda_bin):
+            try:
+                os.add_dll_directory(cuda_bin)
+            except (OSError, AttributeError):
+                pass
+            break
+    try:
+        import torch as _torch
+        torch_lib = os.path.join(os.path.dirname(_torch.__file__), 'lib')
+        if os.path.exists(torch_lib):
+            os.add_dll_directory(torch_lib)
+    except (ImportError, OSError, AttributeError):
+        pass
 import logging
 import numpy as np
 import torch

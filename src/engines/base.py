@@ -14,6 +14,53 @@ from abc import ABC, abstractmethod
 from typing import Optional, Dict, Any, Tuple
 import numpy as np
 
+# Cache the available renderer
+_AVAILABLE_RENDERER: Optional[str] = None
+
+
+def get_available_renderer() -> str:
+    """
+    Check which GPU renderer is available.
+    
+    Returns:
+        One of: "diff-gaussian-rasterization", "gsplat", "software"
+    """
+    global _AVAILABLE_RENDERER
+    
+    if _AVAILABLE_RENDERER is not None:
+        return _AVAILABLE_RENDERER
+    
+    # Try diff-gaussian-rasterization first
+    try:
+        from diff_gaussian_rasterization import GaussianRasterizationSettings
+        _AVAILABLE_RENDERER = "diff-gaussian-rasterization"
+        return _AVAILABLE_RENDERER
+    except ImportError:
+        pass
+    
+    # Try gsplat
+    try:
+        import torch
+        from gsplat import rasterization
+        # Quick test to see if CUDA kernels work
+        means = torch.rand(2, 3, device='cuda')
+        quats = torch.tensor([[1, 0, 0, 0], [1, 0, 0, 0]], dtype=torch.float32, device='cuda')
+        scales = torch.ones(2, 3, device='cuda') * 0.1
+        opacities = torch.ones(2, device='cuda')
+        colors = torch.ones(2, 3, device='cuda')
+        viewmat = torch.eye(4, device='cuda')
+        viewmat[2, 3] = -3.0
+        K = torch.tensor([[500, 0, 320], [0, 500, 240], [0, 0, 1]], dtype=torch.float32, device='cuda')
+        _ = rasterization(means=means, quats=quats, scales=scales, opacities=opacities,
+                         colors=colors, viewmats=viewmat[None], Ks=K[None], width=640, height=480)
+        _AVAILABLE_RENDERER = "gsplat"
+        return _AVAILABLE_RENDERER
+    except Exception:
+        pass
+    
+    _AVAILABLE_RENDERER = "software"
+    return _AVAILABLE_RENDERER
+
 
 class BaseGSEngine(ABC):
     """
@@ -272,9 +319,12 @@ def render_points_gsplat(
     device: str = "cuda"
 ) -> np.ndarray:
     """
-    Render point cloud using gsplat's rasterizer for GPU-accelerated rendering.
+    Render point cloud using GPU-accelerated Gaussian rasterization.
     
-    This creates small spherical Gaussians from points for efficient rendering.
+    Tries renderers in order:
+    1. diff-gaussian-rasterization (graphdeco) - most compatible
+    2. gsplat (nerfstudio) - faster but requires JIT compilation
+    3. Software fallback
     
     Args:
         points: Nx3 array of 3D positions
@@ -289,73 +339,247 @@ def render_points_gsplat(
         HxWx3 uint8 image
     """
     import torch
-    import math
     
     width, height = image_size
     
     if len(points) == 0:
         return np.zeros((height, width, 3), dtype=np.uint8)
     
+    # Try diff-gaussian-rasterization first (most compatible on Windows)
     try:
-        import gsplat
+        return _render_with_diff_gaussian_rasterization(
+            points, colors, pose, intrinsics, image_size, point_size, device
+        )
+    except Exception as e1:
+        pass
+    
+    # Try gsplat next
+    try:
+        return _render_with_gsplat(
+            points, colors, pose, intrinsics, image_size, point_size, device
+        )
+    except Exception as e2:
+        pass
+    
+    # Fallback to software rendering
+    return _software_render_points(points, colors, pose, intrinsics, image_size)
+
+
+def _render_with_diff_gaussian_rasterization(
+    points: np.ndarray,
+    colors: np.ndarray,
+    pose: np.ndarray,
+    intrinsics: Dict[str, float],
+    image_size: Tuple[int, int],
+    point_size: float = 0.01,
+    device: str = "cuda"
+) -> np.ndarray:
+    """Render using diff-gaussian-rasterization (graphdeco)."""
+    import torch
+    import sys
+    from pathlib import Path
+    
+    # Add graphdeco paths if needed
+    graphdeco_path = Path(__file__).parent.parent.parent / "submodules" / "gaussian-splatting"
+    if str(graphdeco_path) not in sys.path:
+        sys.path.insert(0, str(graphdeco_path))
+    
+    from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
+    
+    width, height = image_size
+    n = len(points)
+    
+    # Camera parameters
+    fx = intrinsics['fx'] * width / intrinsics['width']
+    fy = intrinsics['fy'] * height / intrinsics['height']
+    cx = intrinsics['cx'] * width / intrinsics['width']
+    cy = intrinsics['cy'] * height / intrinsics['height']
+    
+    # Compute FoV from focal length
+    import math
+    fov_x = 2 * math.atan(width / (2 * fx))
+    fov_y = 2 * math.atan(height / (2 * fy))
+    
+    # World to camera transform
+    w2c = np.linalg.inv(pose).astype(np.float32)
+    
+    # View matrix (transposed for column-major)
+    view_matrix = torch.from_numpy(w2c.T).to(device)
+    
+    # Projection matrix
+    znear, zfar = 0.01, 100.0
+    tan_fov_x = math.tan(fov_x / 2)
+    tan_fov_y = math.tan(fov_y / 2)
+    
+    proj = torch.zeros(4, 4, device=device)
+    proj[0, 0] = 1 / tan_fov_x
+    proj[1, 1] = 1 / tan_fov_y
+    proj[2, 2] = -(zfar + znear) / (zfar - znear)
+    proj[2, 3] = -2 * zfar * znear / (zfar - znear)
+    proj[3, 2] = -1.0
+    
+    full_proj = view_matrix @ proj
+    
+    # Camera center
+    cam_center = torch.from_numpy(pose[:3, 3].astype(np.float32)).to(device)
+    
+    # Rasterizer settings
+    raster_settings = GaussianRasterizationSettings(
+        image_height=height,
+        image_width=width,
+        tanfovx=tan_fov_x,
+        tanfovy=tan_fov_y,
+        bg=torch.zeros(3, device=device),
+        scale_modifier=1.0,
+        viewmatrix=view_matrix,
+        projmatrix=full_proj,
+        sh_degree=0,
+        campos=cam_center,
+        prefiltered=False,
+        debug=False,
+    )
+    
+    rasterizer = GaussianRasterizer(raster_settings=raster_settings)
+    
+    # Prepare Gaussian parameters
+    means3D = torch.from_numpy(points.astype(np.float32)).to(device)
+    
+    # Project means to 2D for screen space
+    ones = torch.ones(n, 1, device=device)
+    means_h = torch.cat([means3D, ones], dim=1)
+    means_proj = means_h @ full_proj
+    means2D = means_proj[:, :2] / (means_proj[:, 3:4] + 1e-8)
+    means2D.requires_grad_(True)  # Needed for rasterizer
+    
+    # Colors as SH DC component
+    C0 = 0.28209479177387814
+    if colors.max() > 1.0:
+        colors = colors / 255.0
+    colors_tensor = torch.from_numpy(colors.astype(np.float32)).to(device)
+    shs = (colors_tensor - 0.5) / C0
+    shs = shs.unsqueeze(1)  # (N, 1, 3)
+    
+    # Scales and rotations
+    scales = torch.full((n, 3), point_size, device=device)
+    rotations = torch.zeros((n, 4), device=device)
+    rotations[:, 0] = 1.0  # w = 1 for identity quaternion
+    
+    # Opacities (full)
+    opacities = torch.ones((n, 1), device=device)
+    
+    # Covariance from scales and rotations
+    def build_covariance(scales, rotations):
+        """Build 3D covariance matrices from scales and quaternions."""
+        # Rotation matrix from quaternion
+        r, x, y, z = rotations[:, 0], rotations[:, 1], rotations[:, 2], rotations[:, 3]
+        R = torch.stack([
+            1 - 2*(y*y + z*z), 2*(x*y - r*z), 2*(x*z + r*y),
+            2*(x*y + r*z), 1 - 2*(x*x + z*z), 2*(y*z - r*x),
+            2*(x*z - r*y), 2*(y*z + r*x), 1 - 2*(x*x + y*y)
+        ], dim=-1).reshape(-1, 3, 3)
         
-        # Convert to tensors
-        means = torch.from_numpy(points.astype(np.float32)).to(device)
-        rgbs = torch.from_numpy(colors.astype(np.float32)).to(device)
+        # Scale matrix
+        S = torch.diag_embed(scales)
         
-        # Create uniform small scales (spherical Gaussians)
-        n = len(means)
-        scales = torch.full((n, 3), point_size, device=device)
+        # Covariance = R @ S @ S^T @ R^T
+        L = R @ S
+        cov = L @ L.transpose(-1, -2)
         
-        # Identity rotations (quaternions: w, x, y, z)
-        quats = torch.zeros((n, 4), device=device)
-        quats[:, 0] = 1.0  # w = 1 for identity
+        # Return upper triangle (6 values)
+        return torch.stack([
+            cov[:, 0, 0], cov[:, 0, 1], cov[:, 0, 2],
+            cov[:, 1, 1], cov[:, 1, 2], cov[:, 2, 2]
+        ], dim=-1)
+    
+    cov3D = build_covariance(scales, rotations)
+    
+    with torch.no_grad():
+        rendered_image, radii = rasterizer(
+            means3D=means3D,
+            means2D=means2D,
+            shs=shs,
+            colors_precomp=None,
+            opacities=opacities,
+            scales=scales,
+            rotations=rotations,
+            cov3D_precomp=None,
+        )
+    
+    # rendered_image is (3, H, W)
+    img = rendered_image.permute(1, 2, 0).clamp(0, 1)
+    img = (img.cpu().numpy() * 255).astype(np.uint8)
+    return img
+
+
+def _render_with_gsplat(
+    points: np.ndarray,
+    colors: np.ndarray,
+    pose: np.ndarray,
+    intrinsics: Dict[str, float],
+    image_size: Tuple[int, int],
+    point_size: float = 0.01,
+    device: str = "cuda"
+) -> np.ndarray:
+    """Render using gsplat (nerfstudio)."""
+    import torch
+    import gsplat
+    
+    width, height = image_size
+    n = len(points)
+    
+    # Convert to tensors
+    means = torch.from_numpy(points.astype(np.float32)).to(device)
+    if colors.max() > 1.0:
+        colors = colors / 255.0
+    rgbs = torch.from_numpy(colors.astype(np.float32)).to(device)
+    
+    # Create uniform small scales (spherical Gaussians)
+    scales = torch.full((n, 3), point_size, device=device)
+    
+    # Identity rotations (quaternions: w, x, y, z)
+    quats = torch.zeros((n, 4), device=device)
+    quats[:, 0] = 1.0  # w = 1 for identity
+    
+    # Full opacity
+    opacities = torch.ones((n,), device=device)
+    
+    # Camera parameters
+    fx = intrinsics['fx'] * width / intrinsics['width']
+    fy = intrinsics['fy'] * height / intrinsics['height']
+    cx = intrinsics['cx'] * width / intrinsics['width']
+    cy = intrinsics['cy'] * height / intrinsics['height']
+    
+    # View matrix (world to camera)
+    viewmat = torch.from_numpy(np.linalg.inv(pose).astype(np.float32)).to(device)
+    
+    # Camera intrinsics matrix
+    K = torch.tensor([
+        [fx, 0, cx],
+        [0, fy, cy],
+        [0, 0, 1]
+    ], dtype=torch.float32, device=device)
+    
+    # Render using gsplat
+    with torch.no_grad():
+        renders, alphas, meta = gsplat.rasterization(
+            means=means,
+            quats=quats,
+            scales=scales,
+            opacities=opacities,
+            colors=rgbs,
+            viewmats=viewmat.unsqueeze(0),
+            Ks=K.unsqueeze(0),
+            width=width,
+            height=height,
+            near_plane=0.01,
+            far_plane=100.0,
+            sh_degree=None,
+        )
         
-        # Full opacity
-        opacities = torch.ones((n,), device=device)
-        
-        # Camera parameters
-        fx = intrinsics['fx'] * width / intrinsics['width']
-        fy = intrinsics['fy'] * height / intrinsics['height']
-        cx = intrinsics['cx'] * width / intrinsics['width']
-        cy = intrinsics['cy'] * height / intrinsics['height']
-        
-        # View matrix (world to camera)
-        viewmat = torch.from_numpy(np.linalg.inv(pose).astype(np.float32)).to(device)
-        
-        # Camera intrinsics matrix
-        K = torch.tensor([
-            [fx, 0, cx],
-            [0, fy, cy],
-            [0, 0, 1]
-        ], dtype=torch.float32, device=device)
-        
-        # Render using gsplat
-        with torch.no_grad():
-            # Use gsplat's rasterization
-            renders, alphas, meta = gsplat.rasterization(
-                means=means,
-                quats=quats,
-                scales=scales,
-                opacities=opacities,
-                colors=rgbs,
-                viewmats=viewmat.unsqueeze(0),
-                Ks=K.unsqueeze(0),
-                width=width,
-                height=height,
-                near_plane=0.01,
-                far_plane=100.0,
-                sh_degree=None,  # Using direct colors, not SH
-            )
-            
-            # renders is (1, H, W, 3)
-            img = renders[0].clamp(0, 1)
-            img = (img.cpu().numpy() * 255).astype(np.uint8)
-            return img
-            
-    except Exception as e:
-        # Fallback to software rendering
-        return _software_render_points(points, colors, pose, intrinsics, image_size)
+        # renders is (1, H, W, 3)
+        img = renders[0].clamp(0, 1)
+        img = (img.cpu().numpy() * 255).astype(np.uint8)
+        return img
 
 
 def _software_render_points(

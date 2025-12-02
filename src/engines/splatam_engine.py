@@ -16,6 +16,30 @@ To use this engine, ensure the submodule is initialized:
 """
 
 import os
+import sys
+
+# Setup DLL directories for Windows before importing CUDA modules
+if sys.platform == 'win32':
+    cuda_paths = [
+        os.path.join(os.environ.get('CUDA_PATH', ''), 'bin'),
+        r'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\bin',
+        r'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\bin',
+    ]
+    for cuda_bin in cuda_paths:
+        if os.path.exists(cuda_bin):
+            try:
+                os.add_dll_directory(cuda_bin)
+            except (OSError, AttributeError):
+                pass
+            break
+    try:
+        import torch as _torch
+        torch_lib = os.path.join(os.path.dirname(_torch.__file__), 'lib')
+        if os.path.exists(torch_lib):
+            os.add_dll_directory(torch_lib)
+    except (ImportError, OSError, AttributeError):
+        pass
+
 import torch
 import torch.nn.functional as F
 import numpy as np
@@ -157,7 +181,7 @@ class SplaTAMEngine(BaseGSEngine):
         self._intrinsics = None
         self._intrinsics_tensor = None
         
-        self._splatam_path = Path(splatam_path) if splatam_path else SPLATAM_PATH
+        self.SPLATAM_PATH = Path(splatam_path) if splatam_path else SPLATAM_PATH
         
         self.config = config or SplaTAMConfig()
         

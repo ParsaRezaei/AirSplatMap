@@ -134,18 +134,49 @@ def get_engine(name: str, **kwargs):
 
 def list_engines():
     """List available engines and their status."""
+    # Check graphdeco availability by trying to create instance
+    _graphdeco_available = False
+    try:
+        ge = GraphdecoEngine()
+        _graphdeco_available = ge.is_available
+    except:
+        pass
+    
+    # Check gsplat actually works (not just importable, but CUDA compiled)
+    _gsplat_works = False
+    if _GSPLAT_AVAILABLE:
+        try:
+            import torch
+            from gsplat import rasterization
+            # Simple test - if this imports without error and _C is not None
+            from gsplat.cuda._wrapper import _make_lazy_cuda_func
+            # Try to trigger compilation with a small test
+            means = torch.rand(2, 3, device='cuda')
+            quats = torch.tensor([[1, 0, 0, 0], [1, 0, 0, 0]], dtype=torch.float32, device='cuda')
+            scales = torch.ones(2, 3, device='cuda') * 0.1
+            opacities = torch.ones(2, device='cuda')
+            colors = torch.ones(2, 3, device='cuda')
+            viewmat = torch.eye(4, device='cuda')
+            viewmat[2, 3] = -3.0
+            K = torch.tensor([[500, 0, 320], [0, 500, 240], [0, 0, 1]], dtype=torch.float32, device='cuda')
+            _ = rasterization(means=means, quats=quats, scales=scales, opacities=opacities, 
+                            colors=colors, viewmats=viewmat[None], Ks=K[None], width=640, height=480)
+            _gsplat_works = True
+        except Exception as e:
+            _gsplat_works = False
+    
     engines = {
         "graphdeco": {
-            "available": True,
+            "available": _graphdeco_available,
             "description": "Original 3DGS from GRAPHDECO research",
-            "install": "Included (gaussian-splatting submodule)",
+            "install": "Requires CUDA extensions: cd submodules/gaussian-splatting/submodules/simple-knn && pip install -e .",
             "speed": "~2-5 FPS",
             "realtime": False,
         },
         "gsplat": {
-            "available": _GSPLAT_AVAILABLE,
+            "available": _gsplat_works,
             "description": "Nerfstudio's optimized implementation (4x less memory)",
-            "install": "pip install gsplat",
+            "install": "pip install gsplat (requires CUDA toolkit matching PyTorch version for JIT compilation)",
             "speed": "~17 FPS",
             "realtime": True,
         },

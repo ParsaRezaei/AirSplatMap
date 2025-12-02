@@ -27,6 +27,32 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple, List
 from dataclasses import dataclass, field
 
+# Setup DLL directories for Windows before importing CUDA modules
+if sys.platform == 'win32':
+    # Add CUDA toolkit DLLs
+    cuda_paths = [
+        os.path.join(os.environ.get('CUDA_PATH', ''), 'bin'),
+        r'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2\bin',
+        r'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1\bin',
+        r'C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.0\bin',
+    ]
+    for cuda_bin in cuda_paths:
+        if os.path.exists(cuda_bin):
+            try:
+                os.add_dll_directory(cuda_bin)
+            except (OSError, AttributeError):
+                pass
+            break
+    
+    # Add PyTorch lib directory
+    try:
+        import torch
+        torch_lib = os.path.join(os.path.dirname(torch.__file__), 'lib')
+        if os.path.exists(torch_lib):
+            os.add_dll_directory(torch_lib)
+    except (ImportError, OSError, AttributeError):
+        pass
+
 import numpy as np
 import torch
 import torch.nn as nn

@@ -62,6 +62,31 @@ pip install --no-build-isolation -e .
 cd ../../../..
 ```
 
+### Windows: Build CUDA Extensions (Optional)
+
+To use the `graphdeco`, `monogs`, or `splatam` engines on Windows, you need to compile the CUDA extensions:
+
+**Prerequisites:**
+1. Install [Visual Studio Build Tools 2019](https://aka.ms/vs/16/release/vs_buildtools.exe)
+   - During installation, select "C++ build tools" workload
+   - Make sure "MSVC v142" and "Windows 10 SDK" are checked
+2. CUDA Toolkit 12.1+ (should match your PyTorch CUDA version)
+
+**Build the extensions:**
+```cmd
+cd submodules\gaussian-splatting\submodules\diff-gaussian-rasterization
+pip install --no-build-isolation -e .
+cd ..\simple-knn
+pip install --no-build-isolation -e .
+cd ..\..\..\..
+```
+
+**Verify installation:**
+```python
+from simple_knn._C import distCUDA2
+print("simple_knn OK")
+```
+
 ### RealSense Camera Setup
 
 ```bash

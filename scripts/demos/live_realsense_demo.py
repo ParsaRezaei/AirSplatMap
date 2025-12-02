@@ -11,10 +11,21 @@ Features:
 - Optional IMU data for D435i/D455
 - Live rendering comparison
 - Background threaded capture for low latency
+- HTTP server mode for web dashboard integration
+- WebSocket viewer for 3D visualization
 
 Usage:
     # Basic usage (first available camera)
     python scripts/demos/live_realsense_demo.py
+    
+    # With web dashboard
+    python scripts/demos/live_realsense_demo.py --web-viewer
+    
+    # Start HTTP server mode (for external consumers)
+    python scripts/demos/live_realsense_demo.py --start-server --server-port 8554
+    
+    # Connect to existing RealSense server
+    python scripts/demos/live_realsense_demo.py --source http://localhost:8554
     
     # With specific settings
     python scripts/demos/live_realsense_demo.py --width 1280 --height 720 --fps 30
@@ -163,6 +174,22 @@ def main():
     parser.add_argument("--serial", type=str, default=None, help="Camera serial number")
     parser.add_argument("--list-devices", action="store_true", help="List available cameras and exit")
     
+    # Server mode settings
+    parser.add_argument("--source", type=str, default=None,
+                       help="Use HTTP source instead of direct camera (e.g., http://localhost:8554)")
+    parser.add_argument("--start-server", action="store_true",
+                       help="Start RealSense HTTP server for external consumers")
+    parser.add_argument("--server-port", type=int, default=8554,
+                       help="HTTP server port (default: 8554)")
+    
+    # Web viewer settings
+    parser.add_argument("--web-viewer", action="store_true",
+                       help="Enable web-based 3D viewer")
+    parser.add_argument("--http-port", type=int, default=8766,
+                       help="Web viewer HTTP port (default: 8766)")
+    parser.add_argument("--ws-port", type=int, default=8765,
+                       help="WebSocket port for viewer (default: 8765)")
+    
     # Processing settings
     parser.add_argument("--pose-model", type=str, default="orb", 
                        choices=["orb", "robust_flow", "sift"],
@@ -242,31 +269,99 @@ def main():
     }
     preset = presets[args.quality]
     
-    # Initialize RealSense source
-    logger.info("Initializing RealSense camera...")
-    from src.pipeline.frames import RealSenseSource
+    # Server process handle (if we start one)
+    server_proc = None
     
-    try:
-        source = RealSenseSource(
-            serial_number=args.serial,
-            width=args.width,
-            height=args.height,
-            fps=args.fps,
-            pose_model=args.pose_model,
+    # Initialize frame source
+    if args.source:
+        # Use HTTP source (external RealSense server)
+        logger.info(f"Connecting to RealSense server: {args.source}")
+        from src.pipeline.frames import LiveVideoSource
+        
+        source = LiveVideoSource(
+            source=f"{args.source}/stream",
+            use_server_pose=True,
+            pose_server_url=f"{args.source}/pose",
+            depth_model='ground_truth',  # Use RealSense depth from server
+            target_fps=0,  # Use source FPS
             max_frames=args.max_frames,
-            enable_imu=True,
-            align_depth=True,
-            exposure_auto=False,  # Fixed exposure for consistent tracking
         )
-    except Exception as e:
-        logger.error(f"Failed to initialize RealSense: {e}")
-        logger.info("\nRun with --list-devices to see available cameras")
-        return 1
+        has_imu = False  # IMU data via HTTP not yet implemented in LiveVideoSource
+        
+    elif args.start_server:
+        # Start RealSense HTTP server, then connect to it
+        import subprocess
+        
+        server_script = project_root / 'scripts' / 'tools' / 'realsense_server.py'
+        cmd = [
+            sys.executable, str(server_script),
+            '--port', str(args.server_port),
+            '--width', str(args.width),
+            '--height', str(args.height),
+            '--fps', str(args.fps),
+            '--pose-model', args.pose_model,
+        ]
+        if args.serial:
+            cmd.extend(['--serial', args.serial])
+        
+        logger.info(f"Starting RealSense server on port {args.server_port}...")
+        server_proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+        )
+        time.sleep(3)  # Wait for server to start
+        
+        if server_proc.poll() is not None:
+            output = server_proc.stdout.read()
+            logger.error(f"Server failed to start:\n{output}")
+            return 1
+        
+        logger.info("Server started, connecting...")
+        from src.pipeline.frames import LiveVideoSource
+        
+        source_url = f"http://localhost:{args.server_port}"
+        source = LiveVideoSource(
+            source=f"{source_url}/stream",
+            use_server_pose=True,
+            pose_server_url=f"{source_url}/pose",
+            depth_model='ground_truth',
+            target_fps=0,
+            max_frames=args.max_frames,
+        )
+        has_imu = False
+        
+    else:
+        # Direct RealSense capture
+        logger.info("Initializing RealSense camera...")
+        from src.pipeline.frames import RealSenseSource
+        
+        try:
+            source = RealSenseSource(
+                serial_number=args.serial,
+                width=args.width,
+                height=args.height,
+                fps=args.fps,
+                pose_model=args.pose_model,
+                max_frames=args.max_frames,
+                enable_imu=True,
+                align_depth=True,
+                exposure_auto=False,
+            )
+            has_imu = source.has_imu()
+        except Exception as e:
+            logger.error(f"Failed to initialize RealSense: {e}")
+            logger.info("\nRun with --list-devices to see available cameras")
+            logger.info("Or use --source http://HOST:PORT to connect to RealSense server")
+            return 1
     
     intrinsics = source.get_intrinsics()
     width = int(intrinsics['width'])
     height = int(intrinsics['height'])
-    has_imu = source.has_imu()
+    
+    # Check for has_imu method (RealSenseSource has it, LiveVideoSource doesn't)
+    if hasattr(source, 'has_imu'):
+        has_imu = source.has_imu()
+    else:
+        has_imu = False
     
     logger.info(f"Camera: {width}x{height} @ {args.fps} FPS")
     logger.info(f"IMU available: {has_imu}")
@@ -310,6 +405,25 @@ def main():
     
     engine.initialize_scene(intrinsics, config)
     steps_per_frame = args.steps_per_frame * preset['steps_mult']
+    
+    # Web viewer
+    viewer_server = None
+    if args.web_viewer:
+        try:
+            from src.viewer import GaussianViewerServer, serve_viewer
+            
+            viewer_server = GaussianViewerServer(
+                port=args.ws_port,
+                update_rate=10.0,
+            )
+            viewer_server.start()
+            serve_viewer(port=args.http_port, ws_port=args.ws_port)
+            
+            logger.info(f"\n🌐 Web viewer: http://localhost:{args.http_port}")
+            time.sleep(1)
+        except Exception as e:
+            logger.warning(f"Could not start web viewer: {e}")
+            viewer_server = None
     
     # Video writer
     video_writer = None
@@ -375,6 +489,32 @@ def main():
             mse = np.mean((rgb.astype(float) - rendered.astype(float)) ** 2)
             psnr = 10 * np.log10(255**2 / (mse + 1e-10)) if mse > 0 else 40
             
+            # Update web viewer
+            if viewer_server is not None and frame_count % 3 == 0:
+                # Update point cloud
+                pts = engine.get_point_cloud()
+                if pts is not None and len(pts) > 0:
+                    colors = getattr(engine, 'get_gaussian_colors', lambda: None)()
+                    if colors is None:
+                        colors = np.ones_like(pts) * 0.7
+                    viewer_server.update_gaussians(pts, colors)
+                
+                # Update render
+                viewer_server.update_render(rendered, "render")
+                
+                # Update camera image
+                viewer_server.update_camera_image(rgb)
+                
+                # Update metrics
+                viewer_server.update_metrics({
+                    'loss': loss,
+                    'psnr': psnr,
+                    'iteration': frame_count,
+                    'num_gaussians': num_gaussians,
+                    'fps': avg_fps,
+                    'gpu_memory_mb': get_gpu_memory_mb(),
+                })
+            
             # Create visualization
             rgb_bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
             rendered_bgr = cv2.cvtColor(rendered, cv2.COLOR_RGB2BGR)
@@ -436,13 +576,25 @@ def main():
     
     finally:
         # Cleanup
-        source.stop()
+        if hasattr(source, 'stop'):
+            source.stop()
+        elif hasattr(source, 'release'):
+            source.release()
         
         if video_writer:
             video_writer.release()
         
         if not args.no_display:
             cv2.destroyAllWindows()
+        
+        # Stop server if we started it
+        if server_proc is not None:
+            logger.info("Stopping RealSense server...")
+            server_proc.terminate()
+            try:
+                server_proc.wait(timeout=5)
+            except:
+                server_proc.kill()
         
         # Final stats
         avg_fps = frame_count / total_time if total_time > 0 else 0
@@ -465,8 +617,11 @@ def main():
         with open(info_path, 'w') as f:
             f.write("RealSense 3DGS Session\n")
             f.write("=" * 40 + "\n\n")
-            f.write(f"Camera: {source._device_name}\n")
-            f.write(f"Serial: {source._device_serial}\n")
+            if hasattr(source, '_device_name'):
+                f.write(f"Camera: {source._device_name}\n")
+                f.write(f"Serial: {source._device_serial}\n")
+            else:
+                f.write(f"Source: {args.source or 'Direct RealSense'}\n")
             f.write(f"Resolution: {width}x{height} @ {args.fps} FPS\n")
             f.write(f"IMU enabled: {has_imu}\n\n")
             f.write(f"Engine: {args.engine}\n")
@@ -478,6 +633,20 @@ def main():
             f.write(f"Final Gaussians: {engine.get_num_gaussians():,}\n")
         
         logger.info(f"Session info saved to: {info_path}")
+        
+        # Keep web viewer running if enabled
+        if viewer_server is not None:
+            logger.info(f"\n🎉 Reconstruction complete!")
+            logger.info(f"   Web viewer still active at http://localhost:{args.http_port}")
+            logger.info("   Press Ctrl+C to exit\n")
+            
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                pass
+            finally:
+                viewer_server.stop()
 
 
 if __name__ == "__main__":
