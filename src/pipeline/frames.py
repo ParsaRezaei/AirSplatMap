@@ -1043,3 +1043,452 @@ class LiveVideoSource(FrameSource):
 
 # Need time module for LiveVideoSource
 import time
+import threading
+from queue import Queue, Empty
+
+
+class RealSenseSource(FrameSource):
+    """
+    Live RealSense D400-series camera source with optional IMU.
+    
+    Provides real-time RGB-D streaming from Intel RealSense cameras
+    (D415, D435, D435i, D455, etc.) with metric depth and visual odometry
+    pose estimation. Optimized for low-latency 3D Gaussian Splatting.
+    
+    Features:
+    - Metric depth directly from sensor (no estimation needed)
+    - Hardware-synchronized RGB and depth
+    - Optional depth-to-color alignment  
+    - Optional IMU streaming (D435i, D455)
+    - Threaded capture for minimal latency
+    - Automatic intrinsics from camera
+    
+    Args:
+        serial_number: Specific camera serial number (None = first available)
+        width: Frame width (default: 640)
+        height: Frame height (default: 480)
+        fps: Target frame rate (default: 30)
+        align_depth: Align depth to color frame (default: True)
+        enable_imu: Enable IMU streaming on supported cameras (default: True)
+        pose_model: Visual odometry model ('orb', 'robust_flow', 'sift')
+        depth_min: Minimum valid depth in meters (default: 0.1)
+        depth_max: Maximum valid depth in meters (default: 10.0)
+        max_frames: Maximum frames to capture (None = unlimited)
+        threaded: Use background thread for capture (default: True)
+        exposure_auto: Enable auto-exposure (default: False for consistency)
+        
+    Example:
+        # Basic usage
+        source = RealSenseSource()
+        for frame in source:
+            pipeline.step(frame)
+        source.stop()
+        
+        # With specific settings
+        source = RealSenseSource(
+            width=1280, height=720, fps=30,
+            pose_model='orb',
+            enable_imu=True
+        )
+    """
+    
+    def __init__(
+        self,
+        serial_number: Optional[str] = None,
+        width: int = 640,
+        height: int = 480,
+        fps: int = 30,
+        align_depth: bool = True,
+        enable_imu: bool = True,
+        pose_model: str = 'orb',
+        depth_min: float = 0.1,
+        depth_max: float = 10.0,
+        max_frames: Optional[int] = None,
+        threaded: bool = True,
+        exposure_auto: bool = False,
+    ):
+        try:
+            import pyrealsense2 as rs
+        except ImportError:
+            raise ImportError(
+                "pyrealsense2 not installed. Install with: pip install pyrealsense2"
+            )
+        
+        self._rs = rs
+        self._serial_number = serial_number
+        self._width = width
+        self._height = height
+        self._fps = fps
+        self._align_depth = align_depth
+        self._enable_imu = enable_imu
+        self._pose_model_name = pose_model
+        self._depth_min = depth_min
+        self._depth_max = depth_max
+        self._max_frames = max_frames
+        self._threaded = threaded
+        self._exposure_auto = exposure_auto
+        
+        # Initialize RealSense pipeline
+        self._pipeline = rs.pipeline()
+        self._config = rs.config()
+        
+        # Select specific camera if serial provided
+        if serial_number:
+            self._config.enable_device(serial_number)
+        
+        # Configure streams
+        self._config.enable_stream(
+            rs.stream.color, width, height, rs.format.rgb8, fps
+        )
+        self._config.enable_stream(
+            rs.stream.depth, width, height, rs.format.z16, fps
+        )
+        
+        # Enable IMU if requested (D435i, D455)
+        self._has_imu = False
+        if enable_imu:
+            try:
+                self._config.enable_stream(rs.stream.accel)
+                self._config.enable_stream(rs.stream.gyro)
+                self._has_imu = True
+                logger.info("IMU streams enabled")
+            except Exception as e:
+                logger.warning(f"IMU not available on this camera: {e}")
+                self._has_imu = False
+        
+        # Start pipeline and get profile
+        try:
+            self._profile = self._pipeline.start(self._config)
+        except Exception as e:
+            raise RuntimeError(f"Failed to start RealSense pipeline: {e}")
+        
+        # Get device info
+        device = self._profile.get_device()
+        self._device_name = device.get_info(rs.camera_info.name)
+        self._device_serial = device.get_info(rs.camera_info.serial_number)
+        logger.info(f"Connected to {self._device_name} (S/N: {self._device_serial})")
+        
+        # Get depth sensor and scale
+        depth_sensor = device.first_depth_sensor()
+        self._depth_scale = depth_sensor.get_depth_scale()
+        logger.info(f"Depth scale: {self._depth_scale}")
+        
+        # Configure exposure
+        color_sensor = device.first_color_sensor()
+        if not exposure_auto:
+            try:
+                color_sensor.set_option(rs.option.enable_auto_exposure, 0)
+                # Set a reasonable fixed exposure (adjust as needed)
+                color_sensor.set_option(rs.option.exposure, 100)
+                logger.info("Auto-exposure disabled, using fixed exposure")
+            except Exception as e:
+                logger.warning(f"Could not set exposure: {e}")
+        
+        # Get intrinsics from color stream
+        color_stream = self._profile.get_stream(rs.stream.color)
+        color_intrinsics = color_stream.as_video_stream_profile().get_intrinsics()
+        
+        self._intrinsics = {
+            'fx': color_intrinsics.fx,
+            'fy': color_intrinsics.fy,
+            'cx': color_intrinsics.ppx,
+            'cy': color_intrinsics.ppy,
+            'width': color_intrinsics.width,
+            'height': color_intrinsics.height,
+        }
+        logger.info(f"Camera intrinsics: fx={self._intrinsics['fx']:.1f}, "
+                   f"fy={self._intrinsics['fy']:.1f}, "
+                   f"cx={self._intrinsics['cx']:.1f}, cy={self._intrinsics['cy']:.1f}")
+        
+        # Setup depth-to-color alignment
+        self._align = rs.align(rs.stream.color) if align_depth else None
+        
+        # Pose estimator (lazy init)
+        self._pose_estimator = None
+        
+        # IMU data storage
+        self._latest_accel = None
+        self._latest_gyro = None
+        self._imu_lock = threading.Lock()
+        
+        # Threaded capture
+        self._frame_queue: Queue = Queue(maxsize=2)  # Small buffer for low latency
+        self._capture_thread = None
+        self._running = False
+        
+        # Frame counter
+        self._frame_idx = 0
+        self._start_time = None
+        
+    def _init_pose_estimator(self):
+        """Initialize pose estimator."""
+        try:
+            from src.pose import get_pose_estimator
+            
+            self._pose_estimator = get_pose_estimator(self._pose_model_name)
+            self._pose_estimator.set_intrinsics_from_dict(self._intrinsics)
+            logger.info(f"Initialized pose estimator: {self._pose_model_name}")
+        except ImportError as e:
+            logger.warning(f"Could not import pose estimator: {e}")
+            self._pose_estimator = None
+    
+    def _capture_loop(self):
+        """Background thread for frame capture."""
+        rs = self._rs
+        
+        while self._running:
+            try:
+                # Wait for frames with timeout
+                frames = self._pipeline.wait_for_frames(timeout_ms=1000)
+                
+                if frames is None:
+                    continue
+                
+                # Process IMU data if available
+                if self._has_imu:
+                    for frame in frames:
+                        if frame.is_motion_frame():
+                            motion = frame.as_motion_frame()
+                            motion_data = motion.get_motion_data()
+                            
+                            with self._imu_lock:
+                                if frame.get_profile().stream_type() == rs.stream.accel:
+                                    self._latest_accel = np.array([
+                                        motion_data.x, motion_data.y, motion_data.z
+                                    ])
+                                elif frame.get_profile().stream_type() == rs.stream.gyro:
+                                    self._latest_gyro = np.array([
+                                        motion_data.x, motion_data.y, motion_data.z
+                                    ])
+                
+                # Align depth to color if enabled
+                if self._align:
+                    frames = self._align.process(frames)
+                
+                # Get color and depth frames
+                color_frame = frames.get_color_frame()
+                depth_frame = frames.get_depth_frame()
+                
+                if not color_frame or not depth_frame:
+                    continue
+                
+                # Convert to numpy arrays
+                rgb = np.asanyarray(color_frame.get_data())
+                depth_raw = np.asanyarray(depth_frame.get_data())
+                
+                # Convert depth to meters
+                depth = depth_raw.astype(np.float32) * self._depth_scale
+                
+                # Filter depth by range
+                depth[(depth < self._depth_min) | (depth > self._depth_max)] = 0
+                
+                # Get timestamp
+                timestamp = frames.get_timestamp() / 1000.0  # Convert ms to seconds
+                
+                # Get IMU data snapshot
+                with self._imu_lock:
+                    accel = self._latest_accel.copy() if self._latest_accel is not None else None
+                    gyro = self._latest_gyro.copy() if self._latest_gyro is not None else None
+                
+                # Package frame data
+                frame_data = {
+                    'rgb': rgb,
+                    'depth': depth,
+                    'timestamp': timestamp,
+                    'accel': accel,
+                    'gyro': gyro,
+                }
+                
+                # Put in queue (non-blocking, drop if full)
+                try:
+                    self._frame_queue.put_nowait(frame_data)
+                except:
+                    # Queue full - drop oldest and add new
+                    try:
+                        self._frame_queue.get_nowait()
+                        self._frame_queue.put_nowait(frame_data)
+                    except:
+                        pass
+                        
+            except Exception as e:
+                if self._running:
+                    logger.warning(f"Capture error: {e}")
+                    time.sleep(0.01)
+    
+    def _start_capture(self):
+        """Start background capture thread."""
+        if self._threaded and self._capture_thread is None:
+            self._running = True
+            self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
+            self._capture_thread.start()
+            logger.info("Started background capture thread")
+    
+    def _get_next_frame_data(self) -> Optional[Dict]:
+        """Get next frame data from queue or direct capture."""
+        if self._threaded:
+            try:
+                return self._frame_queue.get(timeout=2.0)
+            except Empty:
+                return None
+        else:
+            # Direct capture (blocking)
+            rs = self._rs
+            try:
+                frames = self._pipeline.wait_for_frames(timeout_ms=1000)
+                
+                if self._align:
+                    frames = self._align.process(frames)
+                
+                color_frame = frames.get_color_frame()
+                depth_frame = frames.get_depth_frame()
+                
+                if not color_frame or not depth_frame:
+                    return None
+                
+                rgb = np.asanyarray(color_frame.get_data())
+                depth_raw = np.asanyarray(depth_frame.get_data())
+                depth = depth_raw.astype(np.float32) * self._depth_scale
+                depth[(depth < self._depth_min) | (depth > self._depth_max)] = 0
+                
+                timestamp = frames.get_timestamp() / 1000.0
+                
+                return {
+                    'rgb': rgb,
+                    'depth': depth,
+                    'timestamp': timestamp,
+                    'accel': None,
+                    'gyro': None,
+                }
+            except Exception as e:
+                logger.warning(f"Frame capture failed: {e}")
+                return None
+    
+    def __iter__(self) -> Iterator[Frame]:
+        """Iterate over frames from RealSense camera."""
+        # Initialize pose estimator
+        if self._pose_estimator is None:
+            self._init_pose_estimator()
+        
+        # Start capture thread
+        self._start_capture()
+        
+        self._start_time = time.time()
+        self._frame_idx = 0
+        
+        while True:
+            # Check max frames
+            if self._max_frames and self._frame_idx >= self._max_frames:
+                break
+            
+            # Get frame data
+            frame_data = self._get_next_frame_data()
+            
+            if frame_data is None:
+                continue
+            
+            rgb = frame_data['rgb']
+            depth = frame_data['depth']
+            timestamp = frame_data['timestamp']
+            
+            # Estimate pose using visual odometry
+            if self._pose_estimator is not None:
+                pose_result = self._pose_estimator.estimate(rgb)
+                pose = pose_result.pose
+                tracking_status = pose_result.tracking_status
+            else:
+                # Identity pose if no estimator
+                pose = np.eye(4)
+                tracking_status = "no_estimator"
+            
+            # Build metadata
+            metadata = {
+                'tracking_status': tracking_status,
+                'device': self._device_name,
+                'serial': self._device_serial,
+            }
+            
+            # Add IMU data if available
+            if frame_data.get('accel') is not None:
+                metadata['accel'] = frame_data['accel']
+            if frame_data.get('gyro') is not None:
+                metadata['gyro'] = frame_data['gyro']
+            
+            yield Frame(
+                idx=self._frame_idx,
+                timestamp=timestamp,
+                rgb=rgb,
+                depth=depth,
+                pose=pose,
+                intrinsics=self._intrinsics.copy(),
+                metadata=metadata,
+            )
+            
+            self._frame_idx += 1
+    
+    def __len__(self) -> int:
+        """Return frame count (-1 for live stream)."""
+        return self._max_frames if self._max_frames else -1
+    
+    def get_intrinsics(self) -> Dict[str, float]:
+        """Get camera intrinsics."""
+        return self._intrinsics.copy()
+    
+    def get_imu_data(self) -> Optional[Dict[str, np.ndarray]]:
+        """Get latest IMU data (accelerometer and gyroscope)."""
+        if not self._has_imu:
+            return None
+        
+        with self._imu_lock:
+            if self._latest_accel is None or self._latest_gyro is None:
+                return None
+            return {
+                'accel': self._latest_accel.copy(),
+                'gyro': self._latest_gyro.copy(),
+            }
+    
+    def has_imu(self) -> bool:
+        """Check if IMU is available."""
+        return self._has_imu
+    
+    def stop(self):
+        """Stop capture and release resources."""
+        self._running = False
+        
+        if self._capture_thread is not None:
+            self._capture_thread.join(timeout=2.0)
+            self._capture_thread = None
+        
+        try:
+            self._pipeline.stop()
+        except:
+            pass
+        
+        logger.info("RealSense capture stopped")
+    
+    def __del__(self):
+        """Cleanup on destruction."""
+        self.stop()
+    
+    @staticmethod
+    def list_devices() -> List[Dict[str, str]]:
+        """List available RealSense devices."""
+        try:
+            import pyrealsense2 as rs
+            
+            ctx = rs.context()
+            devices = []
+            
+            for dev in ctx.devices:
+                devices.append({
+                    'name': dev.get_info(rs.camera_info.name),
+                    'serial': dev.get_info(rs.camera_info.serial_number),
+                    'firmware': dev.get_info(rs.camera_info.firmware_version),
+                })
+            
+            return devices
+        except ImportError:
+            logger.warning("pyrealsense2 not installed")
+            return []
+        except Exception as e:
+            logger.warning(f"Error listing devices: {e}")
+            return []

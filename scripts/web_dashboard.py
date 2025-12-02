@@ -30,13 +30,36 @@ class Server:
 
     def _scan(s):
         ds=[]
-        base=Path(__file__).parent.parent.parent/"datasets"
-        for cat,p in[("TUM",base/"tum"),("T&T",base/"tandt")]:
-            if not p.exists():continue
-            for d in sorted(p.iterdir()):
-                if not d.is_dir():continue
-                fr=sum(1 for l in open(d/"rgb.txt")if l.strip()and not l.startswith('#'))if(d/"rgb.txt").exists()else 0
-                ds.append({'name':d.name,'path':str(d),'frames':fr,'type':cat})
+        proj=Path(__file__).parent.parent
+        # Search in multiple locations for datasets
+        search_paths=[
+            proj/"datasets",  # Inside project
+            proj.parent/"datasets",  # Sibling to project
+            Path.home()/"datasets",  # User home
+        ]
+        for base in search_paths:
+            if not base.exists():continue
+            for cat,sub in[("TUM","tum"),("T&T","tandt")]:
+                p=base/sub
+                if not p.exists():
+                    # Also check directly in datasets folder (no subdirectory)
+                    if cat=="TUM":
+                        for d in sorted(base.iterdir()):
+                            if not d.is_dir():continue
+                            if (d/"rgb.txt").exists():
+                                try:
+                                    fr=sum(1 for l in open(d/"rgb.txt",encoding='utf-8',errors='ignore')if l.strip()and not l.startswith('#'))
+                                except:fr=0
+                                if not any(x['path']==str(d)for x in ds):
+                                    ds.append({'name':d.name,'path':str(d),'frames':fr,'type':cat})
+                    continue
+                for d in sorted(p.iterdir()):
+                    if not d.is_dir():continue
+                    try:
+                        fr=sum(1 for l in open(d/"rgb.txt",encoding='utf-8',errors='ignore')if l.strip()and not l.startswith('#'))if(d/"rgb.txt").exists()else 0
+                    except:fr=0
+                    if not any(x['path']==str(d)for x in ds):
+                        ds.append({'name':d.name,'path':str(d),'frames':fr,'type':cat})
         # Add any registered live sources
         for src in s._live_sources:
             ds.append(src)
@@ -158,8 +181,9 @@ class Server:
         for k in s._stop:s._stop[k].set()
 
     def _http(s):
-        with socketserver.TCPServer(("",s.hp),s._handler(),bind_and_activate=True)as srv:
-            srv.socket.setsockopt(1,2,1)
+        socketserver.TCPServer.allow_reuse_address=True
+        with socketserver.TCPServer(("",s.hp),s._handler())as srv:
+            srv.timeout=1
             while s._run:srv.handle_request()
 
     def _ws(s):
@@ -283,8 +307,16 @@ class Server:
             except:s._cl.discard(ws)
 
     def _engines(s):
-        from src.engines import list_engines
-        return[{'name':n,**v}for n,v in list_engines().items()]
+        try:
+            from src.engines import list_engines
+            return[{'name':n,**v}for n,v in list_engines().items()]
+        except Exception as e:
+            logger.warning(f"Could not load engines: {e}")
+            # Return default engine list when import fails
+            return[
+                {'name':'graphdeco','available':False,'description':'Original 3DGS (import failed)','install':'Check CUDA extensions','speed':'~2-5 FPS','realtime':False},
+                {'name':'gsplat','available':False,'description':'Nerfstudio optimized 3DGS','install':'pip install gsplat','speed':'~17 FPS','realtime':True},
+            ]
 
     def _start(s,eng,ds):
         key=f"{eng}_{ds}"
@@ -660,7 +692,7 @@ def main():
     a=p.parse_args()
     logging.basicConfig(level=logging.INFO)
     global HTML
-    HTML=HTML_PATH.read_text()if HTML_PATH.exists()else"<h1>HTML not found</h1>"
+    HTML=HTML_PATH.read_text(encoding='utf-8')if HTML_PATH.exists()else"<h1>HTML not found</h1>"
     HTML=HTML.replace('WS_PORT',str(a.ws_port))
     s=Server(a.http_port,a.ws_port)
     
