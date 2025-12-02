@@ -28,47 +28,50 @@ AirSplatMap provides a modular framework for incremental 3D Gaussian Splatting (
 
 ## Installation
 
-1. **Clone and setup the workspace** (if not already done):
-   ```bash
-   cd /path/to/workspace
-   ```
+### Quick Start (Recommended)
 
-2. **Install dependencies**:
-   ```bash
-   cd AirSplatMap
-   pip install -r requirements.txt
-   ```
+```bash
+# Clone with all submodules
+git clone --recursive https://github.com/ParsaRezaei/AirSplatMap.git
+cd AirSplatMap
 
-3. **Ensure Graphdeco 3DGS is available**:
-   The `GraphdecoEngine` expects the Graphdeco gaussian-splatting repository to be available. It searches in:
-   - `GRAPHDECO_PATH` environment variable
-   - `../gaussian-splatting` (relative to AirSplatMap)
-   
-   Make sure the CUDA extensions are compiled:
-   ```bash
-   cd gaussian-splatting/submodules/diff-gaussian-rasterization
-   pip install --no-build-isolation -e .
-   cd ../simple-knn
-   pip install --no-build-isolation -e .
-   ```
+# Create conda environment
+conda env create -f environment.yml
+conda activate airsplatmap
 
-4. **For all engines (recommended)**: Use the `airsplatmap` conda environment which has:
-   - Python 3.10 + PyTorch 2.5.1 + CUDA 12.1
-   - All three engines: graphdeco, gsplat, splatam
-   
-   ```bash
-   conda activate airsplatmap
-   ```
+# Build CUDA extensions (required for graphdeco engine)
+cd submodules/gaussian-splatting/submodules/diff-gaussian-rasterization
+pip install --no-build-isolation -e .
+cd ../simple-knn
+pip install --no-build-isolation -e .
+cd ../../../..
+```
+
+### If Already Cloned Without Submodules
+
+```bash
+cd AirSplatMap
+git submodule update --init --recursive
+```
+
+### Submodule-Only Mode (Recommended)
+
+To ensure you're using the bundled submodules (with fixes applied):
+
+```bash
+export AIRSPLAT_USE_SUBMODULES=1
+```
 
 ### Available Engines
 
 | Engine | Speed | Real-time | Description | Requirements |
 |--------|-------|-----------|-------------|--------------|
-| `graphdeco` | ~2-5 FPS | ❌ | Original 3DGS from GRAPHDECO | gaussian-splatting repo with CUDA extensions |
-| `gsplat` | ~17 FPS | ✅ | Nerfstudio's optimized 3DGS (4x less memory) | `pip install gsplat` |
-| `splatam` | ~0.4 FPS | ❌ | RGB-D SLAM with Gaussian Splatting | SplaTAM repo at ~/SplaTAM |
-| `monogs` | ~10 FPS | ✅ | Gaussian Splatting SLAM (CVPR'24 Highlight) | [MonoGS](https://github.com/muskie82/MonoGS) |
-| `photoslam` | Real-time | ✅ | Photo-SLAM - Photorealistic SLAM (CVPR'24) | [Photo-SLAM](https://github.com/HuajianUP/Photo-SLAM) |
+| `graphdeco` | ~2-5 FPS | ❌ | Original 3DGS from GRAPHDECO | Included as submodule |
+| `gsplat` | ~17 FPS | ✅ | Nerfstudio's optimized 3DGS (4x less memory) | `pip install gsplat` (in environment.yml) |
+| `splatam` | ~0.4 FPS | ❌ | RGB-D SLAM with Gaussian Splatting | Included as submodule |
+| `monogs` | ~10 FPS | ✅ | Gaussian Splatting SLAM (CVPR'24 Highlight) | Included as submodule |
+| `photoslam` | Real-time | ✅ | Photo-SLAM - Photorealistic SLAM (CVPR'24) | Included as submodule (requires C++ build) |
+| `gslam` | ~5 FPS | ❌ | Gaussian-SLAM with submaps | Included as submodule |
 
 ```python
 from src.engines import get_engine, list_engines
@@ -81,26 +84,21 @@ for name, info in list_engines().items():
 engine = get_engine("gsplat")  # or "graphdeco", "splatam", "monogs", "photoslam"
 ```
 
-### Engine Installation
+### Bundled Submodules
 
-**GSplat (recommended for real-time):**
-```bash
-pip install gsplat
-```
+All external dependencies are included as git submodules with necessary fixes applied:
 
-**MonoGS (real-time mono/stereo/RGB-D SLAM):**
-```bash
-git clone https://github.com/muskie82/MonoGS.git --recursive
-cd MonoGS
-pip install --no-build-isolation -e submodules/simple-knn
-pip install --no-build-isolation -e submodules/diff-gaussian-rasterization
-pip install munch open3d PyOpenGL glfw PyGLM rich
-```
+| Submodule | Upstream | Fixes Applied |
+|-----------|----------|---------------|
+| `submodules/gaussian-splatting` | graphdeco-inria/gaussian-splatting | Output path naming, grayscale SSIM |
+| `submodules/MonoGS` | muskie82/MonoGS | CUDA multiprocessing, NumPy deprecation |
+| `submodules/Gaussian-SLAM` | VladimirYugay/Gaussian-SLAM | NumPy deprecation |
+| `submodules/Photo-SLAM` | HuajianUP/Photo-SLAM | PyTorch API fix |
+| `submodules/SplaTAM` | spla-tam/SplaTAM | - |
 
-**Photo-SLAM (C++ based, requires build):**
+**Photo-SLAM (C++ based, requires additional build):**
 ```bash
-git clone https://github.com/HuajianUP/Photo-SLAM.git --recursive
-cd Photo-SLAM
+cd submodules/Photo-SLAM
 ./build.sh  # Requires LibTorch, OpenCV with CUDA
 ```
 
@@ -277,32 +275,28 @@ AirSplatMap/
 │   │   ├── gsplat_engine.py         # Nerfstudio gsplat
 │   │   ├── splatam_engine.py        # SplaTAM RGB-D SLAM
 │   │   ├── monogs_engine.py         # MonoGS SLAM
-│   │   └── gslam_engine.py          # Gaussian-SLAM
+│   │   ├── gslam_engine.py          # Gaussian-SLAM
+│   │   └── photoslam_engine.py      # Photo-SLAM
 │   ├── pipeline/
 │   │   ├── frames.py                # Frame, FrameSource, TumRGBDSource
 │   │   ├── online_gs.py             # OnlineGSPipeline
 │   │   └── rs_corrector.py          # Rolling shutter correction
-│   └── data/                        # Dataset loaders
+│   ├── depth/                       # Depth estimation (MiDaS, DepthAnything)
+│   └── pose/                        # Pose estimation (ORB, SIFT, flow)
+├── submodules/                      # Git submodules (forked with fixes)
+│   ├── gaussian-splatting/          # Original 3DGS
+│   ├── MonoGS/                      # Gaussian Splatting SLAM
+│   ├── Gaussian-SLAM/               # Submap-based SLAM
+│   ├── Photo-SLAM/                  # Photorealistic SLAM
+│   └── SplaTAM/                     # RGB-D SLAM
 ├── scripts/
 │   ├── start_dashboard.sh           # Start web dashboard
 │   ├── stop_dashboard.sh            # Stop web dashboard
 │   ├── dashboard_config.sh          # Dashboard configuration
 │   ├── web_dashboard.py             # Dashboard backend
-│   ├── web_dashboard.html           # Dashboard frontend
-│   ├── benchmarks/                  # Benchmarking scripts
-│   │   ├── batch_gsplat_tum.py
-│   │   ├── run_monogs_tum.py
-│   │   └── run_splatam_tum.py
-│   ├── demos/                       # Demo/example scripts
-│   │   ├── live_demo.py
-│   │   ├── live_tum_demo.py
-│   │   └── online_tum_graphdeco.py
-│   └── tools/                       # Utility scripts
-│       ├── download_tum.sh
-│       ├── generate_meshes.py
-│       └── generate_voxel_grid.py
+│   └── web_dashboard.html           # Dashboard frontend
 ├── output/                          # Results and benchmarks
-├── requirements.txt
+├── environment.yml                  # Conda environment
 └── README.md
 ```
 
