@@ -66,7 +66,7 @@ echo.
 echo Looking for processes using dashboard ports...
 
 REM Load config for ports
-if exist "%~dp0config.bat" call "%~dp0config.bat"
+if exist "%~dp0..\\scripts\\config.bat" call "%~dp0..\\scripts\\config.bat"
 if not defined AIRSPLAT_HTTP_PORT set AIRSPLAT_HTTP_PORT=9002
 if not defined AIRSPLAT_WS_PORT set AIRSPLAT_WS_PORT=9003
 

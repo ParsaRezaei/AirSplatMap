@@ -8,7 +8,7 @@ REM Usage: start_dashboard.bat [--http-port PORT] [--ws-port PORT] [--foreground
 setlocal enabledelayedexpansion
 
 REM Load config
-if exist "%~dp0config.bat" call "%~dp0config.bat"
+if exist "%~dp0..\scripts\config.bat" call "%~dp0..\scripts\config.bat"
 
 REM Default values
 if not defined AIRSPLAT_HTTP_PORT set AIRSPLAT_HTTP_PORT=9002
@@ -105,7 +105,7 @@ if %FOREGROUND%==1 (
     echo   Press Ctrl+C to stop
     echo.
     call conda activate %AIRSPLAT_CONDA_ENV% 2>nul
-    python scripts/web_dashboard.py --http-port %AIRSPLAT_HTTP_PORT% --ws-port %AIRSPLAT_WS_PORT%
+    python dashboard/web_dashboard.py --http-port %AIRSPLAT_HTTP_PORT% --ws-port %AIRSPLAT_WS_PORT%
     exit /b %ERRORLEVEL%
 )
 
@@ -114,7 +114,7 @@ echo.
 echo Starting dashboard in background...
 
 REM Start the dashboard in background using PowerShell
-powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $proc = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c conda activate %AIRSPLAT_CONDA_ENV% && python scripts/web_dashboard.py --http-port %AIRSPLAT_HTTP_PORT% --ws-port %AIRSPLAT_WS_PORT% > \"%LOG_FILE%\" 2>&1' -WindowStyle Hidden -PassThru; $proc.Id | Out-File -FilePath '%PID_FILE%' -Encoding ascii -NoNewline; Write-Host ('Started with PID: ' + $proc.Id) }"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "& { $proc = Start-Process -FilePath 'cmd.exe' -ArgumentList '/c conda activate %AIRSPLAT_CONDA_ENV% && python dashboard/web_dashboard.py --http-port %AIRSPLAT_HTTP_PORT% --ws-port %AIRSPLAT_WS_PORT% > \"%LOG_FILE%\" 2>&1' -WindowStyle Hidden -PassThru; $proc.Id | Out-File -FilePath '%PID_FILE%' -Encoding ascii -NoNewline; Write-Host ('Started with PID: ' + $proc.Id) }"
 
 if %ERRORLEVEL% neq 0 (
     echo Failed to start dashboard!
@@ -130,7 +130,7 @@ echo   Web UI: http://localhost:%AIRSPLAT_HTTP_PORT%
 echo   WebSocket: ws://localhost:%AIRSPLAT_WS_PORT%
 echo   Log: %LOG_FILE%
 echo.
-echo To stop: scripts\stop_dashboard.bat
+echo To stop: dashboard\stop_dashboard.bat
 echo.
 
 endlocal
