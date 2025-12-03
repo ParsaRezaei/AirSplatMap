@@ -7,10 +7,10 @@ Benchmark pose estimators against TUM RGB-D ground truth trajectories.
 Computes ATE (Absolute Trajectory Error) and RPE (Relative Pose Error).
 
 Usage:
-    python scripts/benchmark_pose.py                    # Run all estimators
-    python scripts/benchmark_pose.py --methods orb sift # Specific methods
-    python scripts/benchmark_pose.py --dataset fr1_desk # Specific dataset
-    python scripts/benchmark_pose.py --output results.json
+    python benchmarks/pose/benchmark_pose.py                    # Run all estimators
+    python benchmarks/pose/benchmark_pose.py --methods orb sift # Specific methods
+    python benchmarks/pose/benchmark_pose.py --dataset fr1_desk # Specific dataset
+    python benchmarks/pose/benchmark_pose.py --output results.json
 """
 
 import argparse
@@ -24,7 +24,8 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+PROJECT_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.pose import get_pose_estimator, list_pose_estimators
 from src.pipeline.frames import TumRGBDSource
