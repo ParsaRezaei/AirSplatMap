@@ -1,12 +1,82 @@
 # AirSplatMap
 
-An extensible, online 3D Gaussian Splatting mapping pipeline.
+Real-time 3D Gaussian Splatting for drones, robots, and cameras.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
 
-AirSplatMap provides a modular framework for incremental 3D Gaussian Splatting (3DGS) from live or replayed streams of RGB/RGB-D frames with poses. The main contribution is the pipeline/orchestration layer; the actual 3DGS implementation sits behind a clean interface allowing different backends to be swapped.
+AirSplatMap is a modular framework for **real-time 3D reconstruction** using Gaussian Splatting. Stream RGB-D from cameras, drones, or datasets and watch 3D maps build in real-time.
 
-## Architecture
+```
+Camera/Drone → Pose Estimation → 3D Gaussian Splatting → Web Dashboard
+```
+
+## ✨ Features
+
+| Feature | Description |
+|---------|-------------|
+| 🚀 **Multiple 3DGS Engines** | GSplat, GraphDeco, MonoGS, SplaTAM, Photo-SLAM |
+| 📍 **Visual Odometry** | ORB, SIFT, LoFTR, SuperPoint, RealSense VIO |
+| 🎯 **Depth Estimation** | MiDaS, Depth Anything, ZoeDepth |
+| 🌐 **Web Dashboard** | Real-time 3D visualization in browser |
+| 📊 **Benchmarks** | Automated evaluation with plots |
+| 🤖 **ArduPilot** | MAVLink integration for drones/rovers |
+
+## 📚 Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Getting Started](docs/getting_started.md) | Installation and first run |
+| [Architecture](docs/architecture.md) | System design overview |
+| [Engines](docs/engines.md) | 3DGS engine comparison |
+| [Pose Estimation](docs/pose_estimation.md) | Visual odometry methods |
+| [Depth Estimation](docs/depth_estimation.md) | Monocular depth methods |
+| [Dashboard](docs/dashboard.md) | Web dashboard usage |
+| [Benchmarks](docs/benchmarks.md) | Running evaluations |
+| [API Reference](docs/api_reference.md) | Python API docs |
+| [ArduPilot](docs/ardupilot_integration.md) | Drone/rover integration |
+
+## 🚀 Quick Start
+
+### Installation
+
+```bash
+# Clone with submodules
+git clone --recursive https://github.com/ParsaRezaei/AirSplatMap.git
+cd AirSplatMap
+
+# Create conda environment
+conda env create -f environment_crossplatform.yml
+conda activate airsplatmap
+
+# Verify
+python -c "import torch; print(f'PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
+```
+
+### Run Web Dashboard
+
+```bash
+# Start dashboard
+dashboard\start_dashboard.bat  # Windows
+./dashboard/start_dashboard.sh  # Linux
+
+# Open browser: http://127.0.0.1:9002
+```
+
+### Run TUM Dataset Demo
+
+```bash
+python scripts/demos/live_tum_demo.py --sequence fr1_desk --engine gsplat
+```
+
+### Run with RealSense Camera
+
+```bash
+python scripts/demos/live_realsense_demo.py --engine gsplat
+```
+
+## 📖 Architecture
 
 ```
 ┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
@@ -317,72 +387,90 @@ class MySource(FrameSource):
         return len(self.data)
 ```
 
-## Project Structure
+## 📦 Project Structure
 
 ```
 AirSplatMap/
-├── src/
-│   ├── engines/
-│   │   ├── __init__.py
-│   │   ├── base.py                  # BaseGSEngine interface
-│   │   ├── graphdeco_engine.py      # Original 3DGS (GRAPHDECO)
-│   │   ├── gsplat_engine.py         # Nerfstudio gsplat
-│   │   ├── splatam_engine.py        # SplaTAM RGB-D SLAM
-│   │   ├── monogs_engine.py         # MonoGS SLAM
-│   │   ├── gslam_engine.py          # Gaussian-SLAM
-│   │   └── photoslam_engine.py      # Photo-SLAM
-│   ├── pipeline/
-│   │   ├── frames.py                # Frame, FrameSource, TumRGBDSource
-│   │   ├── online_gs.py             # OnlineGSPipeline
-│   │   └── rs_corrector.py          # Rolling shutter correction
-│   ├── depth/                       # Depth estimation (MiDaS, DepthAnything)
-│   └── pose/                        # Pose estimation (ORB, SIFT, flow)
-├── submodules/                      # Git submodules (forked with fixes)
-│   ├── gaussian-splatting/          # Original 3DGS
-│   ├── MonoGS/                      # Gaussian Splatting SLAM
-│   ├── Gaussian-SLAM/               # Submap-based SLAM
-│   ├── Photo-SLAM/                  # Photorealistic SLAM
-│   └── SplaTAM/                     # RGB-D SLAM
-├── scripts/
-│   ├── start_dashboard.sh           # Start web dashboard
-│   ├── stop_dashboard.sh            # Stop web dashboard
-│   ├── dashboard_config.sh          # Dashboard configuration
-│   ├── web_dashboard.py             # Dashboard backend
-│   └── web_dashboard.html           # Dashboard frontend
-├── output/                          # Results and benchmarks
-├── environment.yml                  # Conda environment
-└── README.md
+├── src/                    # Core library
+│   ├── engines/           # 3DGS backends (gsplat, graphdeco, monogs...)
+│   ├── pipeline/          # Frame sources & orchestration
+│   ├── pose/              # Visual odometry
+│   ├── depth/             # Depth estimation
+│   └── viewer/            # Visualization
+├── dashboard/             # Web dashboard
+├── benchmarks/            # Evaluation suite
+├── notebooks/             # Jupyter notebooks
+├── scripts/               # Demos and tools
+├── submodules/            # External dependencies
+└── docs/                  # Documentation
 ```
 
-## Configuration
+## 🎮 Available Engines
 
-### Engine Config (passed to `initialize_scene`)
+| Engine | Speed | Real-time | Best For |
+|--------|-------|-----------|----------|
+| `gsplat` | ⭐⭐⭐⭐⭐ | ✅ | Real-time, low memory |
+| `graphdeco` | ⭐⭐⭐ | ❌ | Best quality |
+| `monogs` | ⭐⭐⭐⭐ | ✅ | SLAM with tracking |
+| `splatam` | ⭐⭐ | ❌ | RGB-D dense reconstruction |
+| `photoslam` | ⭐⭐⭐⭐ | ✅ | Photorealistic |
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `sh_degree` | 3 | Spherical harmonics degree |
-| `white_background` | False | Use white background |
-| `position_lr_init` | 0.00016 | Initial position learning rate |
-| `densify_grad_threshold` | 0.0002 | Gradient threshold for densification |
-| `densify_until_iter` | 15000 | Stop densification after N iterations |
-| `lambda_dssim` | 0.2 | Weight for SSIM loss |
-| `recency_weight` | 0.7 | Weight for recent frames in sampling |
+```python
+from src.engines import get_engine, list_engines
 
-### Pipeline Config
+# List available
+print(list_engines())
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `steps_per_frame` | 5 | Optimization steps per new frame |
-| `warmup_frames` | 1 | Frames before starting optimization |
-| `render_every` | 0 | Render preview every N frames |
-| `save_every` | 0 | Save checkpoint every N frames |
+# Use specific engine
+engine = get_engine("gsplat")
+```
 
-## Supported Datasets
+## 📊 Benchmarks
 
-- **TUM RGB-D**: Use `TumRGBDSource` - expects TUM benchmark format with `rgb/`, `depth/`, `rgb.txt`, `depth.txt`, `groundtruth.txt`
-- **COLMAP**: (Planned) `ColmapSource` for COLMAP sparse reconstructions
-- **Video**: (Planned) `VideoSource` for video files with external pose tracking
+```bash
+# Run full benchmark suite
+python benchmarks/run_all.py --quick
+
+# View results
+# Open benchmarks/results/report.html
+```
+
+## 🔧 Configuration
+
+See full details in [docs/](docs/).
 
 ## License
 
-See LICENSE file for details.
+MIT License - See [LICENSE](LICENSE)
+
+---
+
+## 🛠️ Development
+
+### Building CUDA Extensions (Optional)
+
+For `graphdeco` and `monogs` engines:
+
+```bash
+cd submodules/gaussian-splatting/submodules/diff-gaussian-rasterization
+pip install --no-build-isolation -e .
+```
+
+### Running Tests
+
+```bash
+python -m pytest tests/
+```
+
+### Contributing
+
+1. Fork the repository
+2. Create feature branch
+3. Make changes
+4. Submit pull request
+
+---
+
+<p align="center">
+  Made with ❤️ for the 3D Gaussian Splatting community
+</p>
