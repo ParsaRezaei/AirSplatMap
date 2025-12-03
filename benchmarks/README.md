@@ -19,8 +19,13 @@ benchmarks/
 │   └── plots/               # Generated GS plots
 ├── visualization/           # Common visualization utilities
 │   └── plot_utils.py        # Plotting helpers
+├── batch/                   # Batch processing scripts
+│   ├── batch_gsplat_tum.py  # Batch GSplat on TUM
+│   ├── batch_process_scenes.py
+│   ├── run_monogs_tum.py    # MonoGS on TUM
+│   └── run_splatam_tum.py   # SplaTAM on TUM
 └── results/                 # Combined benchmark results
-    ├── summary.html         # Interactive HTML report
+    ├── report.html          # Interactive HTML report
     └── *.json               # Raw results
 ```
 
