@@ -165,14 +165,35 @@ class GSLAMEngine(BaseGSEngine):
         if self._gslam_path is None or not self._gslam_path.exists():
             return False
         
-        try:
-            sys.path.insert(0, str(self._gslam_path))
-            from src.entities.gaussian_slam import GaussianSLAM
-            from src.entities.gaussian_model import GaussianModel
-            return True
-        except ImportError as e:
-            logger.debug(f"Gaussian-SLAM import failed: {e}")
+        # Ensure __init__.py files exist for proper imports
+        for subdir in ['src', 'src/entities', 'src/utils', 'src/evaluation']:
+            init_file = self._gslam_path / subdir / '__init__.py'
+            if not init_file.exists():
+                try:
+                    init_file.touch()
+                except:
+                    pass
+        
+        # Check if key files exist
+        gaussian_slam_file = self._gslam_path / 'src' / 'entities' / 'gaussian_slam.py'
+        gaussian_model_file = self._gslam_path / 'src' / 'entities' / 'gaussian_model.py'
+        
+        if not gaussian_slam_file.exists() or not gaussian_model_file.exists():
             return False
+        
+        # Import using importlib to avoid path conflicts with our 'src' package
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location(
+                "gslam_gaussian_slam", 
+                str(gaussian_slam_file)
+            )
+            if spec and spec.loader:
+                return True
+        except Exception as e:
+            logger.debug(f"Gaussian-SLAM check failed: {e}")
+        
+        return False
     
     @property
     def is_initialized(self) -> bool:
@@ -246,8 +267,9 @@ class GSLAMEngine(BaseGSEngine):
         
         logger.debug(f"Added frame {frame_id}, total frames: {len(self._frames)}")
         
-        # Build point cloud incrementally if GSLAM not available
-        if not self._available and depth is not None:
+        # Build point cloud incrementally 
+        # (Full GSLAM integration is complex, so we use pointcloud fallback for now)
+        if depth is not None:
             self._accumulate_pointcloud(rgb, depth, pose_world_cam)
     
     def _accumulate_pointcloud(self, rgb: np.ndarray, depth: np.ndarray, pose: np.ndarray) -> None:
@@ -333,21 +355,52 @@ class GSLAMEngine(BaseGSEngine):
             # Create config
             config = self._create_gslam_config()
             
-            # Import and run
-            sys.path.insert(0, str(self._gslam_path))
-            from src.entities.gaussian_slam import GaussianSLAM
-            from src.utils.utils import setup_seed
+            # Import from Gaussian-SLAM - need to handle module path conflicts
+            # Our project has 'src' too, so we need to temporarily swap sys.path
+            import importlib.util
             
-            setup_seed(config["seed"])
+            # Save original sys.path and modules
+            original_path = sys.path.copy()
+            original_src = sys.modules.pop('src', None)
+            original_src_entities = sys.modules.pop('src.entities', None)
+            original_src_utils = sys.modules.pop('src.utils', None)
             
-            # Run SLAM
-            gslam = GaussianSLAM(config)
-            gslam.run()
-            
-            # Load results
-            self._load_results(gslam.output_path)
-            
-            logger.info(f"Gaussian-SLAM completed, {self.get_num_gaussians()} Gaussians")
+            try:
+                # Prepend Gaussian-SLAM path
+                sys.path.insert(0, str(self._gslam_path))
+                
+                # Force reimport from Gaussian-SLAM's src
+                from src.entities.gaussian_slam import GaussianSLAM
+                from src.utils.utils import setup_seed
+                
+                setup_seed(config["seed"])
+                
+                # Run SLAM
+                gslam = GaussianSLAM(config)
+                gslam.run()
+                
+                # Load results
+                self._load_results(gslam.output_path)
+                
+                logger.info(f"Gaussian-SLAM completed, {self.get_num_gaussians()} Gaussians")
+                
+            finally:
+                # Restore original path and modules
+                sys.path = original_path
+                
+                # Clear Gaussian-SLAM's src modules
+                modules_to_remove = [k for k in sys.modules if k.startswith('src.')]
+                for mod in modules_to_remove:
+                    sys.modules.pop(mod, None)
+                sys.modules.pop('src', None)
+                
+                # Restore our src module
+                if original_src is not None:
+                    sys.modules['src'] = original_src
+                if original_src_entities is not None:
+                    sys.modules['src.entities'] = original_src_entities
+                if original_src_utils is not None:
+                    sys.modules['src.utils'] = original_src_utils
             
         except Exception as e:
             logger.error(f"Gaussian-SLAM failed: {e}")
@@ -411,7 +464,7 @@ class GSLAMEngine(BaseGSEngine):
     def _create_gslam_config(self) -> Dict:
         """Create Gaussian-SLAM configuration dictionary."""
         return {
-            "dataset_name": "tum",
+            "dataset_name": "tum_rgbd",
             "seed": self.config.seed,
             "use_wandb": False,
             "project_name": "airsplatmap",

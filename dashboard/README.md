@@ -5,11 +5,14 @@ Real-time 3D Gaussian Splatting visualization dashboard.
 ## Quick Start
 
 ```bash
+# Navigate to dashboard directory first
+cd dashboard
+
 # Windows
-dashboard\start_dashboard.bat
+start_dashboard.bat
 
 # Linux/macOS
-./dashboard/start_dashboard.sh
+./start_dashboard.sh
 
 # Then open browser
 http://127.0.0.1:9002

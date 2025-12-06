@@ -6,10 +6,10 @@ AirSplatMap includes a comprehensive benchmarking suite for evaluating pose esti
 
 ```bash
 # Run all benchmarks (quick mode)
-python benchmarks/run_all.py --quick
+python -m benchmarks all --quick
 
 # Generate reports only (from existing results)
-python benchmarks/run_all.py --report
+python -m benchmarks report
 
 # View interactive HTML report
 # Open benchmarks/results/report.html
@@ -19,17 +19,20 @@ python benchmarks/run_all.py --report
 
 ```
 benchmarks/
-├── run_all.py              # Master runner
+├── __init__.py           # Package init with paths
+├── __main__.py           # CLI entry point
 ├── pose/
 │   └── benchmark_pose.py   # Pose estimation evaluation
 ├── depth/
 │   └── benchmark_depth.py  # Depth estimation evaluation
 ├── gaussian_splatting/
 │   └── benchmark_gs.py     # 3DGS engine evaluation
+├── runners/              # Modular benchmark runners
+│   ├── pose.py
+│   ├── depth.py
+│   └── gs.py
 ├── visualization/
 │   └── plot_utils.py       # Plotting utilities
-├── batch/
-│   └── batch_*.py          # Batch processing scripts
 └── results/
     ├── report.html         # Interactive HTML report
     └── *.json              # Raw results
@@ -181,20 +184,20 @@ monogs          50   24.52   0.8423   0.1323      175,234     24.5s   10.12   42
 
 ```bash
 # Run everything
-python benchmarks/run_all.py --all
+python -m benchmarks all
 
 # Quick mode (fewer frames)
-python benchmarks/run_all.py --quick
+python -m benchmarks all --quick
 
 # Specific benchmarks
-python benchmarks/run_all.py --pose --depth
-python benchmarks/run_all.py --gs
+python -m benchmarks pose --methods orb sift
+python -m benchmarks depth --methods midas
+python -m benchmarks gs --engines gsplat
 
-# Custom methods
-python benchmarks/run_all.py \
-    --pose-methods orb sift loftr \
-    --depth-methods midas zoedepth \
-    --gs-engines gsplat graphdeco
+# Skip specific benchmarks
+python -m benchmarks all --skip-pose
+python -m benchmarks all --skip-depth
+python -m benchmarks all --skip-gs
 ```
 
 ## HTML Report
@@ -202,7 +205,7 @@ python benchmarks/run_all.py \
 Generate an interactive HTML report:
 
 ```bash
-python benchmarks/run_all.py --report
+python -m benchmarks report --plots
 ```
 
 Opens `benchmarks/results/report.html` with:
@@ -216,7 +219,7 @@ Opens `benchmarks/results/report.html` with:
 ### Generate Plots Only
 
 ```bash
-python benchmarks/run_all.py --plots-only
+python -m benchmarks report --plots
 ```
 
 ### Available Plots
@@ -271,7 +274,9 @@ Standard benchmark sequences:
 
 Download:
 ```bash
-python scripts/tools/download_tum.py --sequence fr1_desk
+cd scripts/tools
+./download_tum.sh           # Linux/macOS
+download_tum.bat            # Windows
 ```
 
 ### Custom Datasets
@@ -393,13 +398,13 @@ python benchmarks/batch/generate_benchmark_report.py \
 
 ```bash
 # Use quick mode
-python benchmarks/run_all.py --quick
+python -m benchmarks all --quick
 
-# Skip expensive methods
-python benchmarks/run_all.py --pose-methods orb sift
+# Run only pose with specific methods
+python -m benchmarks pose --methods orb sift
 
 # Reduce frames
-python benchmarks/run_all.py --max-frames 50
+python -m benchmarks all --max-frames 50
 ```
 
 ### Reproducibility
@@ -408,8 +413,7 @@ python benchmarks/run_all.py --max-frames 50
 # Set random seed
 export PYTHONHASHSEED=42
 
-# Run with fixed seed
-python benchmarks/run_all.py --seed 42
+# Seeds can be configured in benchmark code
 ```
 
 ### GPU Memory
@@ -418,6 +422,6 @@ python benchmarks/run_all.py --seed 42
 # Monitor GPU during benchmark
 watch -n 1 nvidia-smi
 
-# Use less memory
-python benchmarks/run_all.py --gs-engines gsplat  # Skip memory-heavy engines
+# Use only low-memory engines
+python -m benchmarks gs --engines gsplat  # Skip memory-heavy engines
 ```

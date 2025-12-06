@@ -2,7 +2,7 @@
 # Download TUM RGB-D Dataset Scenes
 # https://cvg.cit.tum.de/data/datasets/rgbd-dataset/download
 
-TUM_DIR="${1:-/home/past/parsa/datasets/tum}"
+TUM_DIR="${1:-./datasets/tum}"
 mkdir -p "$TUM_DIR"
 cd "$TUM_DIR"
 

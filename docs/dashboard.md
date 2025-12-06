@@ -6,10 +6,12 @@ AirSplatMap includes a real-time web dashboard for visualizing 3D Gaussian Splat
 
 ```bash
 # Windows
-dashboard\start_dashboard.bat
+cd dashboard
+start_dashboard.bat
 
 # Linux/macOS
-./dashboard/start_dashboard.sh
+cd dashboard
+./start_dashboard.sh
 
 # Open browser
 http://127.0.0.1:9002

@@ -4,6 +4,8 @@ AirSplatMap includes multiple visual odometry methods for camera tracking when g
 
 ## Available Methods
 
+### Classical Methods (CPU)
+
 | Method | Speed | Accuracy | GPU | Description |
 |--------|-------|----------|-----|-------------|
 | `orb` | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ❌ | ORB features + PnP |
@@ -11,12 +13,29 @@ AirSplatMap includes multiple visual odometry methods for camera tracking when g
 | `robust_flow` | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ❌ | Optical flow with outlier rejection |
 | `flow` | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ❌ | Basic optical flow |
 | `keyframe` | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ❌ | Keyframe-based ORB |
-| `loftr` | ⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | LoFTR deep matching |
+
+### Deep Learning Methods (GPU)
+
+| Method | Speed | Accuracy | GPU | Description |
+|--------|-------|----------|-----|-------------|
+| `loftr` | ⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | LoFTR dense matching |
 | `superpoint` | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | SuperPoint + SuperGlue |
+| `lightglue` | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | LightGlue fast matcher (CVPR 2023) |
+| `raft` | ⭐⭐⭐ | ⭐⭐⭐⭐ | ✅ | RAFT optical flow (NeurIPS 2020) |
+| `r2d2` | ⭐⭐⭐ | ⭐⭐⭐⭐ | ✅ | R2D2 reliable descriptors |
+| `roma` | ⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | RoMa dense matcher (CVPR 2024) |
+
+### Specialized Methods
+
+| Method | Type | Description |
+|--------|------|-------------|
+| RGB-D VO | RGB-D | Visual odometry using depth sensor (\`src.pose.rgbd_vo\`) |
+| Stereo VIO | Stereo | Stereo visual-inertial odometry (\`src.pose.stereo_vio\`) |
+| External | Various | ORB-SLAM3, OpenVINS, DPVO, DROID-SLAM wrappers |
 
 ## Quick Start
 
-```python
+\`\`\`python
 from src.pose import get_pose_estimator, list_pose_estimators
 
 # List available methods
@@ -26,7 +45,7 @@ print(list_pose_estimators())
 estimator = get_pose_estimator("orb")
 
 # Set camera intrinsics
-estimator.set_intrinsics(fx=525, fy=525, cx=319.5, cy=239.5)
+estimator.set_intrinsics_from_dict({'fx': 525, 'fy': 525, 'cx': 319.5, 'cy': 239.5})
 
 # Estimate pose
 result = estimator.estimate(rgb_image)
@@ -34,7 +53,7 @@ result = estimator.estimate(rgb_image)
 print(f"Pose:\n{result.pose}")
 print(f"Confidence: {result.confidence:.2f}")
 print(f"Inliers: {result.num_inliers}")
-```
+\`\`\`
 
 ## Method Details
 
@@ -42,9 +61,9 @@ print(f"Inliers: {result.num_inliers}")
 
 Fast feature-based tracking using ORB descriptors.
 
-```python
+\`\`\`python
 estimator = get_pose_estimator("orb")
-```
+\`\`\`
 
 **How it works:**
 1. Detect ORB keypoints in current frame
@@ -53,201 +72,164 @@ estimator = get_pose_estimator("orb")
 4. Recover pose from Essential matrix
 
 **Config:**
-```python
+\`\`\`python
 estimator = get_pose_estimator("orb",
     n_features=2000,        # Number of features
     scale_factor=1.2,       # Pyramid scale
     n_levels=8,             # Pyramid levels
-    ransac_threshold=1.0,   # RANSAC threshold (pixels)
 )
-```
+\`\`\`
 
-### SIFT (Better Accuracy)
+### LightGlue (Fast Deep Learning) ⭐ NEW
 
-More robust features at the cost of speed.
+LightGlue is a fast and accurate deep learning-based feature matcher from CVPR 2023.
 
-```python
-estimator = get_pose_estimator("sift")
-```
-
-**How it works:**
-1. Detect SIFT keypoints (scale-invariant)
-2. Match with FLANN-based matcher
-3. Filter matches with ratio test
-4. Estimate pose with PnP
-
-### Robust Flow (Balanced)
-
-Optical flow with geometric verification.
-
-```python
-estimator = get_pose_estimator("robust_flow")
-```
+\`\`\`python
+estimator = get_pose_estimator("lightglue")
+\`\`\`
 
 **How it works:**
-1. Compute dense optical flow
-2. Sample reliable correspondences
-3. Apply geometric consistency check
-4. Estimate pose with RANSAC
+1. Extract SuperPoint/DISK/ALIKED features
+2. Match using lightweight attention mechanism
+3. ~5-10x faster than SuperGlue with similar accuracy
 
-**Config:**
-```python
-estimator = get_pose_estimator("robust_flow",
-    flow_method='farneback',  # or 'dis'
-    consistency_threshold=1.0,
-    min_correspondences=100,
-)
-```
+**Requirements:**
+\`\`\`bash
+pip install lightglue  # or use kornia backend
+\`\`\`
 
-### Keyframe-Based (For Drift Reduction)
+### RAFT (Dense Flow) ⭐ NEW
 
-Maintains keyframes for loop closure.
+State-of-the-art optical flow for robust dense correspondence.
 
-```python
-estimator = get_pose_estimator("keyframe")
-```
+\`\`\`python
+estimator = get_pose_estimator("raft", model='large')
+\`\`\`
 
 **How it works:**
-1. Track features between consecutive frames
-2. Create keyframe when motion threshold exceeded
-3. Match against keyframes for drift correction
-4. Bundle adjustment (optional)
+1. Compute dense optical flow using RAFT
+2. Sample reliable correspondences from flow
+3. Estimate pose with RANSAC
+
+**Requirements:**
+- torchvision >= 0.14 (includes RAFT)
+
+### RoMa (Wide Baseline) ⭐ NEW
+
+RoMa handles challenging wide baseline matching using DINOv2 features.
+
+\`\`\`python
+estimator = get_pose_estimator("roma", model='outdoor')
+\`\`\`
+
+**Requirements:**
+\`\`\`bash
+pip install romatch
+\`\`\`
 
 ### LoFTR (Best Accuracy, Slow)
 
 Deep learning-based dense matching.
 
-```python
+\`\`\`python
 estimator = get_pose_estimator("loftr")
-```
+\`\`\`
 
 **Requirements:**
 - CUDA GPU
-- `pip install kornia`
+- \`pip install kornia\`
 
-**How it works:**
-1. Extract deep features with transformer
-2. Dense matching in feature space
-3. Coarse-to-fine refinement
-4. Pose from correspondences
+### Keyframe-Based (For Drift Reduction)
 
-### SuperPoint + SuperGlue
+Maintains keyframes for loop closure.
 
-State-of-the-art learned features.
+\`\`\`python
+estimator = get_pose_estimator("keyframe")
+\`\`\`
 
-```python
-estimator = get_pose_estimator("superpoint")
-```
+## RGB-D Visual Odometry
 
-**Requirements:**
-- CUDA GPU
-- SuperGlue weights
+For RGB-D cameras (like RealSense), use the dedicated RGB-D VO:
 
-## Usage Examples
+\`\`\`python
+from src.pose.rgbd_vo import RGBDVO, create_rgbd_vo
 
-### Basic Tracking
+# Simple creation
+vo = create_rgbd_vo(intrinsics={'fx': 615, 'fy': 615, 'cx': 320, 'cy': 240})
 
-```python
-from src.pose import get_pose_estimator
-import cv2
+# Or with full config
+vo = RGBDVO(
+    max_features=300,
+    min_depth=0.1,
+    max_depth=8.0,
+    pose_smoothing=0.4,
+)
+vo.set_intrinsics(fx=615, fy=615, cx=320, cy=240)
 
-# Initialize
-estimator = get_pose_estimator("orb")
-estimator.set_intrinsics(fx=525, fy=525, cx=319.5, cy=239.5)
+# Process frames
+result = vo.process(rgb, depth, timestamp)
+pose = result.pose  # 4x4 camera-to-world
+\`\`\`
 
-# Open camera
-cap = cv2.VideoCapture(0)
+## External VIO Systems
 
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
-    
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    result = estimator.estimate(rgb)
-    
-    # Get position
-    position = result.pose[:3, 3]
-    print(f"Position: {position}")
-    
-    # Visualize
-    cv2.imshow('Tracking', frame)
-    if cv2.waitKey(1) == 27:
-        break
-```
+AirSplatMap provides wrappers for external VIO/SLAM systems:
 
-### With Depth
+\`\`\`python
+from src.pose.external import list_available_backends, get_available_wrapper
 
-```python
-estimator = get_pose_estimator("orb", use_depth=True)
+# Check available backends
+backends = list_available_backends()
+# {'orbslam3': False, 'openvins': False, 'dpvo': False, 'droid_slam': False}
 
-# Estimate with depth
-result = estimator.estimate(rgb, depth=depth_image)
-```
+# Available wrappers (require separate installation):
+# - ORB-SLAM3: Feature-based VO/VIO/SLAM
+# - OpenVINS: Tightly-coupled VIO (MSCKF)
+# - DPVO: Deep Patch Visual Odometry
+# - DROID-SLAM: Deep visual SLAM
+\`\`\`
 
-### Compare Methods
+### ORB-SLAM3 Example
 
-```python
-methods = ['orb', 'sift', 'robust_flow']
-results = {}
+\`\`\`python
+from src.pose.external import ORBSlam3Wrapper
 
-for method in methods:
-    est = get_pose_estimator(method)
-    est.set_intrinsics(fx=525, fy=525, cx=319.5, cy=239.5)
-    
-    times = []
-    for frame in frames:
-        t0 = time.time()
-        result = est.estimate(frame.rgb)
-        times.append(time.time() - t0)
-    
-    results[method] = {
-        'fps': 1.0 / np.mean(times),
-        'inliers': np.mean([r.num_inliers for r in results])
-    }
+slam = ORBSlam3Wrapper(
+    vocab_path="ORBvoc.txt",
+    config_path="camera.yaml",
+    sensor_type="IMU_STEREO"
+)
+slam.initialize()
 
-print(results)
-```
-
-### Reset Tracking
-
-```python
-# Reset when tracking is lost
-if result.confidence < 0.3:
-    estimator.reset()
-    print("Tracking lost, resetting...")
-```
+result = slam.process(
+    image=left_image,
+    timestamp=time.time(),
+    image_right=right_image,
+    accel=np.array([ax, ay, az]),
+    gyro=np.array([gx, gy, gz])
+)
+\`\`\`
 
 ## API Reference
 
-### `PoseResult`
+### \`PoseResult\`
 
-```python
+\`\`\`python
 @dataclass
 class PoseResult:
     pose: np.ndarray        # 4x4 camera-to-world matrix
     confidence: float       # 0-1 confidence score
     num_inliers: int        # Number of inlier matches
-    timestamp: float        # Estimation timestamp
-    
-    @property
-    def position(self) -> np.ndarray:
-        """3D position (translation)."""
-        return self.pose[:3, 3]
-    
-    @property
-    def rotation(self) -> np.ndarray:
-        """3x3 rotation matrix."""
-        return self.pose[:3, :3]
-```
+    tracking_status: str    # "ok", "lost", "initializing"
+    is_keyframe: bool       # Whether this is a keyframe
+\`\`\`
 
-### `BasePoseEstimator`
+### \`BasePoseEstimator\`
 
-```python
+\`\`\`python
 class BasePoseEstimator(ABC):
-    def set_intrinsics(self, fx: float, fy: float, 
-                       cx: float, cy: float) -> None:
-        """Set camera intrinsics."""
+    def set_intrinsics(self, K: np.ndarray) -> None:
+        """Set 3x3 camera intrinsic matrix."""
         pass
     
     def set_intrinsics_from_dict(self, intrinsics: dict) -> None:
@@ -255,25 +237,20 @@ class BasePoseEstimator(ABC):
         pass
     
     @abstractmethod
-    def estimate(self, rgb: np.ndarray, 
-                 depth: np.ndarray = None) -> PoseResult:
+    def estimate(self, rgb: np.ndarray) -> PoseResult:
         """Estimate pose from image."""
         pass
     
     def reset(self) -> None:
         """Reset tracking state."""
         pass
-    
-    def get_trajectory(self) -> List[np.ndarray]:
-        """Get accumulated trajectory."""
-        pass
-```
+\`\`\`
 
 ## Integration with Pipeline
 
 ### Automatic Pose Estimation
 
-```python
+\`\`\`python
 from src.pipeline.frames import WebcamSource
 from src.pose import get_pose_estimator
 
@@ -287,38 +264,25 @@ source = WebcamSource(
 for frame in source:
     # frame.pose is estimated automatically
     print(f"Frame {frame.idx}: position = {frame.pose[:3, 3]}")
-```
-
-### RealSense VIO
-
-```python
-from src.pipeline import RealSenseSource
-
-# Use RealSense's built-in tracking
-source = RealSenseSource(use_t265=True)  # T265 tracking camera
-
-# Or with visual odometry
-source = RealSenseSource(
-    pose_estimator="robust_flow",  # Use our VO
-)
-```
+\`\`\`
 
 ## Benchmarks
 
-On TUM `fr1_desk`:
+On TUM \`fr1_desk\`:
 
 | Method | ATE (m) | RPE (m/f) | FPS |
 |--------|---------|-----------|-----|
 | orb | 0.089 | 0.023 | 45 |
 | sift | 0.072 | 0.019 | 12 |
 | robust_flow | 0.065 | 0.017 | 28 |
+| lightglue | 0.055 | 0.015 | 15 |
 | loftr | 0.048 | 0.012 | 3 |
-| superpoint | 0.052 | 0.014 | 8 |
+| roma | 0.045 | 0.011 | 2 |
 
 Run benchmarks:
-```bash
-python benchmarks/pose/benchmark_pose.py --methods orb sift robust_flow
-```
+\`\`\`bash
+python -m benchmarks pose --methods orb sift lightglue loftr
+\`\`\`
 
 ## Troubleshooting
 
@@ -326,18 +290,24 @@ python benchmarks/pose/benchmark_pose.py --methods orb sift robust_flow
 
 1. Ensure good lighting
 2. Reduce motion blur (faster shutter)
-3. Try `robust_flow` instead of `orb`
+3. Try \`robust_flow\` or \`lightglue\`
 4. Increase feature count
 
 ### Drift Accumulation
 
-1. Use `keyframe` method
-2. Reduce `steps_per_frame` in pipeline
-3. Add loop closure (coming soon)
+1. Use \`keyframe\` method
+2. Use RGB-D VO if depth available
+3. Consider external VIO (ORB-SLAM3)
 
 ### GPU Methods Not Working
 
-```bash
+\`\`\`bash
 # Install CUDA dependencies
 pip install kornia torch torchvision --upgrade
-```
+
+# For LightGlue
+pip install lightglue
+
+# For RoMa
+pip install romatch
+\`\`\`

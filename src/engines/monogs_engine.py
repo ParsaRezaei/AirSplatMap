@@ -32,6 +32,7 @@ if sys.platform == 'win32':
     except (ImportError, OSError, AttributeError):
         pass
 import logging
+import cv2
 import numpy as np
 import torch
 from pathlib import Path
@@ -199,20 +200,29 @@ class MonoGSEngine:
             }
         }
     
-    def add_frame(self, frame_idx: int, rgb: np.ndarray, depth: Optional[np.ndarray] = None,
-                  pose: Optional[np.ndarray] = None) -> Dict:
+    def add_frame(self, frame_id: int = None, rgb: np.ndarray = None, depth: Optional[np.ndarray] = None,
+                  pose_world_cam: Optional[np.ndarray] = None,
+                  frame_idx: int = None, pose: Optional[np.ndarray] = None) -> Dict:
         """
         Add a new frame to the SLAM system.
         
         Args:
-            frame_idx: Frame index
+            frame_id: Frame identifier (preferred, matches base class)
             rgb: RGB image (H, W, 3) uint8
             depth: Optional depth image (H, W) float32 in meters
-            pose: Optional camera pose (4, 4) - if not provided, will be estimated
+            pose_world_cam: Camera pose (4, 4) - world from camera (preferred)
+            frame_idx: Legacy parameter, use frame_id instead
+            pose: Legacy parameter, use pose_world_cam instead
             
         Returns:
             Dictionary with tracking results (pose, num_gaussians, etc.)
         """
+        # Handle legacy parameter names
+        if frame_id is None and frame_idx is not None:
+            frame_id = frame_idx
+        if pose_world_cam is None and pose is not None:
+            pose_world_cam = pose
+            
         if not self._initialized:
             raise RuntimeError("Scene not initialized. Call initialize_scene first.")
         
@@ -226,22 +236,22 @@ class MonoGSEngine:
         
         # Store camera info
         camera_info = {
-            'frame_idx': frame_idx,
+            'frame_idx': frame_id,
             'rgb': rgb_tensor,
             'depth': depth_tensor,
-            'pose': pose,
+            'pose': pose_world_cam,
         }
         self._cameras.append(camera_info)
-        self._frame_idx = frame_idx
+        self._frame_idx = frame_id
         
         # Accumulate point cloud from depth (MonoGS backend not fully integrated)
-        if depth is not None and pose is not None:
-            self._accumulate_points(rgb, depth, pose)
+        if depth is not None and pose_world_cam is not None:
+            self._accumulate_points(rgb, depth, pose_world_cam)
         
         return {
-            'frame_idx': frame_idx,
+            'frame_idx': frame_id,
             'num_gaussians': self.get_num_gaussians(),
-            'pose_estimated': pose is None,
+            'pose_estimated': pose_world_cam is None,
         }
     
     def _accumulate_points(self, rgb: np.ndarray, depth: np.ndarray, pose: np.ndarray) -> None:
@@ -275,12 +285,17 @@ class MonoGSEngine:
     
     def render_view(self, pose: np.ndarray, img_size: Tuple[int, int]) -> Optional[np.ndarray]:
         """Render view from given camera pose using native Gaussian rasterization."""
-        if not self._initialized or self._gaussians is None:
+        if not self._initialized:
             return None
         
         width, height = img_size
         
-        if self._gaussians.get_xyz.shape[0] == 0:
+        # Check if we have points in the cache (fallback mode)
+        if hasattr(self, '_pts_cache') and len(self._pts_cache) > 0:
+            return self._render_from_cache(pose, img_size)
+        
+        # Try native Gaussian rendering
+        if self._gaussians is None or self._gaussians.get_xyz.shape[0] == 0:
             return np.zeros((height, width, 3), dtype=np.uint8)
         
         try:
@@ -440,6 +455,61 @@ class MonoGSEngine:
         except Exception as e:
             logger.warning(f"Software render failed: {e}")
             return np.zeros((height, width, 3), dtype=np.uint8)
+    
+    def _render_from_cache(self, pose: np.ndarray, img_size: Tuple[int, int]) -> np.ndarray:
+        """Render from cached point cloud."""
+        width, height = img_size
+        
+        if not hasattr(self, '_pts_cache') or len(self._pts_cache) == 0:
+            return np.zeros((height, width, 3), dtype=np.uint8)
+        
+        xyz = np.array(self._pts_cache)
+        colors = np.array(self._cols_cache) if hasattr(self, '_cols_cache') and self._cols_cache else np.full((len(xyz), 3), 0.6)
+        
+        # Transform to camera frame
+        pose_inv = np.linalg.inv(pose)
+        pts_h = np.hstack([xyz, np.ones((len(xyz), 1))])
+        pts_cam = (pose_inv @ pts_h.T).T[:, :3]
+        
+        # Filter behind camera
+        valid = pts_cam[:, 2] > 0.1
+        pts_cam = pts_cam[valid]
+        colors = colors[valid]
+        
+        if len(pts_cam) == 0:
+            return np.zeros((height, width, 3), dtype=np.uint8)
+        
+        # Project
+        fx = self._intrinsics['fx'] * width / self._intrinsics['width']
+        fy = self._intrinsics['fy'] * height / self._intrinsics['height']
+        cx = self._intrinsics['cx'] * width / self._intrinsics['width']
+        cy = self._intrinsics['cy'] * height / self._intrinsics['height']
+        
+        u = (pts_cam[:, 0] * fx / pts_cam[:, 2] + cx).astype(int)
+        v = (pts_cam[:, 1] * fy / pts_cam[:, 2] + cy).astype(int)
+        
+        # Filter to image bounds
+        valid = (u >= 0) & (u < width) & (v >= 0) & (v < height)
+        u, v = u[valid], v[valid]
+        colors = colors[valid]
+        depths = pts_cam[valid, 2]
+        
+        if len(u) == 0:
+            return np.zeros((height, width, 3), dtype=np.uint8)
+        
+        # Sort by depth (back to front)
+        order = np.argsort(-depths)
+        u, v, colors = u[order], v[order], colors[order]
+        
+        # Render with points
+        img = np.zeros((height, width, 3), dtype=np.uint8)
+        color_uint8 = (np.clip(colors, 0, 1) * 255).astype(np.uint8)
+        
+        # Draw points
+        for i in range(len(u)):
+            cv2.circle(img, (u[i], v[i]), 1, color_uint8[i].tolist(), -1)
+        
+        return img
     
     def optimize_step(self, n_steps: int = 1, **kwargs) -> Dict:
         """Run optimization steps."""

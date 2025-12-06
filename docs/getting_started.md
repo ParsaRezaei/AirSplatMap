@@ -22,7 +22,7 @@ cd AirSplatMap
 
 ```bash
 # Create environment with all dependencies
-conda env create -f environment_crossplatform.yml
+conda env create -f environment.yml
 conda activate airsplatmap
 ```
 
@@ -42,8 +42,9 @@ python -c "from src.engines import list_engines; print('Engines:', list(list_eng
 
 ```bash
 # Start the dashboard
-dashboard\start_dashboard.bat  # Windows
-./dashboard/start_dashboard.sh  # Linux/macOS
+cd dashboard
+start_dashboard.bat       # Windows
+./start_dashboard.sh      # Linux/macOS
 
 # Open browser
 # http://127.0.0.1:9002
@@ -53,7 +54,10 @@ dashboard\start_dashboard.bat  # Windows
 
 ```bash
 # Download TUM dataset
-python scripts/tools/download_tum.py --sequence fr1_desk
+cd scripts/tools
+./download_tum.sh           # Linux/macOS
+download_tum.bat            # Windows
+cd ../..
 
 # Run demo
 python scripts/demos/live_tum_demo.py --sequence fr1_desk --engine gsplat
@@ -97,11 +101,10 @@ print(f"Processed {summary['frames']} frames, {summary['gaussians']} Gaussians")
 ### TUM RGB-D
 
 ```bash
-# Download specific sequence
-python scripts/tools/download_tum.py --sequence fr1_desk
-
-# Download all sequences
-python scripts/tools/download_tum.py --all
+# Download all default sequences
+cd scripts/tools
+./download_tum.sh           # Linux/macOS
+download_tum.bat            # Windows
 ```
 
 Available sequences:

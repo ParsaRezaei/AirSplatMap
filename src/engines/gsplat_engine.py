@@ -40,7 +40,24 @@ class GSplatEngine(BaseGSEngine):
         Args:
             device: CUDA device to use (default: "cuda:0")
         """
-        self.device = torch.device(device)
+        # Ensure CUDA is available - gsplat requires GPU
+        if not torch.cuda.is_available():
+            raise RuntimeError("GSplat requires CUDA but no GPU is available")
+        
+        # Use specified device or default to first GPU
+        if device == "cuda" or device == "cuda:0":
+            self.device = torch.device("cuda:0")
+        elif device.startswith("cuda:"):
+            device_id = int(device.split(":")[1])
+            if device_id >= torch.cuda.device_count():
+                logger.warning(f"Device {device} not available, using cuda:0")
+                self.device = torch.device("cuda:0")
+            else:
+                self.device = torch.device(device)
+        else:
+            logger.warning(f"GSplat requires CUDA, ignoring device={device}")
+            self.device = torch.device("cuda:0")
+        
         self._initialized = False
         self._intrinsics = None
         self._config = None
@@ -60,7 +77,7 @@ class GSplatEngine(BaseGSEngine):
         # Background color
         self._bg_color = torch.tensor([0, 0, 0], dtype=torch.float32, device=self.device)
         
-        logger.info(f"GSplat engine initialized on {device}")
+        logger.info(f"GSplat engine initialized on {self.device}")
     
     @property
     def is_initialized(self) -> bool:
@@ -468,6 +485,10 @@ class GSplatEngine(BaseGSEngine):
         # gsplat.rasterization expects specific format
         
         try:
+            # Ensure CUDA is synchronized before rasterization
+            if self.device.type == 'cuda':
+                torch.cuda.synchronize()
+            
             # Debug shapes
             if logger.isEnabledFor(logging.DEBUG):
                 logger.debug(f"means: {means.shape}, quats: {quats.shape}, scales: {scales.shape}")
@@ -494,10 +515,17 @@ class GSplatEngine(BaseGSEngine):
             return rendered[0]  # (H, W, 3)
             
         except Exception as e:
-            logger.warning(f"gsplat rasterization failed: {e}, using fallback")
-            logger.warning(f"  means: {means.shape}, colors: {colors.shape}")
-            logger.warning(f"  quats: {quats.shape}, scales: {scales.shape}")
-            logger.warning(f"  opacities: {opacities.shape}")
+            # Convert exception to string safely to avoid codec errors
+            try:
+                err_msg = str(e)
+            except:
+                err_msg = "Unknown error (could not decode error message)"
+            
+            # Only log first occurrence to avoid spam
+            if not hasattr(self, '_rasterization_error_logged'):
+                self._rasterization_error_logged = True
+                logger.warning(f"gsplat rasterization failed: {err_msg}, using fallback")
+            
             # Fallback to simple point rendering
             return torch.zeros(height, width, 3, device=self.device)
     

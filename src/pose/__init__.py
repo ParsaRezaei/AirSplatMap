@@ -992,6 +992,925 @@ class SuperPointPoseEstimator(BasePoseEstimator):
         self._prev_feats = None
 
 
+class LightGluePoseEstimator(BasePoseEstimator):
+    """
+    Pose estimation using LightGlue matcher.
+    
+    LightGlue is a fast and accurate deep learning-based feature matcher.
+    It's a lightweight alternative to SuperGlue with comparable accuracy.
+    Can use SuperPoint, DISK, or ALIKED as feature extractor.
+    
+    Requires: pip install lightglue
+    """
+    
+    def __init__(
+        self, 
+        device: str = 'cuda', 
+        max_keypoints: int = 2048,
+        extractor: str = 'superpoint',  # 'superpoint', 'disk', 'aliked'
+    ):
+        super().__init__()
+        self._device = device
+        self._max_keypoints = max_keypoints
+        self._extractor_name = extractor
+        self._extractor = None
+        self._matcher = None
+        self._available = False
+        
+        self._prev_gray = None
+        self._prev_feats = None
+        
+        try:
+            import torch
+            
+            self._torch = torch
+            
+            if device == 'cuda' and not torch.cuda.is_available():
+                logger.warning("CUDA not available for LightGlue, falling back to CPU")
+                self._device = 'cpu'
+            
+            # Try lightglue package first
+            try:
+                from lightglue import LightGlue, SuperPoint, DISK, ALIKED
+                from lightglue.utils import rbd  # Remove batch dimension
+                
+                self._rbd = rbd
+                
+                # Select extractor
+                if extractor == 'superpoint':
+                    self._extractor = SuperPoint(max_num_keypoints=max_keypoints).eval().to(self._device)
+                elif extractor == 'disk':
+                    self._extractor = DISK(max_num_keypoints=max_keypoints).eval().to(self._device)
+                elif extractor == 'aliked':
+                    self._extractor = ALIKED(max_num_keypoints=max_keypoints).eval().to(self._device)
+                else:
+                    self._extractor = SuperPoint(max_num_keypoints=max_keypoints).eval().to(self._device)
+                    extractor = 'superpoint'
+                
+                # Initialize LightGlue matcher
+                self._matcher = LightGlue(features=extractor).eval().to(self._device)
+                self._available = True
+                logger.info(f"LightGlue ({extractor}) initialized on {self._device}")
+                
+            except ImportError:
+                # Fall back to kornia if lightglue not available
+                logger.warning("lightglue package not found, trying kornia LightGlue")
+                import kornia
+                from kornia.feature import LightGlue as KorniaLightGlue, KeyNetAffNetHardNet
+                
+                # KeyNetAffNetHardNet + LightGlue combo works well
+                self._extractor = KeyNetAffNetHardNet(num_features=max_keypoints).to(self._device).eval()
+                self._matcher = KorniaLightGlue('keynet_affnet_hardnet').to(self._device).eval()
+                self._use_kornia = True
+                self._available = True
+                logger.info(f"LightGlue (kornia) initialized on {self._device}")
+                
+        except ImportError as e:
+            logger.warning(f"LightGlue not available: {e}. Install with: pip install lightglue")
+        except Exception as e:
+            logger.warning(f"LightGlue initialization failed: {e}")
+    
+    def _extract_and_match(self, gray0: np.ndarray, gray1: np.ndarray):
+        """Extract features and match between two images."""
+        import torch
+        
+        if hasattr(self, '_use_kornia') and self._use_kornia:
+            return self._extract_and_match_kornia(gray0, gray1)
+        
+        # Using lightglue package
+        img0 = torch.from_numpy(gray0).float() / 255.0
+        img1 = torch.from_numpy(gray1).float() / 255.0
+        
+        img0 = img0.unsqueeze(0).unsqueeze(0).to(self._device)
+        img1 = img1.unsqueeze(0).unsqueeze(0).to(self._device)
+        
+        # Extract features
+        with torch.no_grad():
+            feats0 = self._extractor.extract(img0)
+            feats1 = self._extractor.extract(img1)
+            
+            # Match
+            matches01 = self._matcher({'image0': feats0, 'image1': feats1})
+        
+        # Get matched keypoints
+        feats0, feats1, matches01 = [self._rbd(x) for x in [feats0, feats1, matches01]]
+        
+        kpts0 = feats0['keypoints'].cpu().numpy()
+        kpts1 = feats1['keypoints'].cpu().numpy()
+        matches = matches01['matches'].cpu().numpy()
+        
+        # Filter valid matches
+        valid = matches > -1
+        mkpts0 = kpts0[valid]
+        mkpts1 = kpts1[matches[valid]]
+        
+        return mkpts0, mkpts1
+    
+    def _extract_and_match_kornia(self, gray0: np.ndarray, gray1: np.ndarray):
+        """Extract and match using kornia backend (KeyNetAffNetHardNet + LightGlue)."""
+        import torch
+        
+        h, w = gray0.shape[:2]
+        
+        # Convert to tensors - kornia expects [B, C, H, W]
+        img0 = torch.from_numpy(gray0).float() / 255.0
+        img1 = torch.from_numpy(gray1).float() / 255.0
+        
+        img0 = img0.unsqueeze(0).unsqueeze(0).to(self._device)
+        img1 = img1.unsqueeze(0).unsqueeze(0).to(self._device)
+        
+        with torch.no_grad():
+            # KeyNetAffNetHardNet returns (lafs, responses, descriptors)
+            lafs0, resp0, desc0 = self._extractor(img0)
+            lafs1, resp1, desc1 = self._extractor(img1)
+            
+            # Extract keypoint centers from LAFs
+            kpts0 = lafs0[:, :, :, 2]  # [B, N, 2] - (x, y) in pixels
+            kpts1 = lafs1[:, :, :, 2]
+            
+            # Build feature dicts for LightGlue
+            # Note: image_size must be (w, h) to match (x, y) keypoint format
+            feats0 = {
+                'keypoints': kpts0,
+                'descriptors': desc0,
+                'lafs': lafs0,
+                'image_size': torch.tensor([[w, h]], device=self._device),
+            }
+            feats1 = {
+                'keypoints': kpts1,
+                'descriptors': desc1,
+                'lafs': lafs1,
+                'image_size': torch.tensor([[w, h]], device=self._device),
+            }
+            
+            # Match
+            out = self._matcher({'image0': feats0, 'image1': feats1})
+            
+            # matches is a list of [M, 2] tensors where each row is [idx0, idx1]
+            matches = out['matches'][0]  # [M, 2] for batch 0
+            
+            if len(matches) == 0:
+                return np.zeros((0, 2)), np.zeros((0, 2))
+            
+            idx0 = matches[:, 0]  # Indices into kpts0
+            idx1 = matches[:, 1]  # Indices into kpts1
+            
+            mkpts0 = kpts0[0, idx0].cpu().numpy()  # [M, 2]
+            mkpts1 = kpts1[0, idx1].cpu().numpy()  # [M, 2]
+        
+        return mkpts0, mkpts1
+    
+    def estimate(self, rgb: np.ndarray) -> PoseResult:
+        if self._K is None:
+            raise RuntimeError("Intrinsics not set")
+        
+        if not self._available:
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        
+        # Resize for efficiency
+        h, w = gray.shape
+        scale = min(640 / w, 480 / h)
+        if scale < 1:
+            new_w, new_h = int(w * scale), int(h * scale)
+            gray_resized = cv2.resize(gray, (new_w, new_h))
+        else:
+            gray_resized = gray
+            scale = 1.0
+        
+        # First frame
+        if self._prev_gray is None:
+            self._prev_gray = gray_resized
+            self._initialized = True
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="initializing",
+            )
+        
+        # Extract and match
+        try:
+            mkpts0, mkpts1 = self._extract_and_match(self._prev_gray, gray_resized)
+        except Exception as e:
+            logger.warning(f"LightGlue matching failed: {e}")
+            self._prev_gray = gray_resized
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        if len(mkpts0) < 8:
+            self._prev_gray = gray_resized
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=len(mkpts0),
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        # Scale points back to original resolution
+        mkpts0 = mkpts0 / scale
+        mkpts1 = mkpts1 / scale
+        
+        # Estimate essential matrix
+        E, mask = cv2.findEssentialMat(mkpts0, mkpts1, self._K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
+        
+        if E is None:
+            self._prev_gray = gray_resized
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        num_inliers, R, t, _ = cv2.recoverPose(E, mkpts0, mkpts1, self._K, mask=mask)
+        
+        T_rel = np.eye(4)
+        T_rel[:3, :3] = R
+        T_rel[:3, 3] = t.flatten()
+        
+        self._current_pose = self._current_pose @ np.linalg.inv(T_rel)
+        self._prev_gray = gray_resized
+        
+        confidence = min(1.0, num_inliers / 100.0)
+        
+        return PoseResult(
+            pose=self._current_pose.copy(),
+            num_inliers=num_inliers,
+            confidence=confidence,
+            tracking_status="ok",
+        )
+    
+    def get_name(self) -> str:
+        return "lightglue"
+    
+    def reset(self):
+        super().reset()
+        self._prev_gray = None
+        self._prev_feats = None
+
+
+class RAFTPoseEstimator(BasePoseEstimator):
+    """
+    Pose estimation using RAFT optical flow.
+    
+    RAFT (Recurrent All-Pairs Field Transforms) is a state-of-the-art
+    optical flow method. This estimator uses dense optical flow for
+    robust pose estimation.
+    
+    Requires: torchvision >= 0.14 (includes RAFT)
+    """
+    
+    def __init__(
+        self, 
+        device: str = 'cuda',
+        model: str = 'large',  # 'small' or 'large'
+        grid_size: int = 20,
+    ):
+        super().__init__()
+        self._device = device
+        self._model_name = model
+        self._grid_size = grid_size
+        self._raft = None
+        self._available = False
+        
+        self._prev_gray = None
+        self._prev_tensor = None
+        
+        try:
+            import torch
+            import torchvision
+            
+            self._torch = torch
+            
+            if device == 'cuda' and not torch.cuda.is_available():
+                logger.warning("CUDA not available for RAFT, falling back to CPU")
+                self._device = 'cpu'
+            
+            # Load RAFT model from torchvision
+            if model == 'small':
+                weights = torchvision.models.optical_flow.Raft_Small_Weights.DEFAULT
+                self._raft = torchvision.models.optical_flow.raft_small(weights=weights)
+            else:
+                weights = torchvision.models.optical_flow.Raft_Large_Weights.DEFAULT
+                self._raft = torchvision.models.optical_flow.raft_large(weights=weights)
+            
+            self._raft = self._raft.to(self._device).eval()
+            self._transforms = weights.transforms()
+            self._available = True
+            logger.info(f"RAFT ({model}) initialized on {self._device}")
+            
+        except ImportError as e:
+            logger.warning(f"RAFT not available: {e}. Requires torchvision >= 0.14")
+        except Exception as e:
+            logger.warning(f"RAFT initialization failed: {e}")
+    
+    def _preprocess(self, img: np.ndarray):
+        """Preprocess image for RAFT."""
+        import torch
+        
+        # Convert grayscale to RGB if needed
+        if len(img.shape) == 2:
+            img = np.stack([img, img, img], axis=-1)
+        
+        # Convert to tensor [H, W, 3] -> [1, 3, H, W]
+        tensor = torch.from_numpy(img).permute(2, 0, 1).unsqueeze(0).float()
+        tensor = tensor.to(self._device)
+        
+        return tensor
+    
+    def _compute_flow(self, img1: np.ndarray, img2: np.ndarray) -> np.ndarray:
+        """Compute optical flow between two images."""
+        import torch
+        
+        t1 = self._preprocess(img1)
+        t2 = self._preprocess(img2)
+        
+        # Apply RAFT transforms
+        t1, t2 = self._transforms(t1, t2)
+        
+        with torch.no_grad():
+            # RAFT returns list of flow predictions at different iterations
+            flows = self._raft(t1, t2)
+            flow = flows[-1]  # Take final prediction
+        
+        # Convert to numpy [1, 2, H, W] -> [H, W, 2]
+        flow = flow[0].permute(1, 2, 0).cpu().numpy()
+        return flow
+    
+    def _sample_points_from_flow(self, flow: np.ndarray, grid_size: int):
+        """Sample sparse correspondences from dense flow."""
+        h, w = flow.shape[:2]
+        
+        # Create grid of points
+        step = grid_size
+        y_coords = np.arange(step, h - step, step)
+        x_coords = np.arange(step, w - step, step)
+        
+        pts1 = []
+        pts2 = []
+        
+        for y in y_coords:
+            for x in x_coords:
+                fx, fy = flow[y, x]
+                
+                # Skip invalid flow
+                if np.isnan(fx) or np.isnan(fy):
+                    continue
+                if abs(fx) > 200 or abs(fy) > 200:
+                    continue
+                
+                x2 = x + fx
+                y2 = y + fy
+                
+                # Check bounds
+                if 0 <= x2 < w and 0 <= y2 < h:
+                    pts1.append([x, y])
+                    pts2.append([x2, y2])
+        
+        return np.array(pts1, dtype=np.float32), np.array(pts2, dtype=np.float32)
+    
+    def estimate(self, rgb: np.ndarray) -> PoseResult:
+        if self._K is None:
+            raise RuntimeError("Intrinsics not set")
+        
+        if not self._available:
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        # Resize for efficiency
+        h, w = rgb.shape[:2]
+        scale = min(512 / w, 384 / h)
+        if scale < 1:
+            new_w, new_h = int(w * scale), int(h * scale)
+            # RAFT needs dimensions divisible by 8
+            new_w = (new_w // 8) * 8
+            new_h = (new_h // 8) * 8
+            rgb_resized = cv2.resize(rgb, (new_w, new_h))
+        else:
+            new_w = (w // 8) * 8
+            new_h = (h // 8) * 8
+            rgb_resized = cv2.resize(rgb, (new_w, new_h))
+            scale = new_w / w
+        
+        # First frame
+        if self._prev_gray is None:
+            self._prev_gray = rgb_resized
+            self._initialized = True
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="initializing",
+            )
+        
+        # Compute flow
+        try:
+            flow = self._compute_flow(self._prev_gray, rgb_resized)
+            pts1, pts2 = self._sample_points_from_flow(flow, self._grid_size)
+        except Exception as e:
+            logger.warning(f"RAFT flow computation failed: {e}")
+            self._prev_gray = rgb_resized
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        if len(pts1) < 8:
+            self._prev_gray = rgb_resized
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=len(pts1),
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        # Scale points back
+        pts1 = pts1 / scale
+        pts2 = pts2 / scale
+        
+        # Estimate essential matrix
+        E, mask = cv2.findEssentialMat(pts1, pts2, self._K, method=cv2.RANSAC, prob=0.999, threshold=0.5)
+        
+        if E is None or mask is None:
+            self._prev_gray = rgb_resized
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        num_inliers, R, t, _ = cv2.recoverPose(E, pts1, pts2, self._K, mask=mask)
+        
+        T_rel = np.eye(4)
+        T_rel[:3, :3] = R
+        T_rel[:3, 3] = t.flatten()
+        
+        self._current_pose = self._current_pose @ np.linalg.inv(T_rel)
+        self._prev_gray = rgb_resized
+        
+        confidence = min(1.0, num_inliers / 100.0)
+        
+        return PoseResult(
+            pose=self._current_pose.copy(),
+            num_inliers=num_inliers,
+            confidence=confidence,
+            tracking_status="ok",
+        )
+    
+    def get_name(self) -> str:
+        return "raft"
+    
+    def reset(self):
+        super().reset()
+        self._prev_gray = None
+
+
+class R2D2PoseEstimator(BasePoseEstimator):
+    """
+    Pose estimation using R2D2 (Reliable and Repeatable Detector and Descriptor).
+    
+    R2D2 is a deep learning-based local feature detector and descriptor that 
+    jointly learns keypoint detection and description.
+    
+    Paper: "R2D2: Repeatable and Reliable Detector and Descriptor" (NeurIPS 2019)
+    
+    Requires: 
+        pip install kornia  # Has R2D2 implementation
+        # Or clone official repo: https://github.com/naver/r2d2
+    """
+    
+    def __init__(
+        self, 
+        device: str = 'cuda',
+        max_keypoints: int = 2000,
+        reliability_threshold: float = 0.7,
+        repeatability_threshold: float = 0.7,
+    ):
+        super().__init__()
+        self._device = device
+        self._max_keypoints = max_keypoints
+        self._rel_th = reliability_threshold
+        self._rep_th = repeatability_threshold
+        self._r2d2 = None
+        self._available = False
+        
+        self._prev_gray = None
+        self._prev_kp = None
+        self._prev_desc = None
+        
+        try:
+            import torch
+            
+            self._torch = torch
+            
+            if device == 'cuda' and not torch.cuda.is_available():
+                logger.warning("CUDA not available for R2D2, falling back to CPU")
+                self._device = 'cpu'
+            
+            # Try kornia's R2D2 implementation first
+            try:
+                from kornia.feature import KeyNetAffNetHardNet
+                
+                # Use KeyNet+AffNet+HardNet as proxy (similar learned features)
+                # Full R2D2 requires downloading official weights
+                self._r2d2 = KeyNetAffNetHardNet(
+                    num_features=max_keypoints,
+                ).to(self._device).eval()
+                self._use_kornia_proxy = True
+                self._available = True
+                logger.info(f"R2D2 (KeyNet proxy) initialized on {self._device}")
+                
+            except ImportError:
+                logger.warning("R2D2/KeyNet not available in kornia")
+                
+        except ImportError as e:
+            logger.warning(f"R2D2 not available: {e}")
+        except Exception as e:
+            logger.warning(f"R2D2 initialization failed: {e}")
+    
+    def _extract_features(self, gray: np.ndarray):
+        """Extract R2D2 features from grayscale image."""
+        import torch
+        
+        # Convert to tensor
+        tensor = torch.from_numpy(gray).float() / 255.0
+        tensor = tensor.unsqueeze(0).unsqueeze(0).to(self._device)
+        
+        with torch.no_grad():
+            if self._use_kornia_proxy:
+                lafs, responses, descriptors = self._r2d2(tensor)
+                # Convert LAFs to keypoints
+                keypoints = lafs[0, :, :, 2].cpu().numpy()  # Nx2
+                descriptors = descriptors[0].cpu().numpy()  # NxD
+            else:
+                # Native R2D2 output
+                keypoints, descriptors = self._r2d2.detect_and_compute(tensor)
+        
+        return keypoints, descriptors
+    
+    def estimate(self, rgb: np.ndarray) -> PoseResult:
+        if self._K is None:
+            raise RuntimeError("Intrinsics not set")
+        
+        if not self._available:
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        
+        # Resize for efficiency
+        h, w = gray.shape
+        scale = min(640 / w, 480 / h)
+        if scale < 1:
+            new_w, new_h = int(w * scale), int(h * scale)
+            gray_resized = cv2.resize(gray, (new_w, new_h))
+        else:
+            gray_resized = gray
+            scale = 1.0
+        
+        # Extract features
+        try:
+            kp, desc = self._extract_features(gray_resized)
+        except Exception as e:
+            logger.warning(f"R2D2 feature extraction failed: {e}")
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        # First frame
+        if self._prev_desc is None:
+            self._prev_gray = gray
+            self._prev_kp = kp
+            self._prev_desc = desc
+            self._initialized = True
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=len(kp) if len(kp) > 0 else 0,
+                tracking_status="initializing",
+            )
+        
+        if len(kp) < 10 or len(self._prev_kp) < 10:
+            self._prev_gray = gray
+            self._prev_kp = kp
+            self._prev_desc = desc
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        # Match descriptors using mutual nearest neighbor
+        import torch
+        desc1_t = torch.from_numpy(self._prev_desc).to(self._device)
+        desc2_t = torch.from_numpy(desc).to(self._device)
+        
+        dists = torch.cdist(desc1_t, desc2_t)
+        nn01 = dists.argmin(dim=1)
+        nn10 = dists.argmin(dim=0)
+        
+        ids0 = torch.arange(len(nn01), device=self._device)
+        mutual = (nn10[nn01] == ids0)
+        
+        matches0 = ids0[mutual].cpu().numpy()
+        matches1 = nn01[mutual].cpu().numpy()
+        
+        if len(matches0) < 8:
+            self._prev_gray = gray
+            self._prev_kp = kp
+            self._prev_desc = desc
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=len(matches0),
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        # Get matched points and scale back
+        pts1 = self._prev_kp[matches0] / scale
+        pts2 = kp[matches1] / scale
+        
+        # Estimate essential matrix
+        E, mask = cv2.findEssentialMat(pts1, pts2, self._K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
+        
+        if E is None:
+            self._prev_gray = gray
+            self._prev_kp = kp
+            self._prev_desc = desc
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        num_inliers, R, t, _ = cv2.recoverPose(E, pts1, pts2, self._K, mask=mask)
+        
+        T_rel = np.eye(4)
+        T_rel[:3, :3] = R
+        T_rel[:3, 3] = t.flatten()
+        
+        self._current_pose = self._current_pose @ np.linalg.inv(T_rel)
+        
+        self._prev_gray = gray
+        self._prev_kp = kp
+        self._prev_desc = desc
+        
+        confidence = min(1.0, num_inliers / 50.0)
+        
+        return PoseResult(
+            pose=self._current_pose.copy(),
+            num_inliers=num_inliers,
+            confidence=confidence,
+            tracking_status="ok",
+        )
+    
+    def get_name(self) -> str:
+        return "r2d2"
+    
+    def reset(self):
+        super().reset()
+        self._prev_gray = None
+        self._prev_kp = None
+        self._prev_desc = None
+
+
+class RoMaPoseEstimator(BasePoseEstimator):
+    """
+    Pose estimation using RoMa (Robust Dense Feature Matching).
+    
+    RoMa is a robust dense feature matcher that handles wide baselines
+    and challenging conditions better than traditional methods.
+    Uses DINOv2 as backbone for robust features.
+    
+    Paper: "RoMa: Revisiting Robust Losses for Dense Feature Matching" (CVPR 2024)
+    
+    Requires: pip install roma-matcher
+    """
+    
+    def __init__(
+        self, 
+        device: str = 'cuda',
+        model: str = 'outdoor',  # 'outdoor' or 'indoor'
+    ):
+        super().__init__()
+        self._device = device
+        self._model_name = model
+        self._roma = None
+        self._available = False
+        
+        self._prev_gray = None
+        self._prev_tensor = None
+        
+        try:
+            import torch
+            
+            self._torch = torch
+            
+            if device == 'cuda' and not torch.cuda.is_available():
+                logger.warning("CUDA not available for RoMa, falling back to CPU")
+                self._device = 'cpu'
+            
+            # Try to import RoMa
+            try:
+                from romatch import roma_outdoor, roma_indoor
+                
+                if model == 'indoor':
+                    self._roma = roma_indoor(device=self._device)
+                else:
+                    self._roma = roma_outdoor(device=self._device)
+                
+                self._available = True
+                logger.info(f"RoMa ({model}) initialized on {self._device}")
+                
+            except ImportError:
+                # Try alternative import
+                try:
+                    import roma
+                    self._roma = roma.RoMa(pretrained=True, device=self._device)
+                    self._available = True
+                    logger.info(f"RoMa initialized on {self._device}")
+                except ImportError:
+                    logger.warning("RoMa not available. Install with: pip install romatch")
+                    
+        except ImportError as e:
+            logger.warning(f"RoMa not available: {e}")
+        except Exception as e:
+            logger.warning(f"RoMa initialization failed: {e}")
+    
+    def _match_images(self, img0: np.ndarray, img1: np.ndarray):
+        """Match two images using RoMa."""
+        import torch
+        from PIL import Image
+        
+        # RoMa expects PIL images
+        if len(img0.shape) == 2:
+            # Grayscale - convert to RGB
+            img0 = np.stack([img0, img0, img0], axis=-1)
+            img1 = np.stack([img1, img1, img1], axis=-1)
+        
+        pil0 = Image.fromarray(img0.astype(np.uint8))
+        pil1 = Image.fromarray(img1.astype(np.uint8))
+        
+        with torch.no_grad():
+            # RoMa returns warp [B, H, W, 4] and certainty [B, H, W]
+            # warp contains (x0, y0, x1, y1) normalized coordinates
+            warp, certainty = self._roma.match(pil0, pil1)
+            
+            # Sample sparse matches from dense correspondence
+            h, w = certainty.shape[1:3]
+            
+            # Create grid of source points (sample every 8 pixels)
+            y_coords = torch.arange(0, h, 8, device=certainty.device)
+            x_coords = torch.arange(0, w, 8, device=certainty.device)
+            yy, xx = torch.meshgrid(y_coords, x_coords, indexing='ij')
+            
+            # Sample indices
+            idx_y = yy.flatten().long()
+            idx_x = xx.flatten().long()
+            
+            # Get certainty scores at sample points
+            cert = certainty[0, idx_y, idx_x]  # [N]
+            
+            # Get warp coordinates (normalized [-1, 1] -> pixel coords)
+            warp_sampled = warp[0, idx_y, idx_x]  # [N, 4] - (x0, y0, x1, y1)
+            
+            # Convert normalized coords to pixel coords
+            orig_h, orig_w = img0.shape[:2]
+            pts1_x = (warp_sampled[:, 0] + 1) / 2 * orig_w
+            pts1_y = (warp_sampled[:, 1] + 1) / 2 * orig_h
+            pts2_x = (warp_sampled[:, 2] + 1) / 2 * orig_w
+            pts2_y = (warp_sampled[:, 3] + 1) / 2 * orig_h
+            
+            pts1 = torch.stack([pts1_x, pts1_y], dim=1)
+            pts2 = torch.stack([pts2_x, pts2_y], dim=1)
+            
+            # Filter by certainty
+            valid = cert > 0.5
+            pts1 = pts1[valid].cpu().numpy()
+            pts2 = pts2[valid].cpu().numpy()
+        
+        return pts1, pts2
+    
+    def estimate(self, rgb: np.ndarray) -> PoseResult:
+        if self._K is None:
+            raise RuntimeError("Intrinsics not set")
+        
+        if not self._available:
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        # Resize for efficiency (RoMa is memory hungry)
+        h, w = rgb.shape[:2]
+        scale = min(560 / w, 420 / h)
+        if scale < 1:
+            new_w, new_h = int(w * scale), int(h * scale)
+            rgb_resized = cv2.resize(rgb, (new_w, new_h))
+        else:
+            rgb_resized = rgb
+            scale = 1.0
+        
+        # First frame
+        if self._prev_gray is None:
+            self._prev_gray = rgb_resized
+            self._initialized = True
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="initializing",
+            )
+        
+        # Match images
+        try:
+            pts1, pts2 = self._match_images(self._prev_gray, rgb_resized)
+        except Exception as e:
+            logger.warning(f"RoMa matching failed: {e}")
+            self._prev_gray = rgb_resized
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        if len(pts1) < 8:
+            self._prev_gray = rgb_resized
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=len(pts1),
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        # Scale points back
+        pts1 = pts1 / scale
+        pts2 = pts2 / scale
+        
+        # Estimate essential matrix
+        E, mask = cv2.findEssentialMat(pts1, pts2, self._K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
+        
+        if E is None:
+            self._prev_gray = rgb_resized
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
+        
+        num_inliers, R, t, _ = cv2.recoverPose(E, pts1, pts2, self._K, mask=mask)
+        
+        T_rel = np.eye(4)
+        T_rel[:3, :3] = R
+        T_rel[:3, 3] = t.flatten()
+        
+        self._current_pose = self._current_pose @ np.linalg.inv(T_rel)
+        self._prev_gray = rgb_resized
+        
+        confidence = min(1.0, num_inliers / 100.0)
+        
+        return PoseResult(
+            pose=self._current_pose.copy(),
+            num_inliers=num_inliers,
+            confidence=confidence,
+            tracking_status="ok",
+        )
+    
+    def get_name(self) -> str:
+        return "roma"
+    
+    def reset(self):
+        super().reset()
+        self._prev_gray = None
+
+
 # Registry of available estimators
 _ESTIMATORS: Dict[str, type] = {
     'orb': ORBPoseEstimator,
@@ -1001,6 +1920,11 @@ _ESTIMATORS: Dict[str, type] = {
     'keyframe': KeyframePoseEstimator,
     'loftr': LoFTRPoseEstimator,
     'superpoint': SuperPointPoseEstimator,
+    # New deep learning matchers
+    'lightglue': LightGluePoseEstimator,
+    'raft': RAFTPoseEstimator,
+    'r2d2': R2D2PoseEstimator,
+    'roma': RoMaPoseEstimator,
 }
 
 
@@ -1033,52 +1957,113 @@ def list_pose_estimators() -> Dict[str, Dict[str, Any]]:
         'orb': {
             'description': 'Fast ORB-based visual odometry',
             'speed': 'fast',
-            'gpu': False,
+            'requires_gpu': False,
         },
         'robust_flow': {
             'description': 'Optical flow with robust estimation',
             'speed': 'medium',
-            'gpu': False,
+            'requires_gpu': False,
         },
         'flow': {
             'description': 'Basic optical flow tracking',
             'speed': 'fast',
-            'gpu': False,
+            'requires_gpu': False,
         },
         'sift': {
             'description': 'SIFT-based feature matching (robust)',
             'speed': 'slow',
-            'gpu': False,
+            'requires_gpu': False,
         },
         'keyframe': {
             'description': 'Keyframe-based tracking with loop closure',
             'speed': 'medium',
-            'gpu': False,
+            'requires_gpu': False,
         },
         'loftr': {
             'description': 'LoFTR deep learning matcher (very robust)',
             'speed': 'slow',
-            'gpu': True,
+            'requires_gpu': True,
             'requires': 'kornia',
         },
         'superpoint': {
             'description': 'SuperPoint deep features (robust to lighting)',
             'speed': 'medium',
-            'gpu': True,
+            'requires_gpu': True,
             'requires': 'kornia',
+        },
+        'lightglue': {
+            'description': 'LightGlue fast deep matcher (CVPR 2023)',
+            'speed': 'medium',
+            'requires_gpu': True,
+            'requires': 'lightglue or kornia',
+        },
+        'raft': {
+            'description': 'RAFT optical flow (state-of-the-art)',
+            'speed': 'medium',
+            'requires_gpu': True,
+            'requires': 'torchvision>=0.14',
+        },
+        'r2d2': {
+            'description': 'R2D2 learned features (NeurIPS 2019)',
+            'speed': 'medium',
+            'requires_gpu': True,
+            'requires': 'kornia',
+        },
+        'roma': {
+            'description': 'RoMa robust dense matcher (CVPR 2024)',
+            'speed': 'slow',
+            'requires_gpu': True,
+            'requires': 'romatch',
         },
     }
 
 
 __all__ = [
+    # Base classes and types
     'BasePoseEstimator',
     'PoseResult',
+    # Monocular VO estimators (from this module)
     'ORBPoseEstimator',
     'RobustFlowEstimator',
     'SIFTPoseEstimator',
     'KeyframePoseEstimator',
     'LoFTRPoseEstimator',
     'SuperPointPoseEstimator',
+    'LightGluePoseEstimator',
+    'RAFTPoseEstimator',
+    'R2D2PoseEstimator',
+    'RoMaPoseEstimator',
     'get_pose_estimator',
     'list_pose_estimators',
+    # Stereo VIO (from stereo_vio module)
+    'StereoVIO',
+    'VIOResult',
+    'create_stereo_vio',
+    # RGB-D VO (from rgbd_vo module)
+    'RGBDVO',
+    'VOResult',
+    'create_rgbd_vo',
+    # External pose sources
+    'ArduPilotPoseProvider',
+    # External VIO systems (submodule)
+    'external',
 ]
+
+# Import from submodules for convenience
+try:
+    from .stereo_vio import StereoVIO, VIOResult, create_stereo_vio
+except ImportError:
+    pass
+
+try:
+    from .rgbd_vo import RGBDVO, VOResult, create_rgbd_vo
+except ImportError:
+    pass
+
+try:
+    from .ardupilot_mavlink import ArduPilotPoseProvider
+except ImportError:
+    pass
+
+# External VIO backends (ORB-SLAM3, OpenVINS, DPVO, DROID-SLAM)
+from . import external

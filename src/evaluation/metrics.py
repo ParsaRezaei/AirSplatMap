@@ -39,7 +39,7 @@ except ImportError:
     LPIPS_AVAILABLE = False
 
 try:
-    from evo.core import trajectory, metrics, sync
+    from evo.core import trajectory, metrics, sync, geometry
     from evo.core.trajectory import PoseTrajectory3D
     import evo.main_ape as main_ape
     import evo.main_rpe as main_rpe
@@ -204,15 +204,37 @@ def compute_ate(
     Returns:
         Dictionary with 'ate_rmse', 'ate_mean', 'ate_median', 'ate_std', 'ate_max'
     """
-    if not EVO_AVAILABLE:
-        # Fallback: simple position error
-        est_pos = estimated_poses[:, :3, 3]
-        gt_pos = ground_truth_poses[:, :3, 3]
+    # Helper function for fallback computation
+    def compute_ate_fallback(est_poses, gt_poses, do_align):
+        est_pos = est_poses[:, :3, 3].copy()
+        gt_pos = gt_poses[:, :3, 3].copy()
         
-        if align:
-            # Simple centroid alignment
-            est_pos = est_pos - est_pos.mean(axis=0)
-            gt_pos = gt_pos - gt_pos.mean(axis=0)
+        if do_align:
+            # Umeyama alignment fallback
+            try:
+                from scipy.spatial.transform import Rotation
+                
+                # Center the points
+                est_mean = est_pos.mean(axis=0)
+                gt_mean = gt_pos.mean(axis=0)
+                est_centered = est_pos - est_mean
+                gt_centered = gt_pos - gt_mean
+                
+                # Compute optimal rotation using SVD
+                H = est_centered.T @ gt_centered
+                U, S, Vt = np.linalg.svd(H)
+                R = Vt.T @ U.T
+                
+                # Handle reflection case
+                if np.linalg.det(R) < 0:
+                    Vt[-1, :] *= -1
+                    R = Vt.T @ U.T
+                
+                # Apply transformation
+                est_pos = (R @ est_centered.T).T + gt_mean
+            except Exception:
+                # Simple centroid alignment as last resort
+                est_pos = est_pos - est_pos.mean(axis=0) + gt_pos.mean(axis=0)
         
         errors = np.linalg.norm(est_pos - gt_pos, axis=1)
         return {
@@ -223,40 +245,55 @@ def compute_ate(
             'ate_max': float(np.max(errors)),
         }
     
-    # Use evo library for proper trajectory evaluation
-    if timestamps is None:
-        timestamps = np.arange(len(estimated_poses), dtype=np.float64)
+    if not EVO_AVAILABLE:
+        return compute_ate_fallback(estimated_poses, ground_truth_poses, align)
     
-    # Convert to evo trajectories
-    est_traj = poses_to_trajectory(estimated_poses, timestamps)
-    gt_traj = poses_to_trajectory(ground_truth_poses, timestamps)
-    
-    # Synchronize trajectories
-    gt_traj, est_traj = sync.associate_trajectories(gt_traj, est_traj)
-    
-    # Align if requested
-    if align:
-        est_traj_aligned = trajectory.align_trajectory(
-            est_traj, gt_traj, 
-            correct_scale=False,
-            correct_only_scale=False
-        )
-    else:
-        est_traj_aligned = est_traj
-    
-    # Compute APE (Absolute Pose Error)
-    ape_metric = metrics.APE(metrics.PoseRelation.translation_part)
-    ape_metric.process_data((gt_traj, est_traj_aligned))
-    
-    stats = ape_metric.get_all_statistics()
-    
-    return {
-        'ate_rmse': float(stats['rmse']),
-        'ate_mean': float(stats['mean']),
-        'ate_median': float(stats['median']),
-        'ate_std': float(stats['std']),
-        'ate_max': float(stats['max']),
-    }
+    # Try evo library for proper trajectory evaluation
+    try:
+        if timestamps is None:
+            timestamps = np.arange(len(estimated_poses), dtype=np.float64)
+        
+        # Convert to evo trajectories
+        est_traj = poses_to_trajectory(estimated_poses, timestamps)
+        gt_traj = poses_to_trajectory(ground_truth_poses, timestamps)
+        
+        # Synchronize trajectories
+        gt_traj, est_traj = sync.associate_trajectories(gt_traj, est_traj)
+        
+        # Align if requested using Umeyama alignment
+        if align:
+            try:
+                r, t, s = geometry.umeyama_alignment(
+                    est_traj.positions_xyz.T,
+                    gt_traj.positions_xyz.T,
+                    with_scale=False
+                )
+                # Apply transformation to estimated trajectory
+                transform_matrix = np.eye(4)
+                transform_matrix[:3, :3] = r
+                transform_matrix[:3, 3] = t
+                est_traj.transform(transform_matrix)
+            except Exception:
+                # If umeyama fails, continue without alignment
+                pass
+        
+        # Compute APE (Absolute Pose Error)
+        ape_metric = metrics.APE(metrics.PoseRelation.translation_part)
+        ape_metric.process_data((gt_traj, est_traj))
+        
+        stats = ape_metric.get_all_statistics()
+        
+        return {
+            'ate_rmse': float(stats['rmse']),
+            'ate_mean': float(stats['mean']),
+            'ate_median': float(stats['median']),
+            'ate_std': float(stats['std']),
+            'ate_max': float(stats['max']),
+        }
+    except Exception as e:
+        # Fallback to simple computation
+        logger.warning(f"evo ATE computation failed: {e}, using fallback")
+        return compute_ate_fallback(estimated_poses, ground_truth_poses, align)
 
 
 def compute_rpe(

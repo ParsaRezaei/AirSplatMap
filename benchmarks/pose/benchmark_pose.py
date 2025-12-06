@@ -28,10 +28,46 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.pose import get_pose_estimator, list_pose_estimators
-from src.pipeline.frames import TumRGBDSource
+from src.pipeline.frames import TumRGBDSource, SevenScenesSource, ReplicaSource
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+def _detect_dataset_type(dataset_path: str) -> str:
+    """Auto-detect dataset type based on directory structure."""
+    path = Path(dataset_path)
+    
+    # Check for TUM format (rgb.txt file)
+    if (path / "rgb.txt").exists():
+        return 'tum'
+    
+    # Check for 7-Scenes format (seq-XX directories with frame-*.color.png)
+    seq_dirs = list(path.glob("seq-*"))
+    if seq_dirs and any(list(s.glob("frame-*.color.png")) for s in seq_dirs):
+        return '7scenes'
+    
+    # Check for Replica format (traj.txt file)
+    if (path / "traj.txt").exists():
+        return 'replica'
+    
+    # Default to TUM
+    logger.warning(f"Could not detect dataset type for {path}, assuming TUM format")
+    return 'tum'
+
+
+def _get_dataset_source(dataset_path: str):
+    """Get appropriate FrameSource for a dataset."""
+    dataset_type = _detect_dataset_type(dataset_path)
+    
+    if dataset_type == 'tum':
+        return TumRGBDSource(dataset_path)
+    elif dataset_type == '7scenes':
+        return SevenScenesSource(dataset_path)
+    elif dataset_type == 'replica':
+        return ReplicaSource(dataset_path)
+    else:
+        return TumRGBDSource(dataset_path)
 
 
 @dataclass
@@ -62,6 +98,19 @@ class BenchmarkResult:
     avg_inliers: float
     avg_confidence: float
     lost_frames: int  # Frames with <8 inliers
+    
+    # Fields with defaults must come last
+    # Method category
+    is_monocular: bool = True  # True for monocular-only, False for RGB-D capable
+    uses_scale_alignment: bool = True  # Whether scale alignment was applied
+    scale_factor: float = 1.0  # Scale factor from Umeyama alignment
+    
+    # Latency metrics (ms per frame)
+    avg_latency_ms: float = 0.0
+    min_latency_ms: float = 0.0
+    max_latency_ms: float = 0.0
+    p95_latency_ms: float = 0.0  # 95th percentile latency
+    p99_latency_ms: float = 0.0  # 99th percentile latency
 
 
 def align_trajectories(estimated: np.ndarray, ground_truth: np.ndarray) -> Tuple[np.ndarray, float, np.ndarray, np.ndarray]:
@@ -187,7 +236,7 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
     
     Args:
         method: Pose estimator name ('orb', 'sift', 'loftr', etc.)
-        dataset_path: Path to TUM dataset
+        dataset_path: Path to dataset (TUM, 7-Scenes, Replica, or ICL-NUIM)
         max_frames: Maximum frames to process (None = all)
         skip_frames: Process every Nth frame
         
@@ -197,8 +246,8 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
     dataset_name = Path(dataset_path).name
     logger.info(f"Benchmarking {method} on {dataset_name}...")
     
-    # Load dataset
-    source = TumRGBDSource(dataset_path)
+    # Auto-detect dataset type and load appropriate source
+    source = _get_dataset_source(dataset_path)
     frames = list(source)
     
     if max_frames:
@@ -212,23 +261,30 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
     
     # Initialize estimator
     estimator = get_pose_estimator(method)
+    
+    # Check if estimator is available (some require specific packages)
+    if hasattr(estimator, '_available') and not estimator._available:
+        raise RuntimeError(f"Pose estimator '{method}' failed to initialize (missing dependencies)")
+    
     intrinsics = frames[0].intrinsics
-    estimator.set_intrinsics(
-        intrinsics['fx'], intrinsics['fy'],
-        intrinsics['cx'], intrinsics['cy']
-    )
+    estimator.set_intrinsics_from_dict(intrinsics)
     
     # Run estimation
     estimated_poses = []
     gt_poses = []
     inliers_list = []
     confidence_list = []
+    latencies_ms = []
     lost_frames = 0
     
     t0 = time.time()
     
     for frame in frames:
+        frame_start = time.time()
         result = estimator.estimate(frame.rgb)
+        frame_end = time.time()
+        
+        latencies_ms.append((frame_end - frame_start) * 1000)
         
         estimated_poses.append(result.pose.copy())
         gt_poses.append(frame.pose.copy())
@@ -240,6 +296,14 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
     
     total_time = time.time() - t0
     fps = len(frames) / total_time
+    
+    # Compute latency statistics
+    latencies_ms = np.array(latencies_ms)
+    avg_latency_ms = float(np.mean(latencies_ms))
+    min_latency_ms = float(np.min(latencies_ms))
+    max_latency_ms = float(np.max(latencies_ms))
+    p95_latency_ms = float(np.percentile(latencies_ms, 95))
+    p99_latency_ms = float(np.percentile(latencies_ms, 99))
     
     # Extract positions
     est_positions = np.array([p[:3, 3] for p in estimated_poses])
@@ -260,17 +324,25 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
     ate = compute_ate(aligned_positions, gt_positions)
     rpe = compute_rpe(aligned_poses, gt_poses)
     
+    # Determine if method is monocular-only
+    # All our visual odometry methods are monocular (don't use depth)
+    # RGB-D SLAM methods like ORB-SLAM3 would be is_monocular=False
+    is_monocular = True  # All current methods are monocular
+    
     return BenchmarkResult(
         method=method,
         dataset=dataset_name,
         num_frames=len(frames),
         total_time=round(total_time, 2),
         fps=round(fps, 2),
+        is_monocular=is_monocular,
+        uses_scale_alignment=True,  # Always using scale alignment for monocular
         ate_rmse=round(ate['rmse'], 4),
         ate_mean=round(ate['mean'], 4),
         ate_median=round(ate['median'], 4),
         ate_std=round(ate['std'], 4),
         ate_max=round(ate['max'], 4),
+        scale_factor=round(scale, 4),
         rpe_trans_rmse=round(rpe['trans_rmse'], 4),
         rpe_trans_mean=round(rpe['trans_mean'], 4),
         rpe_rot_rmse=round(rpe['rot_rmse'], 4),
@@ -278,6 +350,11 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
         avg_inliers=round(np.mean(inliers_list), 1),
         avg_confidence=round(np.mean(confidence_list), 3),
         lost_frames=lost_frames,
+        avg_latency_ms=round(avg_latency_ms, 2),
+        min_latency_ms=round(min_latency_ms, 2),
+        max_latency_ms=round(max_latency_ms, 2),
+        p95_latency_ms=round(p95_latency_ms, 2),
+        p99_latency_ms=round(p99_latency_ms, 2),
     )
 
 

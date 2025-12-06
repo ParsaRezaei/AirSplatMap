@@ -4,307 +4,121 @@ Depth Estimation Module
 
 Provides modular depth estimation backends for AirSplatMap.
 
-Available estimators:
-- depth_anything_v3: Depth Anything V3 (fast, accurate)
-- midas: MiDaS depth estimation
-- zoedepth: ZoeDepth metric depth
-- none/passthrough: No depth estimation (for ground truth)
+Estimator Categories:
+---------------------
 
-Usage:
-    from src.depth import get_depth_estimator
+**Relative Depth (requires scaling for metric):**
+- depth_anything_v2: Depth Anything V2 - fast, accurate
+- depth_anything_v3: Depth Anything V3 - latest version
+- midas: MiDaS - robust, well-tested
+
+**Metric Depth (outputs meters directly):**
+- depth_pro: Apple Depth Pro - high quality metric depth
+- depth_pro_lite: Apple Depth Pro Lite - faster version
+
+**Stereo Depth (from camera pairs):**
+- stereo: SGBM stereo matching with WLS filter
+- stereo_fast: Simple block matching (faster)
+
+**Passthrough:**
+- none/passthrough: Use when depth comes from sensor
+
+Usage Examples:
+---------------
+
+    from src.depth import get_depth_estimator, DepthScaler, DepthFilter
     
-    estimator = get_depth_estimator('depth_anything_v3')
+    # Relative depth estimation
+    estimator = get_depth_estimator('depth_anything_v2', model_size='vits')
     result = estimator.estimate(rgb_image)
-    depth = result.depth  # HxW float32 in meters
+    relative_depth = result.depth
+    
+    # Metric depth estimation (no scaling needed!)
+    estimator = get_depth_estimator('depth_pro')
+    result = estimator.estimate(rgb_image)
+    metric_depth = result.depth  # Already in meters
+    
+    # Stereo depth from camera pair
+    stereo = get_depth_estimator('stereo', baseline=0.05, focal_length=382.6)
+    result = stereo.estimate_stereo(left_ir, right_ir)
+    
+    # Scale relative depth using sparse 3D points
+    scaler = DepthScaler(method='ransac')
+    metric_depth = scaler.scale_to_metric(relative_depth, points_3d, points_2d)
+    
+    # Filter depth for temporal consistency
+    filter = DepthFilter(temporal_alpha=0.3)
+    filtered = filter.temporal_filter(depth)
 """
 
-import numpy as np
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Optional, Dict, Any, List
 import logging
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
+# Base classes (always available)
+from .base import (
+    BaseDepthEstimator,
+    DepthResult,
+    PassthroughDepthEstimator,
+    DepthScaler,
+    DepthFilter,
+)
 
-@dataclass
-class DepthResult:
-    """Result from depth estimation."""
-    depth: np.ndarray  # HxW float32 depth in meters
-    confidence: Optional[np.ndarray] = None  # HxW confidence map
-    min_depth: float = 0.0
-    max_depth: float = 10.0
-    is_metric: bool = False  # True if depth is metric (meters)
-
-
-class BaseDepthEstimator(ABC):
-    """Abstract base class for depth estimators."""
-    
-    @abstractmethod
-    def estimate(self, rgb: np.ndarray) -> DepthResult:
-        """
-        Estimate depth from RGB image.
-        
-        Args:
-            rgb: HxWx3 RGB image (uint8 or float32)
-            
-        Returns:
-            DepthResult with depth map
-        """
-        pass
-    
-    @abstractmethod
-    def get_name(self) -> str:
-        """Get estimator name."""
-        pass
-    
-    def reset(self):
-        """Reset estimator state (if any)."""
-        pass
-
-
-class PassthroughDepthEstimator(BaseDepthEstimator):
-    """No-op depth estimator that returns None (for ground truth depth)."""
-    
-    def estimate(self, rgb: np.ndarray) -> DepthResult:
-        return DepthResult(
-            depth=None,
-            is_metric=True,
-        )
-    
-    def get_name(self) -> str:
-        return "passthrough"
-
-
-class DepthAnythingV3Estimator(BaseDepthEstimator):
-    """Depth estimation using Depth Anything V3."""
-    
-    def __init__(self, model_size: str = "small", device: str = "cuda"):
-        self.model_size = model_size
-        self.device = device
-        self._model = None
-        self._transform = None
-        self._initialized = False
-    
-    def _lazy_init(self):
-        """Lazy initialization of model."""
-        if self._initialized:
-            return
-        
-        try:
-            import torch
-            from depth_anything_v3.dpt import DepthAnythingV3
-            
-            # Model configs
-            model_configs = {
-                'small': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]},
-                'base': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768]},
-                'large': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]},
-            }
-            
-            config = model_configs.get(self.model_size, model_configs['small'])
-            
-            self._model = DepthAnythingV3(**config)
-            # Load pretrained weights if available
-            # self._model.load_state_dict(torch.load(...))
-            self._model.to(self.device)
-            self._model.eval()
-            
-            self._initialized = True
-            logger.info(f"Initialized Depth Anything V3 ({self.model_size})")
-            
-        except ImportError:
-            logger.warning("Depth Anything V3 not available, using fallback MiDaS")
-            self._use_midas_fallback()
-    
-    def _use_midas_fallback(self):
-        """Fall back to MiDaS if Depth Anything not available."""
-        try:
-            import torch
-            self._model = torch.hub.load('intel-isl/MiDaS', 'MiDaS_small')
-            self._model.to(self.device)
-            self._model.eval()
-            
-            midas_transforms = torch.hub.load('intel-isl/MiDaS', 'transforms')
-            self._transform = midas_transforms.small_transform
-            self._use_midas = True
-            self._initialized = True
-            logger.info("Using MiDaS fallback for depth estimation")
-        except Exception as e:
-            logger.error(f"Failed to initialize MiDaS fallback: {e}")
-            self._model = None
-            self._initialized = True  # Mark as initialized to avoid retry
-    
-    def estimate(self, rgb: np.ndarray) -> DepthResult:
-        """Estimate depth from RGB image."""
-        self._lazy_init()
-        
-        if self._model is None:
-            # Return dummy depth if no model available
-            h, w = rgb.shape[:2]
-            return DepthResult(
-                depth=np.ones((h, w), dtype=np.float32) * 2.0,
-                is_metric=False,
-            )
-        
-        import torch
-        
-        # Ensure RGB is uint8
-        if rgb.dtype != np.uint8:
-            rgb = (np.clip(rgb, 0, 1) * 255).astype(np.uint8)
-        
-        h, w = rgb.shape[:2]
-        
-        try:
-            with torch.no_grad():
-                if hasattr(self, '_use_midas') and self._use_midas:
-                    # MiDaS path
-                    input_batch = self._transform(rgb).to(self.device)
-                    prediction = self._model(input_batch)
-                    prediction = torch.nn.functional.interpolate(
-                        prediction.unsqueeze(1),
-                        size=(h, w),
-                        mode='bicubic',
-                        align_corners=False,
-                    ).squeeze()
-                    depth = prediction.cpu().numpy()
-                    # MiDaS outputs inverse depth, convert
-                    depth = 1.0 / (depth + 1e-6)
-                    # Normalize to reasonable range
-                    depth = depth / depth.max() * 10.0
-                else:
-                    # Depth Anything V3 path
-                    from torchvision import transforms
-                    
-                    transform = transforms.Compose([
-                        transforms.ToTensor(),
-                        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-                    ])
-                    
-                    input_tensor = transform(rgb).unsqueeze(0).to(self.device)
-                    depth = self._model(input_tensor)
-                    depth = torch.nn.functional.interpolate(
-                        depth.unsqueeze(1),
-                        size=(h, w),
-                        mode='bicubic',
-                        align_corners=False,
-                    ).squeeze()
-                    depth = depth.cpu().numpy()
-            
-            return DepthResult(
-                depth=depth.astype(np.float32),
-                is_metric=False,  # Relative depth
-                min_depth=float(depth.min()),
-                max_depth=float(depth.max()),
-            )
-            
-        except Exception as e:
-            logger.error(f"Depth estimation failed: {e}")
-            return DepthResult(
-                depth=np.ones((h, w), dtype=np.float32) * 2.0,
-                is_metric=False,
-            )
-    
-    def get_name(self) -> str:
-        return f"depth_anything_v3_{self.model_size}"
-
-
-class MiDaSEstimator(BaseDepthEstimator):
-    """Depth estimation using MiDaS."""
-    
-    def __init__(self, model_type: str = "MiDaS_small", device: str = "cuda"):
-        self.model_type = model_type
-        self.device = device
-        self._model = None
-        self._transform = None
-        self._initialized = False
-    
-    def _lazy_init(self):
-        if self._initialized:
-            return
-        
-        try:
-            import torch
-            
-            self._model = torch.hub.load('intel-isl/MiDaS', self.model_type)
-            self._model.to(self.device)
-            self._model.eval()
-            
-            midas_transforms = torch.hub.load('intel-isl/MiDaS', 'transforms')
-            if 'small' in self.model_type.lower():
-                self._transform = midas_transforms.small_transform
-            else:
-                self._transform = midas_transforms.dpt_transform
-            
-            self._initialized = True
-            logger.info(f"Initialized MiDaS ({self.model_type})")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize MiDaS: {e}")
-            self._model = None
-            self._initialized = True
-    
-    def estimate(self, rgb: np.ndarray) -> DepthResult:
-        self._lazy_init()
-        
-        h, w = rgb.shape[:2]
-        
-        if self._model is None:
-            return DepthResult(
-                depth=np.ones((h, w), dtype=np.float32) * 2.0,
-                is_metric=False,
-            )
-        
-        import torch
-        
-        if rgb.dtype != np.uint8:
-            rgb = (np.clip(rgb, 0, 1) * 255).astype(np.uint8)
-        
-        try:
-            with torch.no_grad():
-                input_batch = self._transform(rgb).to(self.device)
-                prediction = self._model(input_batch)
-                prediction = torch.nn.functional.interpolate(
-                    prediction.unsqueeze(1),
-                    size=(h, w),
-                    mode='bicubic',
-                    align_corners=False,
-                ).squeeze()
-                
-                depth = prediction.cpu().numpy()
-                # MiDaS outputs disparity (inverse depth)
-                depth = 1.0 / (depth + 1e-6)
-                # Normalize
-                depth = depth / depth.max() * 10.0
-            
-            return DepthResult(
-                depth=depth.astype(np.float32),
-                is_metric=False,
-                min_depth=float(depth.min()),
-                max_depth=float(depth.max()),
-            )
-            
-        except Exception as e:
-            logger.error(f"MiDaS estimation failed: {e}")
-            return DepthResult(
-                depth=np.ones((h, w), dtype=np.float32) * 2.0,
-                is_metric=False,
-            )
-    
-    def get_name(self) -> str:
-        return f"midas_{self.model_type}"
-
-
-# Registry of available estimators
+# Import estimators with graceful fallbacks
 _ESTIMATORS: Dict[str, type] = {
-    'depth_anything_v3': DepthAnythingV3Estimator,
-    'depth_anything': DepthAnythingV3Estimator,
-    'midas': MiDaSEstimator,
-    'midas_small': lambda: MiDaSEstimator('MiDaS_small'),
     'none': PassthroughDepthEstimator,
     'passthrough': PassthroughDepthEstimator,
     'ground_truth': PassthroughDepthEstimator,
 }
+
+# Depth Anything V2 and V3
+try:
+    from .depth_anything import DepthAnythingV2Estimator, DepthAnythingV3Estimator
+    _ESTIMATORS['depth_anything_v2'] = DepthAnythingV2Estimator
+    _ESTIMATORS['depth_anything'] = DepthAnythingV2Estimator
+    _ESTIMATORS['dav2'] = DepthAnythingV2Estimator
+    _ESTIMATORS['depth_anything_v3'] = DepthAnythingV3Estimator
+    _ESTIMATORS['dav3'] = DepthAnythingV3Estimator
+    _ESTIMATORS['da3'] = DepthAnythingV3Estimator
+except ImportError as e:
+    logger.debug(f"Depth Anything not available: {e}")
+    DepthAnythingV2Estimator = None
+    DepthAnythingV3Estimator = None
+
+# MiDaS
+try:
+    from .midas import MiDaSEstimator
+    _ESTIMATORS['midas'] = MiDaSEstimator
+    _ESTIMATORS['midas_small'] = lambda **kw: MiDaSEstimator(model_type='small', **kw)
+    _ESTIMATORS['midas_large'] = lambda **kw: MiDaSEstimator(model_type='large', **kw)
+except ImportError as e:
+    logger.debug(f"MiDaS not available: {e}")
+    MiDaSEstimator = None
+
+# Stereo depth
+try:
+    from .stereo import StereoDepthEstimator, FastStereoEstimator
+    _ESTIMATORS['stereo'] = StereoDepthEstimator
+    _ESTIMATORS['stereo_sgbm'] = StereoDepthEstimator
+    _ESTIMATORS['stereo_fast'] = FastStereoEstimator
+    _ESTIMATORS['stereo_bm'] = FastStereoEstimator
+except ImportError as e:
+    logger.debug(f"Stereo depth not available: {e}")
+    StereoDepthEstimator = None
+    FastStereoEstimator = None
+
+# Apple Depth Pro (metric, high quality)
+try:
+    from .depth_pro import DepthProEstimator, DepthProLiteEstimator
+    _ESTIMATORS['depth_pro'] = DepthProEstimator
+    _ESTIMATORS['apple_depth_pro'] = DepthProEstimator
+    _ESTIMATORS['depthpro'] = DepthProEstimator
+    _ESTIMATORS['depth_pro_lite'] = DepthProLiteEstimator
+except ImportError as e:
+    logger.debug(f"Apple Depth Pro not available: {e}")
+    DepthProEstimator = None
+    DepthProLiteEstimator = None
 
 
 def get_depth_estimator(name: str, **kwargs) -> BaseDepthEstimator:
@@ -312,16 +126,26 @@ def get_depth_estimator(name: str, **kwargs) -> BaseDepthEstimator:
     Get a depth estimator by name.
     
     Args:
-        name: Estimator name ('depth_anything_v3', 'midas', 'none')
-        **kwargs: Additional arguments passed to estimator constructor
+        name: Estimator name (see list_depth_estimators())
+        **kwargs: Additional arguments for estimator constructor
         
     Returns:
         BaseDepthEstimator instance
         
     Raises:
         ValueError: If estimator name is unknown
+        
+    Examples:
+        # Relative depth (fast)
+        estimator = get_depth_estimator('depth_anything_v2', model_size='vits')
+        
+        # Metric depth (no scaling needed)
+        estimator = get_depth_estimator('depth_pro')
+        
+        # Stereo depth
+        estimator = get_depth_estimator('stereo', baseline=0.05, focal_length=382.6)
     """
-    name_lower = name.lower().replace('-', '_')
+    name_lower = name.lower().replace('-', '_').replace(' ', '_')
     
     if name_lower not in _ESTIMATORS:
         available = list(_ESTIMATORS.keys())
@@ -329,37 +153,99 @@ def get_depth_estimator(name: str, **kwargs) -> BaseDepthEstimator:
     
     estimator_cls = _ESTIMATORS[name_lower]
     
+    if estimator_cls is None:
+        raise ValueError(f"Depth estimator '{name}' dependencies not installed")
+    
+    # Handle factory functions
     if callable(estimator_cls) and not isinstance(estimator_cls, type):
-        # Factory function
-        return estimator_cls()
+        return estimator_cls(**kwargs)
     
     return estimator_cls(**kwargs)
 
 
 def list_depth_estimators() -> Dict[str, Dict[str, Any]]:
-    """List available depth estimators."""
-    return {
+    """
+    List available depth estimators with their properties.
+    
+    Returns:
+        Dictionary mapping estimator names to their info
+    """
+    estimators = {
+        'depth_pro': {
+            'description': 'Apple Depth Pro - sharp metric depth with focal length estimation',
+            'metric': True,
+            'available': DepthProEstimator is not None,
+            'features': ['metric depth', 'focal length estimation', 'high boundary accuracy'],
+            'speed': 'fast (~0.3s)',
+            'gpu': True,
+        },
+        'depth_pro_lite': {
+            'description': 'Apple Depth Pro Lite - faster version with lower resolution',
+            'metric': True,
+            'available': DepthProLiteEstimator is not None,
+            'speed': 'faster',
+            'gpu': True,
+        },
         'depth_anything_v3': {
-            'description': 'Depth Anything V3 - fast and accurate monocular depth',
+            'description': 'Depth Anything V3 - latest and most accurate',
             'metric': False,
+            'available': DepthAnythingV3Estimator is not None,
+            'models': ['small (fast)', 'base (balanced)', 'large (accurate)', 'giant (best)'],
+        },
+        'depth_anything_v2': {
+            'description': 'Depth Anything V2 - fast and accurate relative depth',
+            'metric': False,
+            'available': DepthAnythingV2Estimator is not None,
+            'models': ['vits (fast)', 'vitb (balanced)', 'vitl (accurate)'],
         },
         'midas': {
-            'description': 'MiDaS - robust monocular depth estimation',
+            'description': 'MiDaS - robust relative depth estimation',
             'metric': False,
+            'available': MiDaSEstimator is not None,
+            'models': ['small (fast)', 'hybrid (balanced)', 'large (accurate)'],
+        },
+        'stereo': {
+            'description': 'Stereo SGBM - metric depth from stereo pairs',
+            'metric': True,
+            'available': StereoDepthEstimator is not None,
+            'requires': 'Stereo camera pair (e.g., RealSense IR cameras)',
+        },
+        'stereo_fast': {
+            'description': 'Stereo BM - fast stereo matching',
+            'metric': True,
+            'available': FastStereoEstimator is not None,
         },
         'none': {
-            'description': 'Passthrough - no depth estimation (use ground truth)',
+            'description': 'Passthrough - use when depth from sensor',
             'metric': True,
+            'available': True,
         },
     }
+    return estimators
+
+
+def list_available() -> list:
+    """List names of available (installed) estimators."""
+    return [name for name, cls in _ESTIMATORS.items() if cls is not None]
 
 
 __all__ = [
+    # Base classes
     'BaseDepthEstimator',
     'DepthResult',
+    'DepthScaler',
+    'DepthFilter',
+    # Estimator classes
     'PassthroughDepthEstimator',
+    'DepthAnythingV2Estimator',
     'DepthAnythingV3Estimator',
     'MiDaSEstimator',
+    'StereoDepthEstimator',
+    'FastStereoEstimator',
+    'DepthProEstimator',
+    'DepthProLiteEstimator',
+    # Factory functions
     'get_depth_estimator',
     'list_depth_estimators',
+    'list_available',
 ]

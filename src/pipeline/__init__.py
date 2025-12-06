@@ -6,7 +6,15 @@
 # - Rolling-shutter correction abstractions
 # - The main online pipeline that ties everything together
 
-from .frames import Frame, FrameSource, TumRGBDSource, LiveVideoSource, RealSenseSource
+from .frames import (
+    Frame, 
+    FrameSource, 
+    TumRGBDSource, 
+    SevenScenesSource,
+    ReplicaSource,
+    LiveVideoSource, 
+    RealSenseSource
+)
 from .rs_corrector import RSCorrector, IdentityRSCorrector
 from .online_gs import OnlineGSPipeline
 
@@ -14,6 +22,8 @@ __all__ = [
     "Frame",
     "FrameSource",
     "TumRGBDSource",
+    "SevenScenesSource",
+    "ReplicaSource",
     "LiveVideoSource",
     "RealSenseSource",
     "RSCorrector",

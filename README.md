@@ -47,7 +47,7 @@ git clone --recursive https://github.com/ParsaRezaei/AirSplatMap.git
 cd AirSplatMap
 
 # Create conda environment
-conda env create -f environment_crossplatform.yml
+conda env create -f environment.yml
 conda activate airsplatmap
 
 # Verify
@@ -58,8 +58,9 @@ python -c "import torch; print(f'PyTorch {torch.__version__}, CUDA: {torch.cuda.
 
 ```bash
 # Start dashboard
-dashboard\start_dashboard.bat  # Windows
-./dashboard/start_dashboard.sh  # Linux
+cd dashboard
+start_dashboard.bat       # Windows
+./start_dashboard.sh      # Linux/macOS
 
 # Open browser: http://127.0.0.1:9002
 ```
@@ -106,7 +107,7 @@ git clone --recursive https://github.com/ParsaRezaei/AirSplatMap.git
 cd AirSplatMap
 
 # Create conda environment (includes PyTorch + CUDA + all dependencies)
-conda env create -f environment_crossplatform.yml
+conda env create -f environment.yml
 conda activate airsplatmap
 
 # Verify installation
@@ -114,7 +115,7 @@ python -c "import torch; print(f'PyTorch {torch.__version__}, CUDA: {torch.cuda.
 python -c "from src.pipeline import RealSenseSource; print('RealSenseSource OK')"
 ```
 
-That's it! The `environment_crossplatform.yml` includes everything:
+That's it! The `environment.yml` includes everything:
 - PyTorch with CUDA 12.1
 - OpenCV, NumPy, SciPy, etc.
 - pyrealsense2 for RealSense cameras
@@ -242,13 +243,16 @@ AirSplatMap includes a real-time web dashboard for visualizing and controlling 3
 
 ```bash
 # Start the dashboard
-./scripts/start_dashboard.sh
+cd dashboard
+./start_dashboard.sh      # Linux/macOS
+start_dashboard.bat       # Windows
 
 # Open in browser
 # http://localhost:9002
 
 # Stop the dashboard
-./scripts/stop_dashboard.sh
+./stop_dashboard.sh       # Linux/macOS
+stop_dashboard.bat        # Windows
 ```
 
 ### Dashboard Controls
@@ -263,15 +267,12 @@ AirSplatMap includes a real-time web dashboard for visualizing and controlling 3
 
 ### Configuration
 
-Edit `scripts/dashboard_config.sh` to change default ports:
+Dashboard ports can be customized via command line:
 
 ```bash
-# Dashboard configuration
+# Default configuration
 HTTP_PORT=9002      # Web interface port
 WS_PORT=9003        # WebSocket port for real-time updates
-LOG_FILE=/tmp/airsplatmap_dashboard.log
-PID_FILE=/tmp/airsplatmap_dashboard.pid
-CONDA_ENV=airsplatmap
 ```
 
 ### Render Modes
@@ -283,7 +284,9 @@ CONDA_ENV=airsplatmap
 ### Custom Ports
 
 ```bash
-./scripts/start_dashboard.sh --http-port 8080 --ws-port 8081
+cd dashboard
+./start_dashboard.sh --http-port 8080 --ws-port 8081   # Linux/macOS
+start_dashboard.bat --http-port 8080 --ws-port 8081    # Windows
 ```
 
 ## Usage
@@ -429,7 +432,7 @@ engine = get_engine("gsplat")
 
 ```bash
 # Run full benchmark suite
-python benchmarks/run_all.py --quick
+python -m benchmarks all --quick
 
 # View results
 # Open benchmarks/results/report.html

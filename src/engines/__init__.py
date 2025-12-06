@@ -10,11 +10,10 @@
 #   - SplaTAMEngine: Dense RGB-D SLAM with Gaussian Splatting
 #   - GSLAMEngine: Gaussian-SLAM - Submap-based RGB-D SLAM
 #   - MonoGSEngine: Gaussian Splatting SLAM (CVPR'24) - real-time mono/stereo/RGB-D
-#   - PhotoSLAMEngine: Photo-SLAM (CVPR'24) - real-time photorealistic SLAM
 #
 # Usage:
 #   from src.engines import GraphdecoEngine, GSplatEngine, get_engine
-#   engine = get_engine("gsplat")  # or "graphdeco", "splatam", "gslam", "monogs", "photoslam"
+#   engine = get_engine("gsplat")  # or "graphdeco", "splatam", "gslam", "monogs"
 
 from .base import BaseGSEngine
 from .graphdeco_engine import GraphdecoEngine
@@ -48,20 +47,13 @@ except ImportError:
     MonoGSEngine = None
     _MONOGS_AVAILABLE = False
 
-try:
-    from .photoslam_engine import PhotoSLAMEngine
-    _PHOTOSLAM_AVAILABLE = True
-except ImportError:
-    PhotoSLAMEngine = None
-    _PHOTOSLAM_AVAILABLE = False
-
 
 def get_engine(name: str, **kwargs):
     """
     Factory function to get an engine by name.
     
     Args:
-        name: Engine name - one of "graphdeco", "gsplat", "splatam", "gslam", "monogs", "photoslam"
+        name: Engine name - one of "graphdeco", "gsplat", "splatam", "gslam", "monogs"
         **kwargs: Additional arguments passed to engine constructor
         
     Returns:
@@ -107,14 +99,6 @@ def get_engine(name: str, **kwargs):
             )
         return MonoGSEngine(**kwargs)
     
-    elif name in ("photoslam", "photo"):
-        if not _PHOTOSLAM_AVAILABLE:
-            raise ImportError(
-                "Photo-SLAM not available. Install from: "
-                "git clone https://github.com/HuajianUP/Photo-SLAM.git --recursive"
-            )
-        return PhotoSLAMEngine(**kwargs)
-    
     else:
         available = ["graphdeco"]
         if _GSPLAT_AVAILABLE:
@@ -125,8 +109,6 @@ def get_engine(name: str, **kwargs):
             available.append("gslam")
         if _MONOGS_AVAILABLE:
             available.append("monogs")
-        if _PHOTOSLAM_AVAILABLE:
-            available.append("photoslam")
         raise ValueError(
             f"Unknown engine: {name}. Available: {available}"
         )
@@ -201,13 +183,6 @@ def list_engines():
             "speed": "~10 FPS",
             "realtime": True,
         },
-        "photoslam": {
-            "available": _PHOTOSLAM_AVAILABLE,
-            "description": "Photo-SLAM (CVPR'24) - Photorealistic real-time SLAM",
-            "install": "git clone https://github.com/HuajianUP/Photo-SLAM.git --recursive && ./build.sh",
-            "speed": "Real-time",
-            "realtime": True,
-        },
     }
     return engines
 
@@ -219,7 +194,6 @@ __all__ = [
     "SplaTAMEngine",
     "GSLAMEngine",
     "MonoGSEngine",
-    "PhotoSLAMEngine",
     "get_engine",
     "list_engines",
 ]

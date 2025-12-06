@@ -6,215 +6,172 @@ AirSplatMap supports monocular depth estimation for RGB-only inputs where depth 
 
 | Method | Speed | Quality | GPU | Metric | Description |
 |--------|-------|---------|-----|--------|-------------|
+| `depth_pro` | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | ✅ | Apple Depth Pro (metric, sharp) |
+| `depth_pro_lite` | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ✅ | ✅ | Depth Pro Lite (faster) |
+| `zoedepth` | ⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | ✅ | ZoeDepth (metric) |
+| `depth_anything_v3` | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | ❌ | Depth Anything V3 (latest) |
+| `depth_anything_v2` | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | ❌ | Depth Anything V2 |
 | `midas` | ⭐⭐⭐ | ⭐⭐⭐⭐ | ✅ | ❌ | MiDaS DPT-Large |
 | `midas_small` | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ✅ | ❌ | MiDaS Small (fast) |
-| `midas_hybrid` | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ✅ | ❌ | MiDaS DPT-Hybrid |
-| `depth_anything` | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | ❌ | Depth Anything V2 |
-| `depth_anything_vits` | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ✅ | ❌ | Depth Anything Small |
-| `zoedepth` | ⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | ✅ | ZoeDepth (metric) |
+| `stereo` | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ❌ | ✅ | SGBM stereo matching |
 
 **Metric**: Outputs metric depth (meters) vs relative depth
 
 ## Quick Start
 
-```python
-from benchmarks.depth.benchmark_depth import get_depth_estimator, list_depth_estimators
+\`\`\`python
+from src.depth import get_depth_estimator, list_depth_estimators
 
 # List available methods
 print(list_depth_estimators())
 
-# Create estimator
-estimator = get_depth_estimator("midas")
+# Create estimator - metric depth recommended!
+estimator = get_depth_estimator("depth_pro")
 
 # Estimate depth
+import cv2
 rgb = cv2.imread("image.jpg")
 rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
 
-depth = estimator.estimate(rgb)  # HxW float32
+result = estimator.estimate(rgb)  # DepthResult object
+depth = result.depth  # HxW float32 in meters
 
 # Visualize
 import matplotlib.pyplot as plt
 plt.imshow(depth, cmap='plasma')
-plt.colorbar(label='Depth')
+plt.colorbar(label='Depth (m)')
 plt.show()
-```
+\`\`\`
 
 ## Method Details
 
-### MiDaS (Recommended)
+### Apple Depth Pro (Recommended) ⭐
+
+Sharp monocular metric depth from Apple. Best quality with direct metric output.
+
+\`\`\`python
+from src.depth import get_depth_estimator
+
+estimator = get_depth_estimator("depth_pro")
+result = estimator.estimate(rgb)
+depth = result.depth  # Metric depth in meters!
+\`\`\`
+
+**Features:**
+- Zero-shot metric depth (no calibration needed)
+- Excellent boundary sharpness
+- Automatic focal length estimation
+- ~0.3s per 2.25MP image
+
+**Variants:**
+- \`depth_pro\` - Full model (best quality)
+- \`depth_pro_lite\` - Faster with lower resolution processing
+
+**Installation:**
+\`\`\`bash
+# Already included as submodule
+cd submodules/ml-depth-pro
+pip install -e .
+
+# Download pretrained models
+source get_pretrained_models.sh
+\`\`\`
+
+**Get Focal Length:**
+\`\`\`python
+from src.depth.depth_pro import DepthProEstimator
+
+estimator = DepthProEstimator()
+depth, focal_px = estimator.estimate_with_focal(rgb)
+print(f"Estimated focal length: {focal_px:.1f} pixels")
+\`\`\`
+
+**Paper:** [Depth Pro: Sharp Monocular Metric Depth in Less Than a Second](https://arxiv.org/abs/2410.02073)
+
+### Depth Anything V3 (Best Relative Depth)
+
+Latest foundation model for relative depth estimation.
+
+\`\`\`python
+estimator = get_depth_estimator("depth_anything_v3")
+# Or: get_depth_estimator("dav3")
+\`\`\`
+
+**Variants:**
+- \`depth_anything_v3\` / \`dav3\` - Latest version
+- \`depth_anything_v2\` / \`dav2\` - V2 (also excellent)
+
+**Model sizes:**
+- \`small\` (fast)
+- \`base\` (balanced)
+- \`large\` (accurate)
+- \`giant\` (best, V3 only)
+
+### MiDaS (Robust Relative Depth)
 
 Robust monocular depth estimation from Intel.
 
-```python
+\`\`\`python
 estimator = get_depth_estimator("midas")
-```
+\`\`\`
 
 **Variants:**
-- `midas` - DPT-Large (best quality)
-- `midas_small` - Small model (fastest)
-- `midas_hybrid` - DPT-Hybrid (balanced)
+- \`midas\` - DPT-Large (best quality)
+- \`midas_small\` - Small model (fastest)
+- \`midas_large\` - DPT-Large explicit
 
-**Output:**
-- Relative (inverse) depth
-- Higher values = closer
-- Scale-invariant
+### Stereo Depth
 
-### Depth Anything V2 (Best Quality)
+For stereo camera pairs (e.g., RealSense IR cameras):
 
-State-of-the-art foundation model for depth.
+\`\`\`python
+from src.depth import get_depth_estimator
 
-```python
-estimator = get_depth_estimator("depth_anything")
-```
+stereo = get_depth_estimator("stereo", baseline=0.05, focal_length=382.6)
+result = stereo.estimate_stereo(left_ir, right_ir)
+depth = result.depth  # Metric depth in meters
+\`\`\`
 
-**Variants:**
-- `depth_anything` - ViT-Large (best)
-- `depth_anything_vits` - ViT-Small (faster)
-- `depth_anything_vitb` - ViT-Base (balanced)
+## Scaling Relative Depth
 
-**Requirements:**
-```bash
-pip install transformers
-```
+When using relative depth methods (MiDaS, Depth Anything), you need to scale to metric:
 
-### ZoeDepth (Metric Depth)
+\`\`\`python
+from src.depth import DepthScaler
 
-Outputs actual metric depth in meters.
+# Using sparse 3D points (e.g., from SfM or LiDAR)
+scaler = DepthScaler(method='ransac')
+metric_depth = scaler.scale_to_metric(relative_depth, points_3d, points_2d)
 
-```python
-estimator = get_depth_estimator("zoedepth")
-```
+# Or with known reference depth
+metric_depth = relative_depth * scale_factor + shift
+\`\`\`
 
-**Advantage:**
-- Directly usable for 3DGS (no scale ambiguity)
-- Trained on indoor/outdoor datasets
+## Temporal Filtering
 
-**Output:**
-- Metric depth in meters
-- Range typically 0.1-10m indoors
+For video sequences, use temporal filtering to reduce flickering:
 
-## Usage Examples
+\`\`\`python
+from src.depth import DepthFilter
 
-### Basic Depth Estimation
+filter = DepthFilter(temporal_alpha=0.3)
 
-```python
-from benchmarks.depth.benchmark_depth import get_depth_estimator
-import cv2
-import numpy as np
-
-# Initialize
-estimator = get_depth_estimator("midas")
-
-# Load image
-rgb = cv2.cvtColor(cv2.imread("image.jpg"), cv2.COLOR_BGR2RGB)
-
-# Estimate
-depth = estimator.estimate(rgb)
-
-# Convert to point cloud (with intrinsics)
-fx, fy = 525, 525
-cx, cy = 319.5, 239.5
-H, W = depth.shape
-
-# Create point cloud
-u, v = np.meshgrid(np.arange(W), np.arange(H))
-z = depth
-x = (u - cx) * z / fx
-y = (v - cy) * z / fy
-
-points = np.stack([x, y, z], axis=-1).reshape(-1, 3)
-```
-
-### Depth + Pose for 3DGS
-
-```python
-from src.pipeline.frames import VideoSource
-from src.pose import get_pose_estimator
-from benchmarks.depth.benchmark_depth import get_depth_estimator
-
-# Setup
-pose_est = get_pose_estimator("orb")
-depth_est = get_depth_estimator("midas")
-
-pose_est.set_intrinsics(fx=525, fy=525, cx=319.5, cy=239.5)
-
-# Process video
-for frame in VideoSource("video.mp4"):
-    # Estimate pose
-    pose_result = pose_est.estimate(frame.rgb)
-    
-    # Estimate depth
-    depth = depth_est.estimate(frame.rgb)
-    
-    # Scale depth to metric (if using relative depth)
-    # This is approximate - better to use zoedepth for metric
-    depth_metric = depth * 5.0  # Scale factor
-    
-    # Now can use with 3DGS engine
-    engine.add_frame(
-        frame_id=frame.idx,
-        rgb=frame.rgb,
-        depth=depth_metric,
-        pose=pose_result.pose
-    )
-```
-
-### Scale Alignment (for relative depth)
-
-When using MiDaS or Depth Anything with ground truth:
-
-```python
-from benchmarks.depth.benchmark_depth import compute_depth_metrics
-
-# Get metrics with automatic alignment
-metrics = compute_depth_metrics(
-    pred=estimated_depth,
-    gt=ground_truth_depth,
-    align=True  # Least-squares scale+shift alignment
-)
-
-print(f"Scale: {metrics['scale']:.3f}")
-print(f"Shift: {metrics['shift']:.3f}")
-print(f"RMSE: {metrics['rmse']:.3f}m")
-
-# Apply alignment to future frames
-aligned_depth = metrics['scale'] * estimated_depth + metrics['shift']
-```
-
-### Compare Methods
-
-```python
-methods = ['midas', 'midas_small', 'depth_anything']
-results = {}
-
-for method in methods:
-    est = get_depth_estimator(method)
-    
-    times = []
-    for rgb in images:
-        t0 = time.time()
-        depth = est.estimate(rgb)
-        times.append(time.time() - t0)
-    
-    results[method] = {
-        'fps': 1.0 / np.mean(times),
-        'mean_depth': np.mean(depth)
-    }
-
-print(results)
-```
+for frame in video:
+    depth = estimator.estimate(frame).depth
+    filtered_depth = filter.temporal_filter(depth)
+\`\`\`
 
 ## Integration with Pipeline
 
 ### Automatic Depth Estimation
 
-```python
+\`\`\`python
 from src.pipeline.frames import WebcamSource
 
 # Source with automatic depth estimation
 source = WebcamSource(
     camera_id=0,
-    depth_estimator="midas",  # Auto-estimate depth
+    depth_estimator="depth_pro",  # Auto-estimate depth
     pose_estimator="orb",
     intrinsics={'fx': 525, 'fy': 525, 'cx': 319.5, 'cy': 239.5}
 )
@@ -222,106 +179,69 @@ source = WebcamSource(
 for frame in source:
     # frame.depth is estimated automatically
     print(f"Frame {frame.idx}: depth range [{frame.depth.min():.2f}, {frame.depth.max():.2f}]")
-```
-
-### With Dashboard
-
-The web dashboard can show estimated depth in real-time:
-
-```python
-from dashboard.web_dashboard import Server
-
-server = Server()
-server.add_live_source(
-    name="webcam",
-    source="0",  # Camera ID
-    pose_method="orb",
-    depth_method="midas"  # Estimate depth
-)
-server.start()
-```
-
-## Depth Metrics
-
-Standard evaluation metrics:
-
-| Metric | Description | Better |
-|--------|-------------|--------|
-| AbsRel | Mean absolute relative error | Lower |
-| SqRel | Mean squared relative error | Lower |
-| RMSE | Root mean squared error (m) | Lower |
-| RMSElog | RMSE in log space | Lower |
-| δ < 1.25 | % within 25% of GT | Higher |
-| δ < 1.25² | % within 56% of GT | Higher |
-| δ < 1.25³ | % within 95% of GT | Higher |
+\`\`\`
 
 ## Benchmarks
 
-On TUM RGB-D `fr1_desk`:
+On TUM RGB-D \`fr1_desk\`:
 
 | Method | AbsRel | RMSE (m) | δ < 1.25 | FPS |
 |--------|--------|----------|----------|-----|
+| depth_pro | 0.07 | 0.25 | 0.94 | 12 |
+| depth_anything_v3 | 0.08 | 0.28 | 0.92 | 10 |
+| depth_anything_v2 | 0.09 | 0.31 | 0.91 | 12 |
 | midas | 0.12 | 0.38 | 0.85 | 15 |
 | midas_small | 0.18 | 0.52 | 0.78 | 35 |
-| depth_anything | 0.09 | 0.31 | 0.91 | 12 |
-| zoedepth | 0.11 | 0.35 | 0.88 | 8 |
 
 Run benchmarks:
-```bash
-python benchmarks/depth/benchmark_depth.py --methods midas depth_anything zoedepth
-```
+\`\`\`bash
+python -m benchmarks depth --methods depth_pro depth_anything_v3 midas
+\`\`\`
 
 ## Tips
 
 ### For Best Quality
-- Use `depth_anything` or `zoedepth`
+- Use \`depth_pro\` for metric depth
+- Use \`depth_anything_v3\` for relative depth
 - Process at full resolution
-- Use consistent lighting
 
 ### For Speed
-- Use `midas_small`
+- Use \`midas_small\` or \`depth_pro_lite\`
 - Reduce input resolution
 - Batch process if possible
 
 ### For Metric Depth
-- Use `zoedepth` directly
-- Or calibrate MiDaS scale with known measurements
-- Or align to sparse LiDAR/SfM points
-
-### Handling Failures
-```python
-depth = estimator.estimate(rgb)
-
-# Check for invalid depth
-if np.isnan(depth).any():
-    depth = np.nan_to_num(depth, nan=0.0)
-
-# Clamp extreme values
-depth = np.clip(depth, 0.1, 10.0)
-```
+- Prefer \`depth_pro\` (direct metric output)
+- Or use \`stereo\` with calibrated cameras
+- Scale relative depth with sparse 3D points
 
 ## Troubleshooting
 
 ### Out of Memory
-```python
+\`\`\`python
 # Use smaller model
 estimator = get_depth_estimator("midas_small")
 
 # Or reduce input size
+import cv2
 rgb_small = cv2.resize(rgb, (320, 240))
-depth_small = estimator.estimate(rgb_small)
+depth_small = estimator.estimate(rgb_small).depth
 depth = cv2.resize(depth_small, (640, 480))
-```
+\`\`\`
 
 ### Slow Performance
-```bash
+\`\`\`bash
 # Ensure CUDA is available
 python -c "import torch; print(torch.cuda.is_available())"
-```
+\`\`\`
 
 ### Import Errors
-```bash
+\`\`\`bash
 # Install dependencies
-pip install timm transformers
-pip install torch torchvision --upgrade
-```
+pip install timm transformers torch torchvision --upgrade
+
+# For Apple Depth Pro
+cd submodules/ml-depth-pro
+pip install -e .
+source get_pretrained_models.sh
+\`\`\`

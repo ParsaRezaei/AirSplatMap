@@ -40,6 +40,8 @@ class Frame:
             - 'fx', 'fy': Focal lengths in pixels
             - 'cx', 'cy': Principal point in pixels
             - 'width', 'height': Image dimensions
+        accel: Optional accelerometer reading [ax, ay, az] in m/s²
+        gyro: Optional gyroscope reading [gx, gy, gz] in rad/s
         metadata: Optional dictionary for additional frame-specific data
     
     Coordinate Conventions:
@@ -53,6 +55,8 @@ class Frame:
     depth: Optional[np.ndarray]
     pose: np.ndarray  # 4x4 world_from_camera
     intrinsics: Dict[str, float]
+    accel: Optional[np.ndarray] = None  # [ax, ay, az] in m/s²
+    gyro: Optional[np.ndarray] = None   # [gx, gy, gz] in rad/s
     metadata: Dict[str, Any] = field(default_factory=dict)
     
     def __post_init__(self):
@@ -79,6 +83,17 @@ class Frame:
         for key in required_keys:
             if key not in self.intrinsics:
                 raise ValueError(f"Missing intrinsic parameter: {key}")
+        
+        # Validate IMU data if present
+        if self.accel is not None:
+            self.accel = np.asarray(self.accel, dtype=np.float64)
+            if self.accel.shape != (3,):
+                raise ValueError(f"Accel must be shape (3,), got {self.accel.shape}")
+        
+        if self.gyro is not None:
+            self.gyro = np.asarray(self.gyro, dtype=np.float64)
+            if self.gyro.shape != (3,):
+                raise ValueError(f"Gyro must be shape (3,), got {self.gyro.shape}")
     
     @property
     def image_size(self) -> Tuple[int, int]:
@@ -200,15 +215,21 @@ class TumRGBDSource(FrameSource):
         max_time_diff: float = 0.1,  # Increased from 0.05 to handle TUM dataset stream offsets
         depth_scale: float = 5000.0,
         intrinsics: Optional[Dict[str, float]] = None,
+        load_imu: bool = True,  # Load accelerometer data if available
     ):
         self._dataset_root = Path(dataset_root)
         self._sequence = sequence
         self._max_time_diff = max_time_diff
         self._depth_scale = depth_scale
         self._intrinsics = intrinsics or self.DEFAULT_INTRINSICS.copy()
+        self._load_imu = load_imu
         
         # Find the dataset path
         self._dataset_path = self._find_dataset()
+        
+        # IMU data storage
+        self._accel_data: Dict[float, np.ndarray] = {}
+        self._gyro_data: Dict[float, np.ndarray] = {}
         
         if self._dataset_path is None:
             logger.warning(
@@ -218,6 +239,11 @@ class TumRGBDSource(FrameSource):
             self._frames_info: List[Dict[str, Any]] = []
         else:
             logger.info(f"Found TUM dataset at: {self._dataset_path}")
+            
+            # Load IMU data if requested
+            if self._load_imu:
+                self._load_imu_data()
+            
             self._frames_info = self._load_frame_info()
             logger.info(f"Loaded {len(self._frames_info)} frames")
     
@@ -346,6 +372,82 @@ class TumRGBDSource(FrameSource):
         
         return result
     
+    def _load_imu_data(self):
+        """Load IMU data (accelerometer and gyroscope) from TUM dataset."""
+        # Load accelerometer data
+        accel_file = self._dataset_path / "accelerometer.txt"
+        if accel_file.exists():
+            self._accel_data = self._read_imu_file(accel_file)
+            logger.info(f"Loaded {len(self._accel_data)} accelerometer readings")
+        else:
+            logger.debug(f"No accelerometer.txt found at {self._dataset_path}")
+        
+        # Load gyroscope data (some TUM datasets have this)
+        gyro_file = self._dataset_path / "gyroscope.txt"
+        if gyro_file.exists():
+            self._gyro_data = self._read_imu_file(gyro_file)
+            logger.info(f"Loaded {len(self._gyro_data)} gyroscope readings")
+        else:
+            logger.debug(f"No gyroscope.txt found at {self._dataset_path}")
+    
+    def _read_imu_file(self, filepath: Path) -> Dict[float, np.ndarray]:
+        """
+        Read TUM IMU file (accelerometer.txt or gyroscope.txt).
+        
+        Format: timestamp x y z
+        
+        Returns:
+            Dict mapping timestamp -> [x, y, z] array
+        """
+        result = {}
+        
+        with open(filepath, 'r') as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                
+                parts = line.split()
+                if len(parts) >= 4:
+                    ts = float(parts[0])
+                    x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
+                    result[ts] = np.array([x, y, z], dtype=np.float64)
+        
+        return result
+    
+    def _find_closest_imu(
+        self,
+        target_ts: float,
+        imu_data: Dict[float, np.ndarray],
+        max_diff: float = 0.05,
+    ) -> Optional[np.ndarray]:
+        """Find IMU reading closest to target timestamp."""
+        if not imu_data:
+            return None
+        
+        timestamps = list(imu_data.keys())
+        closest_ts = min(timestamps, key=lambda t: abs(t - target_ts))
+        
+        if abs(closest_ts - target_ts) <= max_diff:
+            return imu_data[closest_ts]
+        return None
+    
+    def get_imu_data(self) -> Dict[str, Dict[float, np.ndarray]]:
+        """
+        Get all loaded IMU data.
+        
+        Returns:
+            Dict with 'accel' and 'gyro' keys, each mapping timestamp -> reading
+        """
+        return {
+            'accel': self._accel_data.copy(),
+            'gyro': self._gyro_data.copy(),
+        }
+    
+    def has_imu(self) -> bool:
+        """Check if IMU data is available."""
+        return len(self._accel_data) > 0 or len(self._gyro_data) > 0
+    
     def _read_groundtruth(self, filepath: Path) -> Dict[float, np.ndarray]:
         """
         Read TUM groundtruth.txt file.
@@ -449,6 +551,10 @@ class TumRGBDSource(FrameSource):
             intrinsics['width'] = rgb.shape[1]
             intrinsics['height'] = rgb.shape[0]
             
+            # Get IMU data for this frame timestamp
+            accel = self._find_closest_imu(info['timestamp'], self._accel_data)
+            gyro = self._find_closest_imu(info['timestamp'], self._gyro_data)
+            
             yield Frame(
                 idx=idx,
                 timestamp=info['timestamp'],
@@ -456,6 +562,8 @@ class TumRGBDSource(FrameSource):
                 depth=depth,
                 pose=info['pose'],
                 intrinsics=intrinsics,
+                accel=accel,
+                gyro=gyro,
             )
     
     def __len__(self) -> int:
@@ -464,6 +572,284 @@ class TumRGBDSource(FrameSource):
     
     def get_intrinsics(self) -> Dict[str, float]:
         """Get camera intrinsics."""
+        return self._intrinsics.copy()
+
+
+class SevenScenesSource(FrameSource):
+    """
+    Frame source for Microsoft 7-Scenes dataset.
+    
+    7-Scenes format:
+        <scene>/
+            seq-01/
+                frame-000000.color.png   # RGB (640x480)
+                frame-000000.depth.png   # Depth (16-bit PNG, millimeters)
+                frame-000000.pose.txt    # 4x4 camera-to-world matrix
+            seq-02/
+            ...
+    
+    Args:
+        dataset_root: Path to 7-Scenes dataset (e.g., datasets/7scenes/chess)
+        sequences: Optional list of sequence names to load (e.g., ['seq-01', 'seq-02'])
+                   If None, loads all available sequences.
+        depth_scale: Scale factor for depth (default 1000.0 = millimeters to meters)
+    
+    Example:
+        source = SevenScenesSource("datasets/7scenes/chess")
+        for frame in source:
+            print(f"Frame {frame.frame_id}: pose shape {frame.pose.shape}")
+    """
+    
+    # 7-Scenes uses Kinect camera intrinsics
+    DEFAULT_INTRINSICS = {
+        'fx': 585.0,
+        'fy': 585.0,
+        'cx': 320.0,
+        'cy': 240.0,
+        'width': 640,
+        'height': 480,
+    }
+    
+    def __init__(
+        self,
+        dataset_root: str,
+        sequences: Optional[List[str]] = None,
+        depth_scale: float = 1000.0,  # 7-Scenes depth is in millimeters
+        intrinsics: Optional[Dict[str, float]] = None,
+    ):
+        self._dataset_root = Path(dataset_root)
+        self._sequences = sequences
+        self._depth_scale = depth_scale
+        self._intrinsics = intrinsics or self.DEFAULT_INTRINSICS.copy()
+        
+        if not self._dataset_root.exists():
+            logger.warning(f"7-Scenes dataset not found at {dataset_root}")
+            self._frames_info: List[Dict[str, Any]] = []
+        else:
+            self._frames_info = self._load_frame_info()
+            logger.info(f"Loaded {len(self._frames_info)} frames from 7-Scenes: {self._dataset_root.name}")
+    
+    def _load_frame_info(self) -> List[Dict[str, Any]]:
+        """Load frame information from all sequences."""
+        frames = []
+        
+        # Find all sequence directories
+        if self._sequences:
+            seq_dirs = [self._dataset_root / seq for seq in self._sequences]
+        else:
+            seq_dirs = sorted([
+                d for d in self._dataset_root.iterdir()
+                if d.is_dir() and d.name.startswith('seq-')
+            ])
+        
+        for seq_dir in seq_dirs:
+            if not seq_dir.exists():
+                continue
+            
+            # Find all frames in this sequence
+            color_files = sorted(seq_dir.glob('frame-*.color.png'))
+            
+            for color_path in color_files:
+                frame_name = color_path.stem.replace('.color', '')
+                depth_path = seq_dir / f"{frame_name}.depth.png"
+                pose_path = seq_dir / f"{frame_name}.pose.txt"
+                
+                if depth_path.exists() and pose_path.exists():
+                    # Load pose from text file (4x4 matrix)
+                    pose = np.loadtxt(str(pose_path)).reshape(4, 4)
+                    
+                    frames.append({
+                        'rgb_path': str(color_path),
+                        'depth_path': str(depth_path),
+                        'pose': pose.astype(np.float32),
+                        'sequence': seq_dir.name,
+                        'frame_name': frame_name,
+                    })
+        
+        return frames
+    
+    def __iter__(self) -> Iterator[Frame]:
+        """Iterate over frames."""
+        import cv2
+        
+        for i, info in enumerate(self._frames_info):
+            # Load RGB
+            rgb = cv2.imread(info['rgb_path'])
+            if rgb is None:
+                logger.warning(f"Failed to load RGB: {info['rgb_path']}")
+                continue
+            rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
+            
+            # Load depth
+            depth = cv2.imread(info['depth_path'], cv2.IMREAD_UNCHANGED)
+            if depth is None:
+                logger.warning(f"Failed to load depth: {info['depth_path']}")
+                continue
+            
+            # Convert depth to meters (7-Scenes uses millimeters)
+            # Invalid depth is 65535
+            depth = depth.astype(np.float32)
+            depth[depth >= 65535] = 0
+            depth = depth / self._depth_scale
+            
+            yield Frame(
+                idx=i,
+                timestamp=float(i),  # No timestamps in 7-Scenes
+                rgb=rgb,
+                depth=depth,
+                pose=info['pose'],
+                intrinsics=self._intrinsics.copy(),
+            )
+    
+    def __len__(self) -> int:
+        return len(self._frames_info)
+    
+    def get_intrinsics(self) -> Dict[str, float]:
+        return self._intrinsics.copy()
+
+
+class ReplicaSource(FrameSource):
+    """
+    Frame source for Replica dataset (NICE-SLAM format).
+    
+    NICE-SLAM Replica format:
+        <scene>/
+            results/
+                frame000000.jpg   # RGB
+                depth000000.png   # Depth (16-bit PNG)
+            traj.txt              # Poses (N x 12 matrix, row-major 3x4)
+    
+    Args:
+        dataset_root: Path to Replica scene (e.g., datasets/replica/office0)
+        depth_scale: Scale factor for depth conversion
+    
+    Example:
+        source = ReplicaSource("datasets/replica/office0")
+        for frame in source:
+            print(f"Frame {frame.frame_id}")
+    """
+    
+    # Replica camera intrinsics (from NICE-SLAM config)
+    DEFAULT_INTRINSICS = {
+        'fx': 600.0,
+        'fy': 600.0,
+        'cx': 599.5,
+        'cy': 339.5,
+        'width': 1200,
+        'height': 680,
+    }
+    
+    def __init__(
+        self,
+        dataset_root: str,
+        depth_scale: float = 6553.5,  # NICE-SLAM Replica depth scale
+        intrinsics: Optional[Dict[str, float]] = None,
+    ):
+        self._dataset_root = Path(dataset_root)
+        self._depth_scale = depth_scale
+        self._intrinsics = intrinsics or self.DEFAULT_INTRINSICS.copy()
+        
+        if not self._dataset_root.exists():
+            logger.warning(f"Replica dataset not found at {dataset_root}")
+            self._frames_info: List[Dict[str, Any]] = []
+            self._poses: np.ndarray = np.array([])
+        else:
+            self._poses = self._load_poses()
+            self._frames_info = self._load_frame_info()
+            logger.info(f"Loaded {len(self._frames_info)} frames from Replica: {self._dataset_root.name}")
+    
+    def _load_poses(self) -> np.ndarray:
+        """Load trajectory file."""
+        traj_path = self._dataset_root / "traj.txt"
+        if not traj_path.exists():
+            logger.warning(f"Trajectory file not found: {traj_path}")
+            return np.array([])
+        
+        # Each line is 16 values: flattened 4x4 transform matrix (row-major)
+        poses_flat = np.loadtxt(str(traj_path))
+        if poses_flat.ndim == 1:
+            poses_flat = poses_flat.reshape(1, -1)
+        
+        # Convert to 4x4 matrices
+        n_poses = len(poses_flat)
+        if poses_flat.shape[1] == 16:
+            # Full 4x4 matrix
+            poses = poses_flat.reshape(n_poses, 4, 4).astype(np.float32)
+        elif poses_flat.shape[1] == 12:
+            # 3x4 matrix (need to add last row)
+            poses = np.zeros((n_poses, 4, 4), dtype=np.float32)
+            poses[:, :3, :] = poses_flat.reshape(n_poses, 3, 4)
+            poses[:, 3, 3] = 1.0
+        else:
+            logger.warning(f"Unexpected pose format: {poses_flat.shape[1]} values per line")
+            return np.array([])
+        
+        return poses
+    
+    def _load_frame_info(self) -> List[Dict[str, Any]]:
+        """Load frame information."""
+        frames = []
+        results_dir = self._dataset_root / "results"
+        
+        if not results_dir.exists():
+            # Try alternate structure
+            results_dir = self._dataset_root
+        
+        # Find RGB frames
+        rgb_files = sorted(results_dir.glob('frame*.jpg')) + sorted(results_dir.glob('frame*.png'))
+        
+        for i, rgb_path in enumerate(rgb_files):
+            if i >= len(self._poses):
+                break
+            
+            # Extract frame number
+            frame_num = int(''.join(filter(str.isdigit, rgb_path.stem)))
+            depth_path = results_dir / f"depth{frame_num:06d}.png"
+            
+            if not depth_path.exists():
+                continue
+            
+            frames.append({
+                'rgb_path': str(rgb_path),
+                'depth_path': str(depth_path),
+                'pose_idx': i,
+            })
+        
+        return frames
+    
+    def __iter__(self) -> Iterator[Frame]:
+        """Iterate over frames."""
+        import cv2
+        
+        for i, info in enumerate(self._frames_info):
+            # Load RGB
+            rgb = cv2.imread(info['rgb_path'])
+            if rgb is None:
+                continue
+            rgb = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
+            
+            # Load depth
+            depth = cv2.imread(info['depth_path'], cv2.IMREAD_UNCHANGED)
+            if depth is None:
+                continue
+            depth = depth.astype(np.float32) / self._depth_scale
+            
+            # Get pose
+            pose = self._poses[info['pose_idx']]
+            
+            yield Frame(
+                idx=i,
+                timestamp=float(i),
+                rgb=rgb,
+                depth=depth,
+                pose=pose,
+                intrinsics=self._intrinsics.copy(),
+            )
+    
+    def __len__(self) -> int:
+        return len(self._frames_info)
+    
+    def get_intrinsics(self) -> Dict[str, float]:
         return self._intrinsics.copy()
 
 
