@@ -753,24 +753,32 @@
         <div style="margin-top:6px">
           <label style="font-size:9px;color:var(--dm)">Pose Estimation</label>
           <select id="livePoseMethod" style="margin-bottom:4px">
-            <option value="ground_truth" selected>Ground Truth (from server)</option>
-            <option value="robust_flow">Robust Flow (estimated)</option>
+            <option value="ground_truth" selected>Sensor/Server Data</option>
+            <option value="robust_flow">Robust Flow</option>
             <option value="orb">ORB (fast)</option>
             <option value="sift">SIFT (robust)</option>
             <option value="flow">Optical Flow</option>
             <option value="keyframe">Keyframe</option>
             <option value="loftr">LoFTR (GPU)</option>
             <option value="superpoint">SuperPoint (GPU)</option>
+            <option value="lightglue">LightGlue (GPU)</option>
+            <option value="raft">RAFT Flow (GPU)</option>
+            <option value="r2d2">R2D2 (GPU)</option>
+            <option value="roma">RoMa (GPU)</option>
           </select>
         </div>
         <div>
           <label style="font-size:9px;color:var(--dm)">Depth Estimation</label>
           <select id="liveDepthMethod">
-            <option value="ground_truth">Ground Truth (from server)</option>
-            <option value="depth_anything_v3" selected>Depth-Anything V3</option>
+            <option value="ground_truth" selected>Sensor/Server Data</option>
+            <option value="depth_anything_v3">Depth-Anything V3</option>
+            <option value="depth_anything_v2">Depth-Anything V2</option>
             <option value="depth_pro">Depth Pro (metric)</option>
-            <option value="midas">MiDaS (faster)</option>
-            <option value="none">None</option>
+            <option value="depth_pro_lite">Depth Pro Lite</option>
+            <option value="midas">MiDaS</option>
+            <option value="stereo">Stereo SGBM</option>
+            <option value="stereo_fast">Stereo BM (fast)</option>
+            <option value="none">None (passthrough)</option>
           </select>
         </div>
         <div class="btn-row" style="margin-top:6px">
@@ -1079,20 +1087,31 @@
               
               <label>Pose Estimation</label>
               <select id="liveSettingsPose">
-                <option value="ground_truth">Ground Truth (from server)</option>
-                <option value="robust_flow">Robust Flow (estimated)</option>
+                <option value="ground_truth">Sensor/Server Data</option>
+                <option value="robust_flow">Robust Flow</option>
                 <option value="orb">ORB (fast)</option>
                 <option value="sift">SIFT (robust)</option>
                 <option value="flow">Optical Flow</option>
+                <option value="keyframe">Keyframe</option>
+                <option value="loftr">LoFTR (GPU)</option>
+                <option value="superpoint">SuperPoint (GPU)</option>
+                <option value="lightglue">LightGlue (GPU)</option>
+                <option value="raft">RAFT Flow (GPU)</option>
+                <option value="r2d2">R2D2 (GPU)</option>
+                <option value="roma">RoMa (GPU)</option>
               </select>
               
               <label>Depth Estimation</label>
               <select id="liveSettingsDepth">
-                <option value="ground_truth">Ground Truth (from server)</option>
+                <option value="ground_truth">Sensor/Server Data</option>
                 <option value="depth_anything_v3">Depth-Anything V3</option>
+                <option value="depth_anything_v2">Depth-Anything V2</option>
                 <option value="depth_pro">Depth Pro (metric)</option>
-                <option value="midas">MiDaS (faster)</option>
-                <option value="none">None</option>
+                <option value="depth_pro_lite">Depth Pro Lite</option>
+                <option value="midas">MiDaS</option>
+                <option value="stereo">Stereo SGBM</option>
+                <option value="stereo_fast">Stereo BM (fast)</option>
+                <option value="none">None (passthrough)</option>
               </select>
               
               <div class="live-settings-actions">

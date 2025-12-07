@@ -66,8 +66,12 @@ class Server:
         return ds
 
     def add_live_source(s, name: str, source: str, source_type: str = 'live', 
-                        pose_method: str = 'robust_flow', depth_method: str = 'depth_anything_v3'):
-        """Add a live video source (RTSP, webcam, video file) with pose/depth estimation."""
+                        pose_method: str = 'ground_truth', depth_method: str = 'ground_truth'):
+        """Add a live video source (RTSP, webcam, video file) with pose/depth estimation.
+        
+        Defaults to 'ground_truth' (sensor/server data) for both pose and depth,
+        which expects data from an RTSP server or similar that provides GT pose/depth.
+        """
         s._live_sources.append({
             'name': name,
             'path': source,  # RTSP URL, webcam index, or video path
