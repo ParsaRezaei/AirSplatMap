@@ -4,9 +4,11 @@ This guide will help you install AirSplatMap and run your first 3D Gaussian Spla
 
 ## Prerequisites
 
-- **OS**: Windows 10/11 or Ubuntu 20.04/22.04
-- **GPU**: NVIDIA GPU with CUDA support (RTX 20xx or newer recommended)
-- **RAM**: 16GB+ recommended
+- **OS**: Windows 10/11, Ubuntu 20.04/22.04, or NVIDIA Jetson (JetPack 6.x)
+- **GPU**: NVIDIA GPU with CUDA support
+  - Desktop: RTX 20xx or newer recommended
+  - Jetson: Orin Nano, Orin NX, AGX Orin (JetPack 6.0+)
+- **RAM**: 16GB+ recommended (8GB minimum on Jetson)
 - **Storage**: 10GB+ for datasets and outputs
 
 ## Installation
@@ -18,11 +20,21 @@ git clone --recursive https://github.com/ParsaRezaei/AirSplatMap.git
 cd AirSplatMap
 ```
 
-### 2. Create Conda Environment
+### 2. Run Setup Script
 
+The setup script creates the conda environment and installs PyTorch with CUDA support.
+
+**Linux / macOS / Jetson:**
 ```bash
-# Create environment with all dependencies
-conda env create -f environment.yml
+./setup_env.sh
+conda activate airsplatmap
+```
+
+**Windows (PowerShell):**
+```powershell
+# If you get an execution policy error, run this first:
+# Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+.\setup_env.ps1
 conda activate airsplatmap
 ```
 
@@ -32,8 +44,23 @@ conda activate airsplatmap
 # Check PyTorch and CUDA
 python -c "import torch; print(f'PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
 
-# Check AirSplatMap
+# Check CUDA architecture support (Jetson Orin should show sm_87)
+python -c "import torch; print('CUDA archs:', torch.cuda.get_arch_list())"
+
+# Check AirSplatMap engines
 python -c "from src.engines import list_engines; print('Engines:', list(list_engines().keys()))"
+```
+
+### Jetson-Specific Notes
+
+On NVIDIA Jetson (JetPack 6.x), the setup script automatically:
+- Installs NVIDIA's Jetson PyTorch wheel with SM 8.7 support
+- Builds gsplat from source with Jetson CUDA kernels
+- Sets up `LD_PRELOAD` for libstdc++ compatibility
+
+Verify Jetson Orin support:
+```bash
+python -c "import torch; print('SM 8.7 supported:', any('87' in a for a in torch.cuda.get_arch_list()))"
 ```
 
 ## Quick Start

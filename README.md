@@ -23,6 +23,22 @@ Camera/Drone → Pose Estimation → 3D Gaussian Splatting → Web Dashboard
 | 📊 **Benchmarks** | Automated evaluation with plots |
 | 🤖 **ArduPilot** | MAVLink integration for drones/rovers |
 
+## 🖥️ Supported Platforms
+
+| Platform | GPU | Status |
+|----------|-----|--------|
+| **Ubuntu 20.04/22.04** | NVIDIA RTX 20xx+ | ✅ Fully supported |
+| **Windows 10/11** | NVIDIA RTX 20xx+ | ✅ Fully supported |
+| **NVIDIA Jetson** | Orin (JetPack 6.x) | ✅ Fully supported |
+| macOS | Apple Silicon | ⚠️ Experimental (MPS) |
+
+### Jetson Support
+
+Full support for **NVIDIA Jetson Orin** devices (Nano, NX, AGX) running JetPack 6.x:
+- Automatic detection of Jetson platform
+- NVIDIA's Jetson PyTorch wheel with SM 8.7 support
+- All 5 engines working: gsplat, graphdeco, monogs, splatam, gslam
+
 ## 📚 Documentation
 
 | Guide | Description |
@@ -46,8 +62,11 @@ Camera/Drone → Pose Estimation → 3D Gaussian Splatting → Web Dashboard
 git clone --recursive https://github.com/ParsaRezaei/AirSplatMap.git
 cd AirSplatMap
 
-# Create conda environment
-conda env create -f environment.yml
+# Run setup script (creates conda env + installs PyTorch with CUDA)
+./setup_env.sh          # Linux/macOS/Jetson
+# .\setup_env.ps1       # Windows (PowerShell)
+
+# Activate environment
 conda activate airsplatmap
 
 # Verify
@@ -99,27 +118,31 @@ python scripts/demos/live_realsense_demo.py --engine gsplat
 
 ## Installation
 
-### Quick Start - Cross-Platform (Windows/Linux)
+### Quick Start - Cross-Platform (Windows/Linux/Jetson)
 
 ```bash
 # Clone with all submodules
 git clone --recursive https://github.com/ParsaRezaei/AirSplatMap.git
 cd AirSplatMap
 
-# Create conda environment (includes PyTorch + CUDA + all dependencies)
-conda env create -f environment.yml
+# Run the setup script (creates conda env + installs PyTorch with CUDA)
+./setup_env.sh          # Linux/macOS/Jetson
+# .\setup_env.ps1       # Windows (PowerShell)
+
+# Activate environment
 conda activate airsplatmap
 
 # Verify installation
 python -c "import torch; print(f'PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
-python -c "from src.pipeline import RealSenseSource; print('RealSenseSource OK')"
+python -c "from src.engines import list_engines; print([k for k,v in list_engines().items() if v['available']])"
 ```
 
-That's it! The `environment.yml` includes everything:
-- PyTorch with CUDA 12.1
-- OpenCV, NumPy, SciPy, etc.
-- pyrealsense2 for RealSense cameras
-- gsplat for fast 3DGS
+The setup script handles:
+- Creating the conda environment from `environment.yml`
+- **Jetson**: Installs NVIDIA's Jetson PyTorch wheel with SM 8.7 (Orin) support
+- **Desktop**: Installs PyTorch with CUDA 12.4 support
+- Building gsplat from source (with correct CUDA architecture)
+- Setting up libstdc++ compatibility on Jetson
 
 ### Linux-Only: Build CUDA Extensions (Optional)
 

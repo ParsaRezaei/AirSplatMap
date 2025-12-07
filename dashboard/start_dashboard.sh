@@ -54,6 +54,16 @@ echo "WebSocket Port: $WS_PORT"
 
 cd "$PROJECT_ROOT"
 
+# Activate conda environment
+if command -v conda &> /dev/null; then
+    # Initialize conda for this shell
+    eval "$(conda shell.bash hook)"
+    conda activate airsplatmap 2>/dev/null || {
+        echo "WARNING: Could not activate 'airsplatmap' environment."
+        echo "Please run: conda activate airsplatmap"
+    }
+fi
+
 if [ "$FOREGROUND" -eq 1 ]; then
     echo ""
     echo "Starting dashboard in foreground..."

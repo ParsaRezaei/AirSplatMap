@@ -15,6 +15,11 @@
 #   from src.engines import GraphdecoEngine, GSplatEngine, get_engine
 #   engine = get_engine("gsplat")  # or "graphdeco", "splatam", "gslam", "monogs"
 
+# IMPORTANT: Import torch FIRST before any other libraries that may load 
+# conflicting native libraries (e.g., cv2 on Jetson). This ensures libc10.so
+# and other torch native libs are loaded with correct symbols.
+import torch
+
 from .base import BaseGSEngine
 from .graphdeco_engine import GraphdecoEngine
 

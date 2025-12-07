@@ -1,10 +1,12 @@
 # AirSplatMap - Cross-Platform Conda Environment
 # ================================================
-# Works on Windows, Linux, and macOS with NVIDIA GPU
+# Works on Windows, Linux (x86_64 and aarch64/Jetson), and macOS
 #
 # Installation:
 #   conda env create -f environment.yml
 #   conda activate airsplatmap
+#   # Then install PyTorch with CUDA:
+#   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
 #
 # For graphdeco/monogs/splatam engines (optional, requires C++ compiler):
 #   Windows: Install Visual Studio Build Tools 2019 first
@@ -21,8 +23,6 @@
 #
 name: airsplatmap
 channels:
-  - pytorch
-  - nvidia
   - conda-forge
   - defaults
 dependencies:
@@ -31,11 +31,6 @@ dependencies:
   - pip>=23.0
   - setuptools>=65.0
   - wheel>=0.40
-  
-  # ===== PyTorch with CUDA (cross-platform from pytorch channel) =====
-  - pytorch>=2.1.0
-  - torchvision>=0.16.0
-  - pytorch-cuda=12.1
   
   # ===== Core Scientific Stack =====
   - numpy>=1.24.0,<2.0
@@ -49,7 +44,7 @@ dependencies:
   - scikit-image>=0.21.0
   - scikit-learn>=1.2.0
   
-  # ===== OpenCV (better Windows support from conda-forge) =====
+  # ===== OpenCV =====
   - opencv>=4.8.0
   
   # ===== Visualization =====
@@ -63,6 +58,9 @@ dependencies:
   
   # ===== pip packages =====
   - pip:
+      # ----- NOTE: PyTorch must be installed separately after env creation -----
+      # Run: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+      
       # ----- RealSense Camera -----
       - pyrealsense2>=2.50.0
       
@@ -108,9 +106,8 @@ dependencies:
       - torchmetrics>=1.0.0
       
       # ----- Pose Estimation (Deep Learning Matchers) -----
-      - kornia>=0.7.0  # LoFTR, SuperPoint, KeyNet, LightGlue
-      - lightglue  # LightGlue matcher (optional, kornia fallback available)
-      # - romatch  # RoMa matcher (optional, install from: pip install git+https://github.com/Parskatt/RoMa.git)
+      - kornia>=0.7.0
+      - git+https://github.com/cvg/LightGlue.git
       
       # ----- ROS bag support (optional) -----
       - rosbags>=0.9.0
