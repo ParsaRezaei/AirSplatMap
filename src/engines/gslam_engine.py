@@ -348,6 +348,12 @@ class GSLAMEngine(BaseGSEngine):
         if not self._available:
             return
         
+        # Check if we have depth data - Gaussian-SLAM requires RGB-D
+        has_depth = any(d is not None for d in self._depth_images)
+        if not has_depth:
+            logger.warning("Gaussian-SLAM requires depth data but none was provided. Skipping SLAM.")
+            return
+        
         try:
             # Create dataset structure for Gaussian-SLAM
             self._create_dataset_structure()
@@ -435,10 +441,18 @@ class GSLAMEngine(BaseGSEngine):
             rgb_list.append(f"{ts:.6f} rgb/{rgb_file}")
             
             # Save depth (convert to mm for TUM format)
+            # Gaussian-SLAM requires depth for all frames
             if depth is not None:
                 depth_file = f"{ts:.6f}.png"
                 depth_mm = (depth * 5000).astype(np.uint16)  # TUM uses 5000 scale
                 cv2.imwrite(str(depth_path / depth_file), depth_mm)
+                depth_list.append(f"{ts:.6f} depth/{depth_file}")
+            else:
+                # Create dummy depth if missing (zeros) - this shouldn't happen if we check earlier
+                logger.warning(f"Frame {i} missing depth, creating placeholder")
+                depth_file = f"{ts:.6f}.png"
+                dummy_depth = np.zeros((self._height, self._width), dtype=np.uint16)
+                cv2.imwrite(str(depth_path / depth_file), dummy_depth)
                 depth_list.append(f"{ts:.6f} depth/{depth_file}")
             
             # Ground truth pose (TUM format: tx ty tz qx qy qz qw)

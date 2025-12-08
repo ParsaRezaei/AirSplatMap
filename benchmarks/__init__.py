@@ -2,36 +2,46 @@
 AirSplatMap Benchmark Suite
 ===========================
 
-Lightweight CLI runners for benchmarking. Core metrics and evaluation
-logic lives in `src/evaluation/`.
+Comprehensive benchmarking for pose estimation, depth estimation, and 
+Gaussian splatting. Core metrics and evaluation logic lives in `src/evaluation/`.
 
 Structure:
     benchmarks/
-        __init__.py       - This file
-        __main__.py       - CLI entry point
-        runners/          - Modular benchmark runners
-            __init__.py
-            pose.py       - Pose estimation benchmarks
-            depth.py      - Depth estimation benchmarks  
-            gs.py         - Gaussian splatting benchmarks
-        visualization/    - Plotting utilities
-        results/          - Output directory
+        __init__.py              - This file
+        run.py                   - Main benchmark runner (CLI entry point)
+        pose/
+            benchmark_pose.py    - Pose estimation benchmark logic
+        depth/
+            benchmark_depth.py   - Depth estimation benchmark logic
+        gaussian_splatting/
+            benchmark_gs.py      - Gaussian splatting benchmark logic
+        visualization/           - Plotting utilities
+        results/<hostname>/      - Output directory (per-machine)
 
 Usage:
-    # Run all benchmarks
-    python -m benchmarks --all
+    # Run all benchmarks on all datasets
+    python -m benchmarks.run --comprehensive --multi-dataset
     
-    # Run specific benchmark
-    python -m benchmarks pose --methods orb sift
-    python -m benchmarks depth --methods midas
-    python -m benchmarks gs --engines graphdeco
+    # Quick benchmark (fewer frames)
+    python -m benchmarks.run --comprehensive --multi-dataset --quick
     
-    # Generate report from existing results
-    python -m benchmarks report --input results/
+    # Specific benchmark types only
+    python -m benchmarks.run --pose --multi-dataset
+    python -m benchmarks.run --depth --multi-dataset
+    python -m benchmarks.run --gs --multi-dataset
+    
+    # Specific datasets
+    python -m benchmarks.run --comprehensive --datasets fr1_desk room0
+
+Results are saved to:
+    benchmarks/results/<hostname>/benchmark_<timestamp>/
+        ├── results.json    - Raw benchmark data
+        ├── report.html     - Interactive HTML report
+        ├── benchmark.log   - Run log
+        └── plots/          - Visualization charts
 
 Core evaluation functions are in src/evaluation/:
     from src.evaluation import compute_image_metrics, compute_trajectory_metrics
-    from src.evaluation import BenchmarkRunner, BenchmarkResult
 """
 
 __version__ = "1.0.0"
@@ -43,7 +53,6 @@ from pathlib import Path
 BENCHMARKS_DIR = Path(__file__).parent
 PROJECT_ROOT = BENCHMARKS_DIR.parent
 RESULTS_DIR = BENCHMARKS_DIR / "results"
-PLOTS_DIR = RESULTS_DIR / "plots"
 DATASETS_DIR = PROJECT_ROOT / "datasets"
 
 
