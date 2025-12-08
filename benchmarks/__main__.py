@@ -29,7 +29,7 @@ BENCHMARKS_DIR = Path(__file__).parent
 PROJECT_ROOT = BENCHMARKS_DIR.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from benchmarks import RESULTS_DIR, PLOTS_DIR, DATASETS_DIR
+from benchmarks import RESULTS_DIR, PLOTS_DIR, DATASETS_DIR, get_host_results_dir
 
 logging.basicConfig(
     level=logging.INFO,
@@ -57,7 +57,9 @@ def cmd_pose(args):
     if args.output:
         benchmark.save_results(args.output)
     elif args.save:
-        benchmark.save_results(RESULTS_DIR / 'pose_benchmark.json')
+        host_dir = get_host_results_dir()
+        host_dir.mkdir(parents=True, exist_ok=True)
+        benchmark.save_results(host_dir / 'pose_benchmark.json')
     
     return results
 
@@ -81,7 +83,9 @@ def cmd_depth(args):
     if args.output:
         benchmark.save_results(args.output)
     elif args.save:
-        benchmark.save_results(RESULTS_DIR / 'depth_benchmark.json')
+        host_dir = get_host_results_dir()
+        host_dir.mkdir(parents=True, exist_ok=True)
+        benchmark.save_results(host_dir / 'depth_benchmark.json')
     
     return results
 
@@ -105,7 +109,9 @@ def cmd_gs(args):
     if args.output:
         benchmark.save_results(args.output)
     elif args.save:
-        benchmark.save_results(RESULTS_DIR / 'gs_benchmark.json')
+        host_dir = get_host_results_dir()
+        host_dir.mkdir(parents=True, exist_ok=True)
+        benchmark.save_results(host_dir / 'gs_benchmark.json')
     
     return results
 
@@ -135,6 +141,10 @@ def cmd_all(args):
         max_frames_gs = args.max_frames or 50
         iterations = args.iterations or 30
     
+    # Create host-specific results directory
+    host_dir = get_host_results_dir()
+    host_dir.mkdir(parents=True, exist_ok=True)
+    
     # Pose benchmark
     if not args.skip_pose:
         logger.info("Running POSE benchmark...")
@@ -142,7 +152,7 @@ def cmd_all(args):
         results['pose'] = pose_bench.run(max_frames=max_frames_pose, skip_frames=2)
         pose_bench.print_table()
         if args.save:
-            pose_bench.save_results(RESULTS_DIR / 'pose_benchmark.json')
+            pose_bench.save_results(host_dir / 'pose_benchmark.json')
     
     # Depth benchmark
     if not args.skip_depth:
@@ -151,7 +161,7 @@ def cmd_all(args):
         results['depth'] = depth_bench.run(max_frames=max_frames_depth, skip_frames=5)
         depth_bench.print_table()
         if args.save:
-            depth_bench.save_results(RESULTS_DIR / 'depth_benchmark.json')
+            depth_bench.save_results(host_dir / 'depth_benchmark.json')
     
     # GS benchmark
     if not args.skip_gs:
@@ -160,7 +170,7 @@ def cmd_all(args):
         results['gs'] = gs_bench.run(max_frames=max_frames_gs, iterations=iterations)
         gs_bench.print_table()
         if args.save:
-            gs_bench.save_results(RESULTS_DIR / 'gs_benchmark.json')
+            gs_bench.save_results(host_dir / 'gs_benchmark.json')
     
     # Generate plots
     if args.plots:
@@ -168,7 +178,7 @@ def cmd_all(args):
     
     print("\n" + "=" * 70)
     print("  BENCHMARK COMPLETE")
-    print(f"  Results: {RESULTS_DIR}")
+    print(f"  Results: {host_dir}")
     print("=" * 70)
     
     return results
@@ -182,10 +192,11 @@ def cmd_report(args):
     
     results = {'pose': [], 'depth': [], 'gs': []}
     
-    # Load existing results
-    pose_file = RESULTS_DIR / 'pose_benchmark.json'
-    depth_file = RESULTS_DIR / 'depth_benchmark.json'
-    gs_file = RESULTS_DIR / 'gs_benchmark.json'
+    # Load existing results from host-specific directory
+    host_dir = get_host_results_dir()
+    pose_file = host_dir / 'pose_benchmark.json'
+    depth_file = host_dir / 'depth_benchmark.json'
+    gs_file = host_dir / 'gs_benchmark.json'
     
     if pose_file.exists():
         with open(pose_file) as f:
@@ -207,7 +218,7 @@ def cmd_report(args):
     
     # Generate markdown report
     report = generate_markdown_report(results)
-    report_path = RESULTS_DIR / 'BENCHMARK_REPORT.md'
+    report_path = host_dir / 'BENCHMARK_REPORT.md'
     with open(report_path, 'w') as f:
         f.write(report)
     print(f"  Saved report to {report_path}")
@@ -221,13 +232,14 @@ def generate_plots(results):
         plot_latency_comparison,
     )
     
-    PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+    host_plots_dir = get_host_results_dir() / "plots"
+    host_plots_dir.mkdir(parents=True, exist_ok=True)
     
     if results.get('pose'):
         pose_dicts = [r.to_dict() if hasattr(r, 'to_dict') else r for r in results['pose']]
         try:
-            plot_pose_metrics_bar(pose_dicts, output_path=PLOTS_DIR / 'pose_comparison')
-            plot_latency_comparison(pose_dicts, benchmark_type='pose', output_path=PLOTS_DIR / 'pose_latency')
+            plot_pose_metrics_bar(pose_dicts, output_path=host_plots_dir / 'pose_comparison')
+            plot_latency_comparison(pose_dicts, benchmark_type='pose', output_path=host_plots_dir / 'pose_latency')
             logger.info("  Generated pose plots")
         except Exception as e:
             logger.warning(f"  Pose plots failed: {e}")
@@ -235,8 +247,8 @@ def generate_plots(results):
     if results.get('depth'):
         depth_dicts = [r.to_dict() if hasattr(r, 'to_dict') else r for r in results['depth']]
         try:
-            plot_depth_metrics_bar(depth_dicts, output_path=PLOTS_DIR / 'depth_comparison')
-            plot_latency_comparison(depth_dicts, benchmark_type='depth', output_path=PLOTS_DIR / 'depth_latency')
+            plot_depth_metrics_bar(depth_dicts, output_path=host_plots_dir / 'depth_comparison')
+            plot_latency_comparison(depth_dicts, benchmark_type='depth', output_path=host_plots_dir / 'depth_latency')
             logger.info("  Generated depth plots")
         except Exception as e:
             logger.warning(f"  Depth plots failed: {e}")

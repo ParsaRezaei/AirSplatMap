@@ -21,6 +21,7 @@ import logging
 import sys
 import time
 import os
+import socket
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, asdict
@@ -1165,9 +1166,11 @@ def main():
     for d in datasets:
         logger.info(f"  - {d.name}")
     
-    # Create timestamped output directory
+    # Create timestamped output directory under hostname folder
+    hostname = socket.gethostname()
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = PROJECT_ROOT / "benchmarks" / "results" / f"benchmark_{timestamp}"
+    host_results_dir = PROJECT_ROOT / "benchmarks" / "results" / hostname
+    output_dir = host_results_dir / f"benchmark_{timestamp}"
     output_dir.mkdir(parents=True, exist_ok=True)
     plots_dir = output_dir / "plots"
     plots_dir.mkdir(exist_ok=True)
@@ -1385,14 +1388,15 @@ def main():
         except Exception as e2:
             logger.error(f"HTML report generation failed: {e2}")
     
-    # Create a latest symlink
-    latest_link = PROJECT_ROOT / "benchmarks" / "results" / "latest"
+    # Create a latest symlink within the hostname folder
+    latest_link = host_results_dir / "latest"
     try:
         if latest_link.exists() or latest_link.is_symlink():
             latest_link.unlink()
         latest_link.symlink_to(output_dir.name)
-    except:
-        pass
+        logger.info(f"Updated latest symlink: {latest_link} -> {output_dir.name}")
+    except Exception as e:
+        logger.warning(f"Could not create latest symlink: {e}")
     
     # List plots
     plots_dir = output_dir / "plots"
@@ -1421,7 +1425,7 @@ def main():
         print(f"       ├── {ddir.name[:20]+'...' if len(ddir.name) > 20 else ddir.name}/  - {dcount} plots")
     if len(dataset_dirs) > 3:
         print(f"       └── ... and {len(dataset_dirs) - 3} more dataset folders")
-    print(f"\n🔗 Latest results: benchmarks/results/latest/")
+    print(f"\n🔗 Latest results: benchmarks/results/{hostname}/latest/")
 
 
 if __name__ == '__main__':

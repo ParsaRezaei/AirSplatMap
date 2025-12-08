@@ -36,6 +36,7 @@ Core evaluation functions are in src/evaluation/:
 
 __version__ = "1.0.0"
 
+import socket
 from pathlib import Path
 
 # Paths
@@ -44,3 +45,36 @@ PROJECT_ROOT = BENCHMARKS_DIR.parent
 RESULTS_DIR = BENCHMARKS_DIR / "results"
 PLOTS_DIR = RESULTS_DIR / "plots"
 DATASETS_DIR = PROJECT_ROOT / "datasets"
+
+
+def get_hostname() -> str:
+    """Get the current hostname."""
+    return socket.gethostname()
+
+
+def get_host_results_dir(hostname: str = None) -> Path:
+    """
+    Get the results directory for a specific hostname.
+    
+    Args:
+        hostname: The hostname to get results for. Defaults to current host.
+    
+    Returns:
+        Path to the hostname-specific results directory.
+    """
+    if hostname is None:
+        hostname = get_hostname()
+    return RESULTS_DIR / hostname
+
+
+def get_host_latest_dir(hostname: str = None) -> Path:
+    """
+    Get the latest results directory for a specific hostname.
+    
+    Args:
+        hostname: The hostname to get results for. Defaults to current host.
+    
+    Returns:
+        Path to the latest symlink for the hostname.
+    """
+    return get_host_results_dir(hostname) / "latest"

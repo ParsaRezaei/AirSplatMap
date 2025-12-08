@@ -62,7 +62,6 @@ venv.bak/
 # -----------------------------------------------------------------------------
 output/
 outputs/
-results/
 logs/
 *.log
 *.ply
@@ -72,6 +71,15 @@ logs/
 *.pickle
 checkpoints/
 .history/
+
+# -----------------------------------------------------------------------------
+# Benchmark results - keep JSON/HTML reports and plots, ignore large render files
+# -----------------------------------------------------------------------------
+# Keep benchmark results structure
+!benchmarks/results/
+benchmarks/results/**/renders/
+benchmarks/results/**/*.ply
+benchmarks/results/**/*.jpg
 
 # -----------------------------------------------------------------------------
 # Datasets (should be downloaded separately)

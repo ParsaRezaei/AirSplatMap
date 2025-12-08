@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AirSplatMap Benchmark Report</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin: 40px; background: #1e293b; color: #e2e8f0; }
+        h1 { color: #818cf8; border-bottom: 2px solid #4f46e5; padding-bottom: 10px; }
+        h2 { color: #94a3b8; margin-top: 30px; }
+        table { border-collapse: collapse; width: 100%; margin: 20px 0; background: #334155; border-radius: 8px; overflow: hidden; }
+        th, td { border: 1px solid #475569; padding: 12px; text-align: left; }
+        th { background-color: #4f46e5; color: white; }
+        tr:hover { background-color: #3f3f5a; }
+        .best { background-color: rgba(16, 185, 129, 0.2) !important; color: #10b981; font-weight: bold; }
+        .timestamp { color: #64748b; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <h1>🚀 AirSplatMap Benchmark Report</h1>
+    <p class="timestamp">Generated: 2025-12-05 21:19:21</p>
+
+    <h2>📍 Pose Estimation</h2>
+    <table>
+        <tr><th>Method</th><th>Dataset</th><th>ATE RMSE (m)</th><th>RPE Trans (m)</th><th>FPS</th></tr>
+        <tr class="best"><td>robust_flow</td><td>room2</td><td>0.0115</td><td>0.0031</td><td>59.6</td></tr>
+        <tr><td>robust_flow</td><td>rgbd_dataset_freiburg2_xyz</td><td>0.0168</td><td>0.0059</td><td>99.8</td></tr>
+        <tr><td>orb</td><td>office1</td><td>0.0175</td><td>0.0176</td><td>61.3</td></tr>
+        <tr><td>orb</td><td>rgbd_dataset_freiburg2_xyz</td><td>0.0195</td><td>0.0110</td><td>32.2</td></tr>
+        <tr><td>sift</td><td>rgbd_dataset_freiburg2_xyz</td><td>0.0200</td><td>0.0080</td><td>18.3</td></tr>
+        <tr><td>orb</td><td>rgbd_dataset_freiburg3_long_office_household</td><td>0.0214</td><td>0.0126</td><td>28.3</td></tr>
+        <tr><td>robust_flow</td><td>rgbd_dataset_freiburg1_xyz</td><td>0.0219</td><td>0.0120</td><td>80.1</td></tr>
+        <tr><td>sift</td><td>rgbd_dataset_freiburg1_xyz</td><td>0.0226</td><td>0.0137</td><td>16.2</td></tr>
+        <tr><td>robust_flow</td><td>room0</td><td>0.0236</td><td>0.0159</td><td>61.6</td></tr>
+        <tr><td>sift</td><td>rgbd_dataset_freiburg1_room</td><td>0.0239</td><td>0.0127</td><td>21.0</td></tr>
+        <tr><td>robust_flow</td><td>rgbd_dataset_freiburg1_room</td><td>0.0251</td><td>0.0211</td><td>28.5</td></tr>
+        <tr><td>sift</td><td>room0</td><td>0.0256</td><td>0.0135</td><td>9.8</td></tr>
+        <tr><td>robust_flow</td><td>rgbd_dataset_freiburg1_desk</td><td>0.0262</td><td>0.0179</td><td>14.5</td></tr>
+        <tr><td>orb</td><td>rgbd_dataset_freiburg1_xyz</td><td>0.0273</td><td>0.0205</td><td>30.4</td></tr>
+        <tr><td>orb</td><td>room0</td><td>0.0283</td><td>0.0227</td><td>28.8</td></tr>
+        <tr><td>robust_flow</td><td>office1</td><td>0.0293</td><td>0.0265</td><td>67.3</td></tr>
+        <tr><td>robust_flow</td><td>fire</td><td>0.0315</td><td>0.0158</td><td>87.3</td></tr>
+        <tr><td>robust_flow</td><td>office0</td><td>0.0327</td><td>0.0116</td><td>61.6</td></tr>
+        <tr><td>sift</td><td>room2</td><td>0.0330</td><td>0.0309</td><td>10.5</td></tr>
+        <tr><td>robust_flow</td><td>chess</td><td>0.0341</td><td>0.0170</td><td>92.0</td></tr>
+        <tr><td>sift</td><td>rgbd_dataset_freiburg3_long_office_household</td><td>0.0359</td><td>0.0221</td><td>17.8</td></tr>
+        <tr><td>orb</td><td>room1</td><td>0.0389</td><td>0.0233</td><td>34.3</td></tr>
+        <tr><td>orb</td><td>rgbd_dataset_freiburg1_desk</td><td>0.0394</td><td>0.0241</td><td>25.4</td></tr>
+        <tr><td>robust_flow</td><td>rgbd_dataset_freiburg1_desk2</td><td>0.0406</td><td>0.0187</td><td>6.7</td></tr>
+        <tr><td>sift</td><td>office0</td><td>0.0420</td><td>0.0318</td><td>10.9</td></tr>
+        <tr><td>robust_flow</td><td>rgbd_dataset_freiburg3_long_office_household</td><td>0.0422</td><td>0.0106</td><td>84.1</td></tr>
+        <tr><td>robust_flow</td><td>room1</td><td>0.0425</td><td>0.0291</td><td>64.0</td></tr>
+        <tr><td>sift</td><td>fire</td><td>0.0442</td><td>0.0237</td><td>17.8</td></tr>
+        <tr><td>sift</td><td>rgbd_dataset_freiburg1_desk</td><td>0.0453</td><td>0.0272</td><td>19.9</td></tr>
+        <tr><td>orb</td><td>office0</td><td>0.0490</td><td>0.0291</td><td>83.9</td></tr>
+        <tr><td>sift</td><td>office1</td><td>0.0492</td><td>0.0345</td><td>11.1</td></tr>
+        <tr><td>orb</td><td>rgbd_dataset_freiburg1_desk2</td><td>0.0504</td><td>0.0201</td><td>63.9</td></tr>
+        <tr><td>orb</td><td>room2</td><td>0.0513</td><td>0.0378</td><td>32.6</td></tr>
+        <tr><td>robust_flow</td><td>office3</td><td>0.0556</td><td>0.0193</td><td>71.3</td></tr>
+        <tr><td>sift</td><td>rgbd_dataset_freiburg1_desk2</td><td>0.0567</td><td>0.0175</td><td>22.1</td></tr>
+        <tr><td>sift</td><td>office2</td><td>0.0572</td><td>0.0273</td><td>9.9</td></tr>
+        <tr><td>robust_flow</td><td>office4</td><td>0.0572</td><td>0.0236</td><td>53.3</td></tr>
+        <tr><td>robust_flow</td><td>office2</td><td>0.0574</td><td>0.0250</td><td>55.8</td></tr>
+        <tr><td>orb</td><td>rgbd_dataset_freiburg2_desk</td><td>0.0623</td><td>0.0393</td><td>27.1</td></tr>
+        <tr><td>robust_flow</td><td>rgbd_dataset_freiburg2_desk</td><td>0.0623</td><td>0.0272</td><td>79.1</td></tr>
+        <tr><td>sift</td><td>rgbd_dataset_freiburg2_desk</td><td>0.0638</td><td>0.0301</td><td>17.6</td></tr>
+        <tr><td>sift</td><td>office4</td><td>0.0659</td><td>0.0283</td><td>10.8</td></tr>
+        <tr><td>orb</td><td>chess</td><td>0.0665</td><td>0.0351</td><td>30.8</td></tr>
+        <tr><td>orb</td><td>rgbd_dataset_freiburg1_room</td><td>0.0691</td><td>0.0245</td><td>33.9</td></tr>
+        <tr><td>sift</td><td>chess</td><td>0.0698</td><td>0.0285</td><td>17.5</td></tr>
+        <tr><td>sift</td><td>room1</td><td>0.0703</td><td>0.0305</td><td>10.3</td></tr>
+        <tr><td>orb</td><td>office4</td><td>0.0750</td><td>0.0205</td><td>36.2</td></tr>
+        <tr><td>orb</td><td>office3</td><td>0.0793</td><td>0.0602</td><td>28.1</td></tr>
+        <tr><td>sift</td><td>office3</td><td>0.0807</td><td>0.0495</td><td>10.1</td></tr>
+        <tr><td>orb</td><td>fire</td><td>0.0903</td><td>0.0527</td><td>32.0</td></tr>
+        <tr><td>orb</td><td>office2</td><td>0.0930</td><td>0.0509</td><td>28.6</td></tr>
+    </table>
+
+    <h2>📏 Depth Estimation</h2>
+    <table>
+        <tr><th>Method</th><th>Dataset</th><th>AbsRel</th><th>RMSE</th><th>δ&lt;1.25</th><th>FPS</th></tr>
+        <tr class="best"><td>midas</td><td>room1</td><td>0.0688</td><td>0.1931</td><td>98.1%</td><td>5.7</td></tr>
+        <tr><td>midas</td><td>fire</td><td>0.0838</td><td>0.1696</td><td>94.9%</td><td>7.8</td></tr>
+        <tr><td>midas</td><td>rgbd_dataset_freiburg1_room</td><td>0.0846</td><td>0.1782</td><td>93.7%</td><td>8.7</td></tr>
+        <tr><td>midas</td><td>rgbd_dataset_freiburg2_xyz</td><td>0.0869</td><td>0.3257</td><td>93.8%</td><td>9.2</td></tr>
+        <tr><td>midas</td><td>room2</td><td>0.0918</td><td>0.2437</td><td>91.7%</td><td>6.9</td></tr>
+        <tr><td>midas</td><td>rgbd_dataset_freiburg3_long_office_household</td><td>0.0925</td><td>0.6302</td><td>90.5%</td><td>9.3</td></tr>
+        <tr><td>midas</td><td>office2</td><td>0.0992</td><td>0.3573</td><td>90.5%</td><td>7.0</td></tr>
+        <tr><td>midas</td><td>rgbd_dataset_freiburg1_desk</td><td>0.1290</td><td>0.2546</td><td>85.2%</td><td>8.0</td></tr>
+        <tr><td>midas</td><td>rgbd_dataset_freiburg2_desk</td><td>0.1317</td><td>0.4890</td><td>83.6%</td><td>9.4</td></tr>
+        <tr><td>midas</td><td>office1</td><td>0.1317</td><td>0.2676</td><td>83.1%</td><td>6.9</td></tr>
+        <tr><td>midas</td><td>rgbd_dataset_freiburg1_xyz</td><td>0.1343</td><td>0.2176</td><td>82.5%</td><td>9.4</td></tr>
+        <tr><td>midas</td><td>chess</td><td>0.1505</td><td>0.4689</td><td>77.6%</td><td>7.8</td></tr>
+        <tr><td>midas</td><td>rgbd_dataset_freiburg1_desk2</td><td>0.1697</td><td>0.2803</td><td>72.5%</td><td>9.5</td></tr>
+        <tr><td>midas</td><td>room0</td><td>0.1719</td><td>0.4863</td><td>76.8%</td><td>5.9</td></tr>
+        <tr><td>midas</td><td>office3</td><td>0.1804</td><td>0.5614</td><td>67.6%</td><td>6.8</td></tr>
+        <tr><td>midas</td><td>office0</td><td>0.1842</td><td>0.4428</td><td>65.2%</td><td>6.0</td></tr>
+        <tr><td>midas</td><td>office4</td><td>0.1928</td><td>0.7029</td><td>67.7%</td><td>6.6</td></tr>
+        <tr><td>depth_anything_v2</td><td>rgbd_dataset_freiburg3_long_office_household</td><td>0.3307</td><td>1.4256</td><td>52.7%</td><td>12.2</td></tr>
+        <tr><td>depth_anything_v2</td><td>rgbd_dataset_freiburg1_xyz</td><td>0.3669</td><td>0.6061</td><td>32.3%</td><td>12.7</td></tr>
+        <tr><td>depth_anything_v2</td><td>rgbd_dataset_freiburg2_xyz</td><td>0.3937</td><td>1.1639</td><td>40.9%</td><td>12.2</td></tr>
+        <tr><td>depth_anything_v2</td><td>rgbd_dataset_freiburg2_desk</td><td>0.4999</td><td>1.4876</td><td>29.7%</td><td>12.8</td></tr>
+        <tr><td>depth_anything_v2</td><td>chess</td><td>0.5168</td><td>1.6449</td><td>34.1%</td><td>9.7</td></tr>
+        <tr><td>depth_anything_v2</td><td>rgbd_dataset_freiburg1_desk</td><td>0.5281</td><td>0.9531</td><td>26.6%</td><td>5.8</td></tr>
+        <tr><td>depth_anything_v2</td><td>rgbd_dataset_freiburg1_desk2</td><td>0.5762</td><td>0.9227</td><td>30.5%</td><td>12.1</td></tr>
+        <tr><td>depth_anything_v2</td><td>rgbd_dataset_freiburg1_room</td><td>0.6225</td><td>0.9334</td><td>22.7%</td><td>12.4</td></tr>
+        <tr><td>depth_anything_v2</td><td>fire</td><td>0.6237</td><td>1.1303</td><td>22.6%</td><td>11.8</td></tr>
+        <tr><td>depth_anything_v2</td><td>office2</td><td>0.7111</td><td>2.2874</td><td>16.1%</td><td>7.5</td></tr>
+        <tr><td>depth_anything_v2</td><td>room1</td><td>0.7320</td><td>1.9112</td><td>19.9%</td><td>7.2</td></tr>
+        <tr><td>depth_anything_v2</td><td>office0</td><td>0.8022</td><td>1.7963</td><td>22.9%</td><td>7.3</td></tr>
+        <tr><td>depth_anything_v2</td><td>room2</td><td>0.9224</td><td>2.2658</td><td>21.3%</td><td>7.3</td></tr>
+        <tr><td>depth_anything_v2</td><td>office1</td><td>0.9786</td><td>1.6710</td><td>17.7%</td><td>7.4</td></tr>
+        <tr><td>depth_anything_v2</td><td>office4</td><td>1.0375</td><td>3.4372</td><td>30.1%</td><td>7.3</td></tr>
+        <tr><td>depth_anything_v2</td><td>office3</td><td>1.0636</td><td>2.7940</td><td>11.9%</td><td>7.3</td></tr>
+        <tr><td>depth_anything_v2</td><td>room0</td><td>1.3433</td><td>3.3706</td><td>9.0%</td><td>6.3</td></tr>
+    </table>
+
+    <h2>🎨 Gaussian Splatting</h2>
+    <table>
+        <tr><th>Engine</th><th>Dataset</th><th>PSNR (dB)</th><th>SSIM</th><th>Gaussians</th><th>FPS</th></tr>
+        <tr class="best"><td>gsplat</td><td>office0</td><td>37.74</td><td>0.9715</td><td>114,571</td><td>30.6</td></tr>
+        <tr><td>gsplat</td><td>office1</td><td>36.10</td><td>0.9599</td><td>114,749</td><td>30.0</td></tr>
+        <tr><td>graphdeco</td><td>office0</td><td>32.53</td><td>0.9312</td><td>89,113</td><td>12.7</td></tr>
+        <tr><td>graphdeco</td><td>office1</td><td>32.41</td><td>0.9392</td><td>89,249</td><td>13.1</td></tr>
+        <tr><td>gsplat</td><td>office3</td><td>31.25</td><td>0.9385</td><td>114,744</td><td>28.3</td></tr>
+        <tr><td>gsplat</td><td>room2</td><td>30.55</td><td>0.9058</td><td>114,738</td><td>28.1</td></tr>
+        <tr><td>gsplat</td><td>office4</td><td>29.70</td><td>0.9266</td><td>114,750</td><td>31.2</td></tr>
+        <tr><td>gsplat</td><td>room1</td><td>29.06</td><td>0.8996</td><td>114,750</td><td>30.9</td></tr>
+        <tr><td>gsplat</td><td>office2</td><td>28.84</td><td>0.8942</td><td>109,143</td><td>31.2</td></tr>
+        <tr><td>graphdeco</td><td>room2</td><td>27.95</td><td>0.8583</td><td>89,244</td><td>11.9</td></tr>
+        <tr><td>graphdeco</td><td>room1</td><td>27.21</td><td>0.8807</td><td>89,250</td><td>12.8</td></tr>
+        <tr><td>graphdeco</td><td>office4</td><td>26.94</td><td>0.8897</td><td>89,250</td><td>12.2</td></tr>
+        <tr><td>graphdeco</td><td>office3</td><td>26.36</td><td>0.8855</td><td>89,245</td><td>11.6</td></tr>
+        <tr><td>graphdeco</td><td>room0</td><td>25.98</td><td>0.8721</td><td>89,250</td><td>12.0</td></tr>
+        <tr><td>gsplat</td><td>room0</td><td>25.72</td><td>0.8942</td><td>114,750</td><td>30.5</td></tr>
+        <tr><td>graphdeco</td><td>office2</td><td>24.50</td><td>0.8146</td><td>84,921</td><td>12.4</td></tr>
+        <tr><td>gsplat</td><td>fire</td><td>22.86</td><td>0.6403</td><td>39,440</td><td>56.7</td></tr>
+        <tr><td>graphdeco</td><td>fire</td><td>21.47</td><td>0.5716</td><td>30,630</td><td>26.1</td></tr>
+        <tr><td>graphdeco</td><td>rgbd_dataset_freiburg2_xyz</td><td>20.90</td><td>0.7444</td><td>24,323</td><td>28.9</td></tr>
+        <tr><td>graphdeco</td><td>chess</td><td>20.88</td><td>0.6633</td><td>25,948</td><td>27.6</td></tr>
+        <tr><td>graphdeco</td><td>rgbd_dataset_freiburg3_long_office_household</td><td>20.82</td><td>0.7678</td><td>27,464</td><td>27.6</td></tr>
+        <tr><td>gsplat</td><td>chess</td><td>20.76</td><td>0.7390</td><td>33,360</td><td>61.7</td></tr>
+        <tr><td>gsplat</td><td>rgbd_dataset_freiburg1_xyz</td><td>19.64</td><td>0.6674</td><td>32,335</td><td>59.2</td></tr>
+        <tr><td>gsplat</td><td>rgbd_dataset_freiburg3_long_office_household</td><td>18.55</td><td>0.8252</td><td>35,376</td><td>58.7</td></tr>
+        <tr><td>graphdeco</td><td>rgbd_dataset_freiburg1_xyz</td><td>18.26</td><td>0.6362</td><td>25,253</td><td>28.3</td></tr>
+        <tr><td>graphdeco</td><td>rgbd_dataset_freiburg2_desk</td><td>17.71</td><td>0.6399</td><td>22,522</td><td>26.5</td></tr>
+        <tr><td>gsplat</td><td>rgbd_dataset_freiburg1_room</td><td>16.75</td><td>0.6918</td><td>32,908</td><td>61.5</td></tr>
+        <tr><td>graphdeco</td><td>rgbd_dataset_freiburg1_room</td><td>16.64</td><td>0.6411</td><td>25,331</td><td>30.9</td></tr>
+        <tr><td>gsplat</td><td>rgbd_dataset_freiburg2_xyz</td><td>16.45</td><td>0.7144</td><td>31,176</td><td>61.8</td></tr>
+        <tr><td>gsplat</td><td>rgbd_dataset_freiburg1_desk</td><td>14.30</td><td>0.6479</td><td>23,886</td><td>38.1</td></tr>
+        <tr><td>graphdeco</td><td>rgbd_dataset_freiburg1_desk2</td><td>13.02</td><td>0.6591</td><td>26,342</td><td>31.9</td></tr>
+        <tr><td>graphdeco</td><td>rgbd_dataset_freiburg1_desk</td><td>12.77</td><td>0.5939</td><td>23,944</td><td>37.3</td></tr>
+        <tr><td>gsplat</td><td>rgbd_dataset_freiburg2_desk</td><td>12.75</td><td>0.5763</td><td>28,921</td><td>62.3</td></tr>
+        <tr><td>gsplat</td><td>rgbd_dataset_freiburg1_desk2</td><td>11.01</td><td>0.5732</td><td>33,082</td><td>62.1</td></tr>
+    </table>
+
+    <h2>🔄 Combined Pipeline</h2>
+    <table>
+        <tr><th>Configuration</th><th>PSNR (dB)</th><th>SSIM</th><th>Pose Error</th><th>Depth Error</th></tr>
+        <tr class="best"><td>GT_pose_midas_depth</td><td>21.30</td><td>0.6981</td><td>GT</td><td>0.1473</td></tr>
+        <tr><td>GT_pose_GT_depth</td><td>20.81</td><td>0.7122</td><td>GT</td><td>GT</td></tr>
+        <tr><td>GT_pose_GT_depth</td><td>20.68</td><td>0.6943</td><td>GT</td><td>GT</td></tr>
+        <tr><td>GT_pose_midas_depth</td><td>19.87</td><td>0.6793</td><td>GT</td><td>0.1443</td></tr>
+        <tr><td>GT_pose_depth_anything_v2_depth</td><td>19.22</td><td>0.6454</td><td>GT</td><td>0.3926</td></tr>
+        <tr><td>GT_pose_GT_depth</td><td>18.06</td><td>0.6079</td><td>GT</td><td>GT</td></tr>
+        <tr><td>GT_pose_midas_depth</td><td>17.87</td><td>0.5876</td><td>GT</td><td>GT</td></tr>
+        <tr><td>GT_pose_GT_depth</td><td>17.85</td><td>0.5780</td><td>GT</td><td>GT</td></tr>
+        <tr><td>GT_pose_midas_depth</td><td>17.81</td><td>0.5617</td><td>GT</td><td>0.1538</td></tr>
+        <tr><td>GT_pose_depth_anything_v2_depth</td><td>17.61</td><td>0.6434</td><td>GT</td><td>0.3279</td></tr>
+        <tr><td>GT_pose_midas_depth</td><td>17.19</td><td>0.6374</td><td>GT</td><td>0.1434</td></tr>
+        <tr><td>GT_pose_midas_depth</td><td>17.05</td><td>0.6090</td><td>GT</td><td>0.1457</td></tr>
+        <tr><td>GT_pose_GT_depth</td><td>16.35</td><td>0.6087</td><td>GT</td><td>GT</td></tr>
+        <tr><td>GT_pose_depth_anything_v2_depth</td><td>15.21</td><td>0.6670</td><td>GT</td><td>0.5620</td></tr>
+        <tr><td>GT_pose_depth_anything_v2_depth</td><td>15.03</td><td>0.5076</td><td>GT</td><td>0.4950</td></tr>
+        <tr><td>GT_pose_depth_anything_v2_depth</td><td>14.88</td><td>0.5148</td><td>GT</td><td>0.3688</td></tr>
+        <tr><td>GT_pose_midas_depth</td><td>14.79</td><td>0.6613</td><td>GT</td><td>GT</td></tr>
+        <tr><td>GT_pose_depth_anything_v2_depth</td><td>13.91</td><td>0.5506</td><td>GT</td><td>0.5172</td></tr>
+        <tr><td>GT_pose_depth_anything_v2_depth</td><td>13.67</td><td>0.5632</td><td>GT</td><td>0.6495</td></tr>
+        <tr><td>sift_pose_midas_depth</td><td>13.45</td><td>0.5291</td><td>8.1521m</td><td>0.1443</td></tr>
+    </table>
+
+</body>
+</html>
