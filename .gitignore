@@ -171,10 +171,3 @@ coverage.xml
 # -----------------------------------------------------------------------------
 docs/_build/
 site/
-
-# -----------------------------------------------------------------------------
-# Specific to this project - keep these tracked
-# -----------------------------------------------------------------------------
-# Don't ignore these (use ! to negate)
-!output/BENCHMARK_REPORT.md
-!output/benchmark_results.json
