@@ -2,16 +2,12 @@
 Pose Estimation Benchmarks
 ==========================
 
-Legacy benchmark module. Use `benchmarks.runners.pose` for the new modular API.
+Benchmark pose estimation methods against ground truth trajectories.
 
 For CLI usage:
-    python -m benchmarks pose --methods orb sift
+    python -m benchmarks.run --pose --multi-dataset
 """
 
-# Re-export from runners for backward compatibility
-from benchmarks.runners.pose import PoseBenchmark, PoseResult
-
-# Legacy exports from old benchmark_pose.py
 from .benchmark_pose import (
     run_benchmark,
     find_tum_datasets,
@@ -20,6 +16,5 @@ from .benchmark_pose import (
 )
 
 __all__ = [
-    'PoseBenchmark', 'PoseResult',
     'run_benchmark', 'find_tum_datasets', 'print_results_table', 'BenchmarkResult',
 ]
