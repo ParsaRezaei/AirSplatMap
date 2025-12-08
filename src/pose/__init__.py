@@ -1099,10 +1099,24 @@ class LightGluePoseEstimator(BasePoseEstimator):
         kpts1 = feats1['keypoints'].cpu().numpy()
         matches = matches01['matches'].cpu().numpy()
         
-        # Filter valid matches
-        valid = matches > -1
-        mkpts0 = kpts0[valid]
-        mkpts1 = kpts1[matches[valid]]
+        # matches is [M, 2] where each row is [idx0, idx1]
+        if len(matches) == 0:
+            return np.zeros((0, 2)), np.zeros((0, 2))
+        
+        idx0 = matches[:, 0]  # Indices into kpts0
+        idx1 = matches[:, 1]  # Indices into kpts1
+        
+        # Filter valid indices (within bounds)
+        valid = (idx0 >= 0) & (idx0 < len(kpts0)) & (idx1 >= 0) & (idx1 < len(kpts1))
+        
+        if not np.any(valid):
+            return np.zeros((0, 2)), np.zeros((0, 2))
+        
+        idx0 = idx0[valid]
+        idx1 = idx1[valid]
+        
+        mkpts0 = kpts0[idx0]
+        mkpts1 = kpts1[idx1]
         
         return mkpts0, mkpts1
     
@@ -1216,9 +1230,13 @@ class LightGluePoseEstimator(BasePoseEstimator):
                 confidence=0.0,
             )
         
-        # Scale points back to original resolution
-        mkpts0 = mkpts0 / scale
-        mkpts1 = mkpts1 / scale
+        # Scale points back to original resolution and ensure correct format for OpenCV
+        mkpts0 = (mkpts0 / scale).astype(np.float64)
+        mkpts1 = (mkpts1 / scale).astype(np.float64)
+        
+        # Ensure points are contiguous and 2D
+        mkpts0 = np.ascontiguousarray(mkpts0.reshape(-1, 2))
+        mkpts1 = np.ascontiguousarray(mkpts1.reshape(-1, 2))
         
         # Estimate essential matrix
         E, mask = cv2.findEssentialMat(mkpts0, mkpts1, self._K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
