@@ -41,6 +41,177 @@ class FeatureType(Enum):
     ORB = "orb"
 
 
+class MadgwickFilter:
+    """
+    Madgwick AHRS filter for IMU orientation estimation.
+    
+    Fuses accelerometer and gyroscope to estimate orientation as a quaternion.
+    Provides stable orientation even with noisy sensors.
+    
+    Reference: Madgwick, S. O. H., Harrison, A. J. L., & Vaidyanathan, R. (2011).
+    "Estimation of IMU and MARG orientation using a gradient descent algorithm."
+    """
+    
+    def __init__(self, beta: float = 0.1, sample_freq: float = 100.0):
+        """
+        Initialize Madgwick filter.
+        
+        Args:
+            beta: Filter gain (higher = faster convergence but more noise)
+                  Typical values: 0.01-0.5
+            sample_freq: Expected sample frequency in Hz
+        """
+        self.beta = beta
+        self.sample_freq = sample_freq
+        
+        # Quaternion [w, x, y, z] - starts with identity (no rotation)
+        self.q = np.array([1.0, 0.0, 0.0, 0.0])
+        
+        # Previous timestamp for dt calculation
+        self._prev_time: Optional[float] = None
+        
+        # Gyro bias estimate (rad/s)
+        self._gyro_bias = np.zeros(3)
+        self._gyro_samples: List[np.ndarray] = []
+        self._calibrated = False
+    
+    def reset(self):
+        """Reset filter state."""
+        self.q = np.array([1.0, 0.0, 0.0, 0.0])
+        self._prev_time = None
+        self._calibrated = False
+        self._gyro_samples = []
+        self._gyro_bias = np.zeros(3)
+    
+    def calibrate_gyro(self, gyro: np.ndarray, num_samples: int = 50) -> bool:
+        """Calibrate gyro bias when stationary. Returns True when done."""
+        if self._calibrated:
+            return True
+        
+        self._gyro_samples.append(gyro.copy())
+        if len(self._gyro_samples) >= num_samples:
+            self._gyro_bias = np.mean(self._gyro_samples, axis=0)
+            self._calibrated = True
+            return True
+        return False
+    
+    def update(self, gyro: np.ndarray, accel: np.ndarray, timestamp: float) -> np.ndarray:
+        """
+        Update orientation estimate with new IMU data.
+        
+        Args:
+            gyro: Gyroscope reading [gx, gy, gz] in rad/s
+            accel: Accelerometer reading [ax, ay, az] in m/s²
+            timestamp: Current timestamp in seconds
+            
+        Returns:
+            Updated quaternion [w, x, y, z]
+        """
+        # Calculate dt
+        if self._prev_time is None:
+            self._prev_time = timestamp
+            return self.q.copy()
+        
+        dt = timestamp - self._prev_time
+        dt = np.clip(dt, 0.001, 0.1)  # Clamp to reasonable range
+        self._prev_time = timestamp
+        
+        # Remove gyro bias
+        gyro = gyro - self._gyro_bias
+        
+        q = self.q
+        
+        # Normalize accelerometer
+        accel_norm = np.linalg.norm(accel)
+        if accel_norm < 1e-6:
+            # No valid accel, use gyro only
+            q_dot = 0.5 * self._quat_multiply(q, np.array([0, gyro[0], gyro[1], gyro[2]]))
+            self.q = q + q_dot * dt
+            self.q = self.q / np.linalg.norm(self.q)
+            return self.q.copy()
+        
+        accel = accel / accel_norm
+        
+        # Gradient descent step
+        # Objective function: align accelerometer with gravity in body frame
+        # Expected gravity in body frame: rotate [0, 0, 1] by q^-1
+        
+        # Auxiliary variables
+        _2q0, _2q1, _2q2, _2q3 = 2.0 * q
+        _4q0, _4q1, _4q2 = 4.0 * q[0], 4.0 * q[1], 4.0 * q[2]
+        _8q1, _8q2 = 8.0 * q[1], 8.0 * q[2]
+        q0q0, q1q1, q2q2, q3q3 = q[0]**2, q[1]**2, q[2]**2, q[3]**2
+        
+        # Gradient (simplified for gravity-only reference)
+        f = np.array([
+            2.0 * (q[1]*q[3] - q[0]*q[2]) - accel[0],
+            2.0 * (q[0]*q[1] + q[2]*q[3]) - accel[1],
+            2.0 * (0.5 - q[1]**2 - q[2]**2) - accel[2]
+        ])
+        
+        J = np.array([
+            [-_2q2, _2q3, -_2q0, _2q1],
+            [_2q1, _2q0, _2q3, _2q2],
+            [0, -_4q1, -_4q2, 0]
+        ])
+        
+        step = J.T @ f
+        step_norm = np.linalg.norm(step)
+        if step_norm > 1e-6:
+            step = step / step_norm
+        
+        # Gyroscope quaternion derivative
+        q_dot_gyro = 0.5 * self._quat_multiply(q, np.array([0, gyro[0], gyro[1], gyro[2]]))
+        
+        # Fused rate of change
+        q_dot = q_dot_gyro - self.beta * step
+        
+        # Integrate
+        self.q = q + q_dot * dt
+        self.q = self.q / np.linalg.norm(self.q)
+        
+        return self.q.copy()
+    
+    def _quat_multiply(self, q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
+        """Quaternion multiplication."""
+        w1, x1, y1, z1 = q1
+        w2, x2, y2, z2 = q2
+        return np.array([
+            w1*w2 - x1*x2 - y1*y2 - z1*z2,
+            w1*x2 + x1*w2 + y1*z2 - z1*y2,
+            w1*y2 - x1*z2 + y1*w2 + z1*x2,
+            w1*z2 + x1*y2 - y1*x2 + z1*w2
+        ])
+    
+    def get_rotation_matrix(self) -> np.ndarray:
+        """Convert current quaternion to 3x3 rotation matrix."""
+        q = self.q
+        w, x, y, z = q
+        
+        # Rotation matrix from quaternion
+        return np.array([
+            [1 - 2*(y**2 + z**2), 2*(x*y - w*z), 2*(x*z + w*y)],
+            [2*(x*y + w*z), 1 - 2*(x**2 + z**2), 2*(y*z - w*x)],
+            [2*(x*z - w*y), 2*(y*z + w*x), 1 - 2*(x**2 + y**2)]
+        ])
+    
+    def get_euler_angles(self) -> Tuple[float, float, float]:
+        """Get roll, pitch, yaw in radians."""
+        R = self.get_rotation_matrix()
+        
+        # Extract Euler angles (ZYX convention)
+        pitch = np.arcsin(-R[2, 0])
+        
+        if np.abs(np.cos(pitch)) > 1e-6:
+            roll = np.arctan2(R[2, 1], R[2, 2])
+            yaw = np.arctan2(R[1, 0], R[0, 0])
+        else:
+            roll = np.arctan2(-R[1, 2], R[1, 1])
+            yaw = 0.0
+        
+        return roll, pitch, yaw
+
+
 @dataclass
 class VIOResult:
     """Result from VIO processing."""
@@ -248,6 +419,8 @@ class StereoVIO:
         gravity_samples: int = 30,
         pose_smoothing: float = 0.3,
         motion_threshold: float = 0.8,  # pixel motion for stationary detection
+        max_translation: float = 0.1,  # max meters per frame (reject larger)
+        max_rotation: float = 0.15,  # max radians per frame (~8.5 degrees)
     ):
         """
         Initialize Stereo VIO.
@@ -261,7 +434,11 @@ class StereoVIO:
             gravity_samples: Samples needed for gravity calibration
             pose_smoothing: EMA smoothing factor (0=none, 1=max)
             motion_threshold: Pixel motion threshold for stationary detection
+            max_translation: Max translation per frame in meters (outlier rejection)
+            max_rotation: Max rotation per frame in radians (outlier rejection)
         """
+        self._max_translation = max_translation
+        self._max_rotation = max_rotation
         self.baseline = baseline
         self.max_features = max_features
         self.min_features = min_features
@@ -297,8 +474,17 @@ class StereoVIO:
         # Gravity estimation (optional)
         self._gravity_estimator = GravityEstimator(num_samples=gravity_samples) if use_imu else None
         
-        # Pose filtering
-        self._pose_filter = PoseFilter(smoothing=pose_smoothing)
+        # Madgwick filter for IMU orientation fusion
+        self._madgwick = MadgwickFilter(beta=0.1, sample_freq=100.0) if use_imu else None
+        self._imu_orientation: Optional[np.ndarray] = None  # 3x3 rotation from IMU
+        self._imu_initialized = False
+        
+        # Pose filtering with outlier rejection
+        self._pose_filter = PoseFilter(
+            smoothing=pose_smoothing,
+            max_translation=max_translation,
+            max_rotation=max_rotation,
+        )
         
         # Motion history for stationary detection
         self._motion_history: deque = deque(maxlen=10)
@@ -538,21 +724,31 @@ class StereoVIO:
         if self._prev_time is not None:
             dt = max(0.001, min(0.5, timestamp - self._prev_time))
         
-        # Process IMU data (accelerometer)
-        if self.use_imu and self._gravity_estimator is not None and accel is not None:
-            calibration_done = self._gravity_estimator.add_sample(accel)
+        # Process IMU data (accelerometer and gyroscope)
+        if self.use_imu and accel is not None and gyro is not None:
+            # Update gravity estimator
+            if self._gravity_estimator is not None:
+                calibration_done = self._gravity_estimator.add_sample(accel)
+                
+                # During gravity calibration, also calibrate gyro and return early
+                if not calibration_done:
+                    if self._madgwick is not None:
+                        self._madgwick.calibrate_gyro(gyro)
+                    proc_time = (time.perf_counter() - t_start) * 1000
+                    return VIOResult(
+                        pose=self._pose.copy(),
+                        velocity=self._velocity.copy(),
+                        tracking_status="calibrating",
+                        num_inliers=0,
+                        confidence=len(self._gravity_estimator._samples) / self._gravity_estimator._num_samples,
+                        processing_time_ms=proc_time,
+                    )
             
-            # During calibration phase, return early
-            if not calibration_done:
-                proc_time = (time.perf_counter() - t_start) * 1000
-                return VIOResult(
-                    pose=self._pose.copy(),
-                    velocity=self._velocity.copy(),
-                    tracking_status="calibrating",
-                    num_inliers=0,
-                    confidence=len(self._gravity_estimator._samples) / self._gravity_estimator._num_samples,
-                    processing_time_ms=proc_time,
-                )
+            # Update Madgwick filter for IMU orientation
+            if self._madgwick is not None:
+                self._madgwick.update(gyro, accel, timestamp)
+                self._imu_orientation = self._madgwick.get_rotation_matrix()
+                self._imu_initialized = True
         
         # Initialize on first frame
         if not self._initialized:
@@ -635,27 +831,15 @@ class StereoVIO:
         prev_3d = prev_3d[valid]
         curr_2d = curr_2d[valid]
         
-        # Check if stationary (skip pose update to prevent drift)
-        if self._is_stationary(prev_2d, curr_2d):
-            self._prev_gray = left_gray
-            self._prev_time = timestamp
-            
-            # Re-detect for next frame
-            new_pts = self._detect_features(left_gray)
-            new_pts, new_3d = self._triangulate_stereo(left_gray, right_gray, new_pts)
-            if len(new_pts) >= self.min_features:
-                self._prev_points = new_pts
-                self._prev_points_3d = new_3d
-            
-            proc_time = (time.perf_counter() - t_start) * 1000
-            return VIOResult(
-                pose=self._pose.copy(),
-                velocity=np.zeros(3),
-                tracking_status="ok",
-                num_inliers=len(self._prev_points) if self._prev_points is not None else 0,
-                confidence=0.9,
-                processing_time_ms=proc_time,
-            )
+        # NOTE: Stationary detection removed - it was causing pose to freeze
+        # The issue was that after re-detecting features, they naturally show
+        # low motion on the next frame, creating a feedback loop.
+        # Instead, we rely on PnP RANSAC to reject bad poses.
+        
+        # Check IMU for stationary (more reliable than visual)
+        imu_stationary = False
+        if self.use_imu and self._gravity_estimator is not None and accel is not None:
+            imu_stationary = self._gravity_estimator.is_stationary_from_accel(threshold=0.2)
         
         # Estimate motion with PnP
         T_curr_prev, num_inliers = self._estimate_motion_pnp(prev_3d, curr_2d)
@@ -677,6 +861,38 @@ class StereoVIO:
         # Update pose
         T_rel = np.linalg.inv(T_curr_prev)
         new_pose = self._pose @ T_rel
+        
+        # If IMU says stationary but vision says moving, reduce motion (IMU is more reliable)
+        if imu_stationary:
+            # Reduce translation significantly when IMU indicates stationary
+            T_rel[:3, 3] *= 0.1
+            new_pose = self._pose @ T_rel
+        
+        # Fuse IMU orientation with visual odometry
+        # IMU provides stable absolute orientation, VO provides translation
+        if self._imu_initialized and self._imu_orientation is not None:
+            # Get translation from visual odometry
+            vo_translation = new_pose[:3, 3]
+            
+            # Use IMU orientation (more stable for roll/pitch)
+            # But blend with VO rotation to preserve yaw from VO (IMU yaw drifts)
+            imu_R = self._imu_orientation
+            vo_R = new_pose[:3, :3]
+            
+            # Extract roll/pitch from IMU, yaw from VO
+            # IMU roll/pitch is reliable (gravity reference), yaw drifts
+            # VO yaw is reliable (features), roll/pitch can drift
+            
+            # Blend factor: higher = more IMU influence on roll/pitch
+            imu_blend = 0.7
+            
+            # Simple weighted average in rotation space via Rodrigues
+            # This is approximate but works for small differences
+            blended_R = self._blend_rotations(vo_R, imu_R, imu_blend)
+            
+            # Build fused pose
+            new_pose[:3, :3] = blended_R
+            new_pose[:3, 3] = vo_translation
         
         # Apply filtering
         filtered_pose, accepted = self._pose_filter.filter(new_pose)
@@ -712,6 +928,53 @@ class StereoVIO:
             confidence=confidence,
             processing_time_ms=proc_time,
         )
+    
+    def _blend_rotations(self, R1: np.ndarray, R2: np.ndarray, alpha: float) -> np.ndarray:
+        """
+        Blend two rotation matrices using SLERP-like interpolation.
+        
+        Args:
+            R1: First rotation matrix (from visual odometry)
+            R2: Second rotation matrix (from IMU)
+            alpha: Blend factor (0 = R1, 1 = R2)
+            
+        Returns:
+            Blended rotation matrix
+        """
+        # Convert to axis-angle representation via Rodrigues
+        def rot_to_axis_angle(R):
+            angle = np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1))
+            if angle < 1e-6:
+                return np.zeros(3)
+            axis = np.array([
+                R[2, 1] - R[1, 2],
+                R[0, 2] - R[2, 0],
+                R[1, 0] - R[0, 1]
+            ]) / (2 * np.sin(angle))
+            return axis * angle
+        
+        def axis_angle_to_rot(aa):
+            angle = np.linalg.norm(aa)
+            if angle < 1e-6:
+                return np.eye(3)
+            axis = aa / angle
+            K = np.array([
+                [0, -axis[2], axis[1]],
+                [axis[2], 0, -axis[0]],
+                [-axis[1], axis[0], 0]
+            ])
+            return np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+        
+        # Get relative rotation R1 -> R2
+        R_rel = R2 @ R1.T
+        aa_rel = rot_to_axis_angle(R_rel)
+        
+        # Interpolate the relative rotation
+        aa_interp = alpha * aa_rel
+        R_interp = axis_angle_to_rot(aa_interp)
+        
+        # Apply interpolated rotation to R1
+        return R_interp @ R1
     
     def get_pose(self) -> np.ndarray:
         """Get current camera-to-world pose in OpenCV convention."""

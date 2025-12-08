@@ -956,16 +956,18 @@ class LiveVideoSource(FrameSource):
 
         
         # Auto-detect server URLs from HTTP stream source
-        if (self._use_server_pose or self._use_server_depth) and self._pose_server_url is None:
+        if (self._use_server_pose or self._use_server_depth):
             if isinstance(source, str) and source.startswith('http'):
                 # Extract base URL: http://localhost:8554/stream -> http://127.0.0.1:8554
                 base_url = source.rsplit('/', 1)[0]
                 # CRITICAL: Replace localhost with 127.0.0.1 to avoid Windows DNS delay
                 base_url = base_url.replace('localhost', '127.0.0.1')
-                self._pose_server_url = f"{base_url}/pose"
+                # Set URLs if not already set
+                if self._pose_server_url is None:
+                    self._pose_server_url = f"{base_url}/pose"
                 self._depth_server_url = f"{base_url}/depth"
                 self._intrinsics_url = f"{base_url}/intrinsics"
-                self._frame_server_url = f"{base_url}/frame"  # Synchronized bundle
+                self._frame_server_url = f"{base_url}/frame"  # Synchronized bundle - always set
                 if self._use_server_pose:
                     logger.info(f"Auto-detected pose server: {self._pose_server_url}")
                 if self._use_server_depth:

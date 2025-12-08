@@ -1283,7 +1283,7 @@
       const pts = new THREE.Points(geo, mat);
       scene.add(pts);
 
-      let sph = { r: 2.5, t: Math.PI / 4, p: Math.PI / 2.5 }, tgt = new THREE.Vector3(), drag = 0, pan = 0, pm = { x: 0, y: 0 };
+      let sph = { r: 2.5, t: Math.PI / 4, p: Math.PI / 2 }, tgt = new THREE.Vector3(), drag = 0, pan = 0, pm = { x: 0, y: 0 };
       function upd() {
         cam.position.set(
           tgt.x + sph.r * Math.sin(sph.p) * Math.cos(sph.t),

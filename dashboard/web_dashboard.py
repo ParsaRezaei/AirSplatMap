@@ -127,6 +127,42 @@ class Server:
             source = int(source)
         
         try:
+            # For HTTP sources, try to fetch single frame from /frame endpoint first
+            if isinstance(source, str) and source.startswith('http'):
+                # Check if this is a RealSense server (has /frame endpoint)
+                base_url = source.replace('/stream', '').rstrip('/')
+                try:
+                    import urllib.request
+                    frame_url = f"{base_url}/frame"
+                    frame_count = 0
+                    t0 = time.time()
+                    
+                    while not s._preview_stop and frame_count < 300:
+                        try:
+                            with urllib.request.urlopen(frame_url, timeout=2) as resp:
+                                data = json.loads(resp.read().decode())
+                                if data.get('frame_jpg_b64'):
+                                    frame_count += 1
+                                    elapsed = time.time() - t0
+                                    fps = frame_count / elapsed if elapsed > 0 else 0
+                                    
+                                    await ws.send(json.dumps({
+                                        'type': 'preview_frame',
+                                        'name': name,
+                                        'image': data['frame_jpg_b64'],
+                                        'fps': fps,
+                                        'pose': data.get('pose'),
+                                        'has_depth': data.get('has_depth', False)
+                                    }))
+                        except Exception as e:
+                            logger.debug(f"Frame fetch error: {e}")
+                        
+                        await asyncio.sleep(0.1)  # ~10 FPS for preview
+                    return
+                except Exception as e:
+                    logger.debug(f"RealSense frame endpoint not available, trying OpenCV: {e}")
+            
+            # Fallback to OpenCV VideoCapture
             cap = cv2.VideoCapture(source)
             if not cap.isOpened():
                 await ws.send(json.dumps({'type': 'preview_frame', 'error': f'Cannot open {source}'}))
@@ -234,12 +270,14 @@ class Server:
                     depth_method=d.get('depth_method','depth_anything_v3')
                     s.add_live_source(name, source, source_type=d.get('type','LIVE'), 
                                      pose_method=pose_method, depth_method=depth_method)
-                    await ws.send(json.dumps({'type':'datasets','datasets':s._ds}))
+                    # Broadcast to ALL clients so UI updates immediately
+                    s._q.put({'type':'datasets','datasets':s._ds})
                 elif cmd=='remove_live':
                     # Remove a live video source
                     name=d.get('name')
                     s.remove_live_source(name)
-                    await ws.send(json.dumps({'type':'live_removed','datasets':s._ds}))
+                    # Broadcast to ALL clients
+                    s._q.put({'type':'datasets','datasets':s._ds})
                 elif cmd=='update_live':
                     # Update a live video source settings
                     old_name=d.get('old_name')
@@ -250,7 +288,8 @@ class Server:
                         pose_method=d.get('pose_method'),
                         depth_method=d.get('depth_method')
                     )
-                    await ws.send(json.dumps({'type':'datasets','datasets':s._ds}))
+                    # Broadcast to ALL clients
+                    s._q.put({'type':'datasets','datasets':s._ds})
                 elif cmd=='preview_live':
                     # Preview live video source
                     name=d.get('name')
@@ -356,9 +395,13 @@ class Server:
             if pc is None:return None,None
             pc=np.asarray(pc)
             if len(pc)==0:return None,None
-            # Flip Y axis for Three.js (Y-up) vs OpenCV (Y-down) convention
+            # Convert OpenCV (X-right, Y-down, Z-forward) to Three.js (X-right, Y-up, Z-out)
+            # Swap Y and Z, negate new Y (was Z) to flip forward direction
             pc = pc.copy()
-            pc[:, 1] = -pc[:, 1]
+            new_y = -pc[:, 2]  # OpenCV Z-forward -> Three.js Y (negated)
+            new_z = -pc[:, 1]  # OpenCV Y-down -> Three.js Z (negated to flip)
+            pc[:, 1] = new_y
+            pc[:, 2] = new_z
             idx=None
             if len(pc)>max_pts:
                 idx=np.random.choice(len(pc),max_pts,replace=False)

@@ -95,50 +95,97 @@ class RealSenseCapture:
         self._auto_exposure = auto_exposure
         self._manual_exposure = manual_exposure
         
-        # Hardware reset the device first to clear any stale state
+        # Check for devices
         ctx = rs.context()
         devices = list(ctx.devices)
         if not devices:
             raise RuntimeError("No RealSense devices found")
         
-        print(f"Found {len(devices)} device(s), resetting...")
+        print(f"Found {len(devices)} device(s)")
+        
+        # Hardware reset to clear any stale state (required for IMU to work)
+        print("Hardware reset to clear device state...")
         devices[0].hardware_reset()
-        time.sleep(3)  # Wait for device to come back
+        time.sleep(4)  # Wait for device to come back
         
-        # Initialize RealSense pipeline
-        self._pipeline = rs.pipeline()
-        self._config = rs.config()
+        # Re-query after reset
+        ctx = rs.context()
+        devices = list(ctx.devices)
+        if not devices:
+            raise RuntimeError("Device not found after reset")
         
-        # Select specific camera if serial provided
-        if serial_number:
-            self._config.enable_device(serial_number)
+        # Get device serial for both pipelines
+        device_serial = serial_number or devices[0].get_info(rs.camera_info.serial_number)
         
-        # Configure streams
-        self._config.enable_stream(rs.stream.color, width, height, rs.format.bgr8, fps)
-        self._config.enable_stream(rs.stream.depth, width, height, rs.format.z16, fps)
-        
-        # Enable infrared stereo streams for stereo VIO
-        self._config.enable_stream(rs.stream.infrared, 1, width, height, rs.format.y8, fps)  # Left IR
-        self._config.enable_stream(rs.stream.infrared, 2, width, height, rs.format.y8, fps)  # Right IR
-        
-        # Enable IMU if requested
+        # ============================================
+        # PIPELINE 1: IMU FIRST (like DonkeyCar approach)
+        # Start IMU before video to avoid resource conflicts
+        # ============================================
+        self._imu_pipeline = None
         self._has_imu = False
+        self._imu_lock = threading.Lock()
+        self._latest_accel = None
+        self._latest_gyro = None
+        
         if enable_imu:
             try:
-                self._config.enable_stream(rs.stream.accel)
-                self._config.enable_stream(rs.stream.gyro)
+                self._imu_pipeline = rs.pipeline()
+                imu_config = rs.config()
+                imu_config.enable_device(device_serial)
+                # Use lowest available frequencies (100Hz accel, 200Hz gyro)
+                # Available: Accel @ 400/200/100 Hz, Gyro @ 400/200 Hz
+                imu_config.enable_stream(rs.stream.accel, rs.format.motion_xyz32f, 100)
+                imu_config.enable_stream(rs.stream.gyro, rs.format.motion_xyz32f, 200)
+                
+                self._imu_profile = self._imu_pipeline.start(imu_config)
+                
+                # Warmup IMU - eat some frames to let it settle
+                print("IMU pipeline starting, warming up...")
+                for i in range(5):
+                    try:
+                        self._imu_pipeline.wait_for_frames(1000)
+                    except:
+                        pass
+                
                 self._has_imu = True
+                print("IMU pipeline started (accel@63Hz, gyro@200Hz)")
             except Exception as e:
-                print(f"IMU not available: {e}")
+                print(f"IMU pipeline failed: {e}")
+                self._imu_pipeline = None
         
-        # Start pipeline
+        # ============================================
+        # PIPELINE 2: Video (RGB + Depth + IR) at 30Hz
+        # Started AFTER IMU pipeline
+        # ============================================
+        self._video_pipeline = rs.pipeline()
+        self._video_config = rs.config()
+        self._video_config.enable_device(device_serial)
+        
+        # Video streams
+        self._video_config.enable_stream(rs.stream.color, width, height, rs.format.bgr8, fps)
+        self._video_config.enable_stream(rs.stream.depth, width, height, rs.format.z16, fps)
+        
+        # Enable IR stereo streams
+        self._has_ir = False
         try:
-            self._profile = self._pipeline.start(self._config)
+            self._video_config.enable_stream(rs.stream.infrared, 1, width, height, rs.format.y8, fps)
+            self._video_config.enable_stream(rs.stream.infrared, 2, width, height, rs.format.y8, fps)
+            self._has_ir = True
+            print("IR stereo streams enabled")
         except Exception as e:
-            raise RuntimeError(f"Failed to start RealSense: {e}")
+            print(f"IR streams not available: {e}")
         
-        # Get device info
-        device = self._profile.get_device()
+        # Start video pipeline
+        try:
+            self._video_profile = self._video_pipeline.start(self._video_config)
+        except Exception as e:
+            # If video fails and IMU was started, stop IMU
+            if self._imu_pipeline:
+                self._imu_pipeline.stop()
+            raise RuntimeError(f"Failed to start video pipeline: {e}")
+        
+        # Get device info from video pipeline
+        device = self._video_profile.get_device()
         self._device_name = device.get_info(rs.camera_info.name)
         self._device_serial = device.get_info(rs.camera_info.serial_number)
         print(f"Connected to {self._device_name} (S/N: {self._device_serial})")
@@ -148,23 +195,20 @@ class RealSenseCapture:
         self._depth_scale = depth_sensor.get_depth_scale()
         print(f"Depth scale: {self._depth_scale}")
         
-        # Get stereo baseline from depth sensor
+        # Get stereo baseline
         try:
             depth_baseline = depth_sensor.get_option(rs.option.stereo_baseline)
-            self._stereo_baseline = depth_baseline / 1000.0  # Convert mm to meters
+            self._stereo_baseline = depth_baseline / 1000.0
             print(f"Stereo baseline: {self._stereo_baseline:.4f}m")
         except:
-            self._stereo_baseline = 0.05  # Default 50mm
+            self._stereo_baseline = 0.05
             print(f"Stereo baseline: {self._stereo_baseline:.4f}m (default)")
         
-        # Configure color sensor - start with auto exposure, lock after warmup
+        # Configure exposure
         self._color_sensor = device.first_color_sensor()
-        self._auto_exposure = auto_exposure
-        self._manual_exposure = manual_exposure
         self._exposure_locked = False
         
         if manual_exposure is not None:
-            # Use manual exposure immediately
             self._color_sensor.set_option(rs.option.enable_auto_exposure, 0)
             try:
                 self._color_sensor.set_option(rs.option.enable_auto_white_balance, 0)
@@ -174,12 +218,11 @@ class RealSenseCapture:
             self._exposure_locked = True
             print(f"Manual exposure: {manual_exposure}")
         else:
-            # Start with auto-exposure, will lock after warmup
             self._color_sensor.set_option(rs.option.enable_auto_exposure, 1)
             print("Auto-exposure: enabled (will lock after warmup)")
         
-        # Get intrinsics from color stream
-        color_stream = self._profile.get_stream(rs.stream.color)
+        # Get intrinsics
+        color_stream = self._video_profile.get_stream(rs.stream.color)
         color_intrinsics = color_stream.as_video_stream_profile().get_intrinsics()
         
         self._intrinsics = {
@@ -193,9 +236,9 @@ class RealSenseCapture:
         }
         print(f"Intrinsics: fx={self._intrinsics['fx']:.1f}, fy={self._intrinsics['fy']:.1f}")
         
-        # Get IR intrinsics for stereo VIO
+        # Get IR intrinsics
         try:
-            ir_stream = self._profile.get_stream(rs.stream.infrared, 1)
+            ir_stream = self._video_profile.get_stream(rs.stream.infrared, 1)
             ir_intrinsics = ir_stream.as_video_stream_profile().get_intrinsics()
             self._ir_intrinsics = {
                 'fx': ir_intrinsics.fx,
@@ -212,6 +255,12 @@ class RealSenseCapture:
         
         # Setup alignment
         self._align = rs.align(rs.stream.color) if align_depth else None
+        
+        # ============================================
+        # Let camera warm up (like DonkeyCar does)
+        # ============================================
+        print("Letting cameras warm up...")
+        time.sleep(2)
         
         # Current frame data (thread-safe)
         self._lock = threading.Lock()
@@ -234,20 +283,181 @@ class RealSenseCapture:
         self._frame_count = 0
         self._start_time = time.time()
         
-        # Warmup - grab frames to let auto-exposure stabilize
-        print("Warming up camera...")
-        for i in range(30):
+        # Running state
+        self._running = True
+        self._pipeline_ok = True
+        
+        # Brief video warmup
+        print("Warming up video pipeline...")
+        for i in range(10):
             try:
-                frames = self._pipeline.wait_for_frames(timeout_ms=1000)
+                frames = self._video_pipeline.wait_for_frames(timeout_ms=1000)
             except:
                 pass
         print("Camera ready!")
         
-        # Capture thread
-        self._running = True
-        self._pipeline_ok = True  # Track pipeline state
-        self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
+        # Start IMU capture thread if IMU is available
+        if self._has_imu:
+            self._imu_thread = threading.Thread(target=self._imu_capture_loop, daemon=True)
+            self._imu_thread.start()
+        
+        # Start video capture thread
+        self._capture_thread = threading.Thread(target=self._video_capture_loop, daemon=True)
         self._capture_thread.start()
+    
+    def _imu_capture_loop(self):
+        """Separate thread for IMU pipeline polling."""
+        rs = self._rs
+        
+        while self._running and self._imu_pipeline is not None:
+            try:
+                # Poll IMU pipeline
+                imu_frames = self._imu_pipeline.wait_for_frames(100)
+                
+                # Extract accel and gyro
+                accel_frame = imu_frames.first_or_default(rs.stream.accel)
+                gyro_frame = imu_frames.first_or_default(rs.stream.gyro)
+                
+                with self._imu_lock:
+                    if accel_frame:
+                        accel_data = accel_frame.as_motion_frame().get_motion_data()
+                        self._latest_accel = np.array([accel_data.x, accel_data.y, accel_data.z])
+                    if gyro_frame:
+                        gyro_data = gyro_frame.as_motion_frame().get_motion_data()
+                        self._latest_gyro = np.array([gyro_data.x, gyro_data.y, gyro_data.z])
+                        
+            except Exception as e:
+                # Timeout is normal
+                pass
+    
+    def _video_capture_loop(self):
+        """Video capture loop at 30Hz - IMU data from separate thread."""
+        rs = self._rs
+        error_count = 0
+        
+        while self._running:
+            if not self._pipeline_ok:
+                time.sleep(0.1)
+                continue
+                
+            try:
+                # Wait for video frames from video pipeline
+                frames = self._video_pipeline.wait_for_frames(timeout_ms=100)
+                error_count = 0
+                timestamp = time.time()
+                
+                # Get IMU data from separate IMU thread
+                accel = None
+                gyro = None
+                if self._has_imu:
+                    with self._imu_lock:
+                        accel = self._latest_accel.copy() if self._latest_accel is not None else None
+                        gyro = self._latest_gyro.copy() if self._latest_gyro is not None else None
+                
+                # Lock exposure after warmup
+                if not self._exposure_locked and self._frame_count == 90:
+                    try:
+                        current_exp = self._color_sensor.get_option(rs.option.exposure)
+                        final_exp = max(500, current_exp)
+                        self._color_sensor.set_option(rs.option.enable_auto_exposure, 0)
+                        self._color_sensor.set_option(rs.option.exposure, final_exp)
+                        self._exposure_locked = True
+                    except:
+                        pass
+                
+                # Get IR frames for stereo VIO
+                ir_left = None
+                ir_right = None
+                try:
+                    ir_left_frame = frames.get_infrared_frame(1)
+                    ir_right_frame = frames.get_infrared_frame(2)
+                    if ir_left_frame and ir_right_frame:
+                        ir_left = np.asanyarray(ir_left_frame.get_data())
+                        ir_right = np.asanyarray(ir_right_frame.get_data())
+                except:
+                    pass
+                
+                # Align depth to color
+                aligned = frames
+                if self._align:
+                    aligned = self._align.process(frames)
+                
+                # Get video frames
+                color_frame = aligned.get_color_frame()
+                depth_frame = aligned.get_depth_frame()
+                
+                if not color_frame or not depth_frame:
+                    continue
+                
+                # Convert to numpy
+                rgb = np.asanyarray(color_frame.get_data())
+                depth_raw = np.asanyarray(depth_frame.get_data())
+                
+                # Convert depth to meters
+                depth = depth_raw.astype(np.float32) * self._depth_scale
+                depth[(depth < self._depth_min) | (depth > self._depth_max)] = 0
+                
+                # Estimate pose with IMU data from separate thread
+                pose = self._estimate_pose(ir_left, ir_right, rgb, depth, timestamp, accel, gyro)
+                
+                # Update current data
+                with self._lock:
+                    self._current_rgb = rgb
+                    self._current_depth = depth
+                    self._current_depth_raw = depth_raw
+                    self._current_ir_left = ir_left
+                    self._current_ir_right = ir_right
+                    self._current_pose = pose
+                    self._current_timestamp = timestamp
+                    self._current_accel = accel
+                    self._current_gyro = gyro
+                    self._frame_count += 1
+                
+            except RuntimeError as e:
+                # Timeout is expected when polling
+                if "Frame didn't arrive" not in str(e):
+                    error_count += 1
+                    if error_count == 1 or error_count % 30 == 0:
+                        print(f"Capture error ({error_count}): {e}")
+            except Exception as e:
+                if self._running:
+                    error_count += 1
+                    if error_count == 1 or error_count % 30 == 0:
+                        print(f"Capture error ({error_count}): {e}")
+                    time.sleep(0.033)
+    
+    def _estimate_pose(self, ir_left, ir_right, rgb, depth, timestamp, accel, gyro):
+        """Estimate pose using available data."""
+        pose = None
+        
+        # Try StereoVIO first
+        if self._stereo_vio is not None and ir_left is not None:
+            try:
+                vio_result = self._stereo_vio.process(
+                    ir_left, ir_right, timestamp, depth, accel, gyro
+                )
+                pose = self._stereo_vio.get_pose()
+            except Exception as e:
+                if self._frame_count < 5:
+                    print(f"StereoVIO error: {e}")
+        
+        # Try RGBD VO
+        if pose is None and self._vio is not None:
+            try:
+                rgb_for_vio = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
+                vio_result = self._vio.process(
+                    rgb_for_vio, depth, timestamp, accel, gyro
+                )
+                pose = self._vio.get_pose()
+            except Exception as e:
+                if self._frame_count < 5:
+                    print(f"VIO error: {e}")
+        
+        # Fallback to ORB
+        if pose is None:
+            pose = self._estimate_pose_fallback(rgb)
+        
+        return pose
     
     def _init_pose_estimator(self):
         """Initialize visual odometry."""
@@ -256,39 +466,36 @@ class RealSenseCapture:
         self._stereo_vio = None
         self._vio = None
         
-        # Use FilteredVO - better pose filtering for 3DGS
+        # Try StereoVIO from src.pose with better parameters for stability
         try:
-            from src.pose.filtered_vo import FilteredVO
-            self._stereo_vio = FilteredVO(
+            from src.pose.stereo_vio import StereoVIO
+            self._stereo_vio = StereoVIO(
                 baseline=self._stereo_baseline,
-                max_features=400,
-                motion_threshold=0.8,  # Pixels - below this = stationary
-                pose_filter_alpha=0.5,  # Moderate smoothing
-                max_translation_per_frame=0.10,  # 10cm max per frame
-                max_rotation_per_frame=0.12,  # ~7 degrees max per frame
-                min_inliers=15,
+                max_features=500,  # More features for robustness
+                min_features=80,
+                use_imu=self._has_imu,
+                pose_smoothing=0.5,  # Strong smoothing to reduce jitter
+                motion_threshold=1.5,  # Higher threshold for stationary detection
+                max_translation=0.05,  # Max 5cm per frame (~1.5m/s at 30fps)
+                max_rotation=0.1,  # Max ~5.7 degrees per frame
             )
             self._stereo_vio.set_intrinsics_from_dict(self._ir_intrinsics)
-            print(f"Initialized FilteredVO (baseline={self._stereo_baseline:.4f}m)")
+            print(f"Initialized StereoVIO (baseline={self._stereo_baseline:.4f}m, imu={self._has_imu})")
             return
         except Exception as e:
-            print(f"FilteredVO not available: {e}")
+            print(f"StereoVIO not available: {e}")
             import traceback
             traceback.print_exc()
         
-        # Fallback to SimpleVO
+        # Try RGBD VO
         try:
-            from src.pose.simple_vo import SimpleVO
-            self._stereo_vio = SimpleVO(
-                baseline=self._stereo_baseline,
-                max_features=300,
-                motion_threshold=1.0,
-            )
-            self._stereo_vio.set_intrinsics_from_dict(self._ir_intrinsics)
-            print(f"Initialized SimpleVO (baseline={self._stereo_baseline:.4f}m)")
+            from src.pose.rgbd_vo import RGBDVO
+            self._vio = RGBDVO()
+            self._vio.set_intrinsics_from_dict(self._intrinsics)
+            print(f"Initialized RGBDVO")
             return
         except Exception as e:
-            print(f"SimpleVO not available: {e}")
+            print(f"RGBDVO not available: {e}")
         
         print("Using fallback ORB-based odometry")
     
@@ -342,10 +549,9 @@ class RealSenseCapture:
         return self._accumulated_pose.copy()
     
     def _capture_loop(self):
-        """Background capture thread."""
+        """Background capture thread (used when IMU is disabled)."""
         rs = self._rs
         error_count = 0
-        exposure_lock_frame = 90  # Lock exposure after 90 frames (~3 sec) - give more time to settle
         
         while self._running:
             if not self._pipeline_ok:
@@ -353,37 +559,20 @@ class RealSenseCapture:
                 continue
                 
             try:
-                # Wait for frames
                 frames = self._pipeline.wait_for_frames(timeout_ms=1000)
-                error_count = 0  # Reset on success
+                error_count = 0
                 timestamp = time.time()
                 
                 # Lock exposure after warmup
-                if not self._exposure_locked and self._frame_count == exposure_lock_frame:
+                if not self._exposure_locked and self._frame_count == 90:
                     try:
                         current_exp = self._color_sensor.get_option(rs.option.exposure)
-                        # Ensure minimum exposure of 500 for decent brightness
                         final_exp = max(500, current_exp)
                         self._color_sensor.set_option(rs.option.enable_auto_exposure, 0)
                         self._color_sensor.set_option(rs.option.exposure, final_exp)
                         self._exposure_locked = True
-                        print(f"Exposure locked at {final_exp:.0f} (was {current_exp:.0f})")
-                    except Exception as e:
-                        print(f"Failed to lock exposure: {e}")
-                
-                # Process IMU
-                accel = None
-                gyro = None
-                if self._has_imu:
-                    for frame in frames:
-                        if frame.is_motion_frame():
-                            motion = frame.as_motion_frame()
-                            motion_data = motion.get_motion_data()
-                            
-                            if frame.get_profile().stream_type() == rs.stream.accel:
-                                accel = np.array([motion_data.x, motion_data.y, motion_data.z])
-                            elif frame.get_profile().stream_type() == rs.stream.gyro:
-                                gyro = np.array([motion_data.x, motion_data.y, motion_data.z])
+                    except:
+                        pass
                 
                 # Get IR frames for stereo VIO
                 ir_left = None
@@ -409,56 +598,17 @@ class RealSenseCapture:
                     continue
                 
                 # Convert to numpy
-                rgb = np.asanyarray(color_frame.get_data())  # BGR format
-                depth_raw = np.asanyarray(depth_frame.get_data())  # uint16
+                rgb = np.asanyarray(color_frame.get_data())
+                depth_raw = np.asanyarray(depth_frame.get_data())
                 
                 # Convert depth to meters
                 depth = depth_raw.astype(np.float32) * self._depth_scale
                 depth[(depth < self._depth_min) | (depth > self._depth_max)] = 0
                 
-                # Estimate pose - prefer stereo VIO
-                pose = None
+                # Estimate pose (no IMU data in this mode)
+                pose = self._estimate_pose(ir_left, ir_right, rgb, depth, timestamp, None, None)
                 
-                if hasattr(self, '_stereo_vio') and self._stereo_vio is not None and ir_left is not None:
-                    try:
-                        vio_result = self._stereo_vio.process(
-                            ir_left, ir_right, timestamp, depth, accel, gyro
-                        )
-                        # Use raw pose for 3DGS (camera-to-world, OpenCV convention)
-                        pose = self._stereo_vio.get_pose()
-                        
-                        # Debug: print pose occasionally
-                        if self._frame_count % 60 == 0:  # Less frequent logging
-                            t = pose[:3, 3]
-                            status = vio_result.tracking_status
-                            proc_ms = getattr(vio_result, 'processing_time_ms', 0)
-                            print(f"Frame {self._frame_count}: pos=[{t[0]:.2f}, {t[1]:.2f}, {t[2]:.2f}], status={status}, inliers={vio_result.num_inliers}, vio_ms={proc_ms:.1f}")
-                    except Exception as e:
-                        if self._frame_count < 5:
-                            print(f"StereoVIO error: {e}")
-                            import traceback
-                            traceback.print_exc()
-                
-                if pose is None and self._vio is not None:
-                    try:
-                        rgb_for_vio = cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB)
-                        vio_result = self._vio.process(
-                            rgb_for_vio, depth, timestamp, accel, gyro
-                        )
-                        # Use raw pose
-                        pose = self._vio.get_pose()
-                        
-                        if self._frame_count % 30 == 0:
-                            t = pose[:3, 3]
-                            print(f"Frame {self._frame_count}: pos=[{t[0]:.3f}, {t[1]:.3f}, {t[2]:.3f}], mono inliers={vio_result.num_inliers}")
-                    except Exception as e:
-                        if self._frame_count < 5:
-                            print(f"VIO error: {e}")
-                
-                if pose is None:
-                    pose = self._estimate_pose_fallback(rgb)
-                
-                # Update current data (thread-safe)
+                # Update current data
                 with self._lock:
                     self._current_rgb = rgb
                     self._current_depth = depth
@@ -467,8 +617,6 @@ class RealSenseCapture:
                     self._current_ir_right = ir_right
                     self._current_pose = pose
                     self._current_timestamp = timestamp
-                    self._current_accel = accel
-                    self._current_gyro = gyro
                     self._frame_count += 1
                 
             except Exception as e:
@@ -476,7 +624,7 @@ class RealSenseCapture:
                     error_count += 1
                     if error_count == 1 or error_count % 30 == 0:
                         print(f"Capture error ({error_count}): {e}")
-                    time.sleep(0.033)  # Wait ~1 frame
+                    time.sleep(0.033)
     
     def get_synchronized_data(self) -> Dict:
         """Get all current frame data (synchronized)."""
@@ -601,12 +749,28 @@ class RealSenseCapture:
     def stop(self):
         """Stop capture."""
         self._running = False
+        
+        # Wait for video capture thread
         if self._capture_thread.is_alive():
             self._capture_thread.join(timeout=2.0)
+        
+        # Wait for IMU thread if it exists
+        if self._has_imu and hasattr(self, '_imu_thread') and self._imu_thread.is_alive():
+            self._imu_thread.join(timeout=1.0)
+        
+        # Stop IMU pipeline first (started first, stop last is cleaner but either works)
+        if self._imu_pipeline is not None:
+            try:
+                self._imu_pipeline.stop()
+            except:
+                pass
+        
+        # Stop video pipeline
         try:
-            self._pipeline.stop()
+            self._video_pipeline.stop()
         except:
             pass
+        
         print("RealSense capture stopped")
 
 
