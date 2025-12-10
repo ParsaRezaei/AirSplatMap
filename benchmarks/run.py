@@ -442,7 +442,18 @@ def run_pipeline_benchmark(
     # Estimate poses
     for pose_method in pose_methods:
         logger.info(f"  Estimating poses with {pose_method}...")
+        estimator = None
         try:
+            # Clear GPU memory before loading each estimator
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                import gc
+                gc.collect()
+            except ImportError:
+                pass
+            
             estimator = get_pose_estimator(pose_method)
             estimator.set_intrinsics_from_dict(intrinsics)
             poses = []
@@ -465,11 +476,36 @@ def run_pipeline_benchmark(
             traceback.print_exc()
             estimated_poses[pose_method] = [f.pose for f in frames]  # Fallback to GT
             pose_errors[pose_method] = float('inf')
+        finally:
+            # Cleanup estimator to free GPU memory
+            if estimator is not None:
+                if hasattr(estimator, 'cleanup'):
+                    estimator.cleanup()
+                del estimator
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                import gc
+                gc.collect()
+            except ImportError:
+                pass
     
     # Estimate depths
     for depth_method in depth_methods:
         logger.info(f"  Estimating depths with {depth_method}...")
+        estimator = None
         try:
+            # Clear GPU memory before loading each estimator
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                import gc
+                gc.collect()
+            except ImportError:
+                pass
+            
             estimator = get_depth_estimator(depth_method)
             depths = []
             abs_rels = []
@@ -512,6 +548,20 @@ def run_pipeline_benchmark(
             traceback.print_exc()
             estimated_depths[depth_method] = [frame.depth for frame in frames]  # Fallback to GT
             depth_errors[depth_method] = float('inf')
+        finally:
+            # Cleanup estimator to free GPU memory
+            if estimator is not None:
+                if hasattr(estimator, 'cleanup'):
+                    estimator.cleanup()
+                del estimator
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                import gc
+                gc.collect()
+            except ImportError:
+                pass
     
     # Run GS with each configuration
     for config_name, pose_source, depth_source in configs:
@@ -1354,8 +1404,12 @@ def main():
             print("-" * 40)
             if hardware_monitor:
                 hardware_monitor.mark(f"pipeline_{dataset_name}")
-            pipeline_pose_methods = args.pose_methods if dataset_results['pose'] else ['orb']
-            pipeline_depth_methods = args.depth_methods if dataset_results['depth'] else ['midas_small']
+            
+            # Limit pipeline to fast methods to avoid OOM on Jetson
+            # Heavy GPU methods (loftr, superpoint, lightglue, raft, r2d2, roma) are tested in pose benchmark
+            fast_pose_methods = ['orb', 'sift', 'robust_flow', 'keyframe']
+            pipeline_pose_methods = [m for m in fast_pose_methods if m in args.pose_methods] or ['orb']
+            pipeline_depth_methods = args.depth_methods if dataset_results['depth'] else ['midas']
             
             # Run pipeline benchmark for EACH GS engine
             pipeline_engines = args.gs_engines if args.gs_engines else ['graphdeco']
