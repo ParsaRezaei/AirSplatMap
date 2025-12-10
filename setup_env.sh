@@ -92,6 +92,18 @@ if [[ "$IS_JETSON" == "true" ]]; then
     echo "Installing torchaudio..."
     pip install torchaudio --no-deps 2>/dev/null || \
         echo "WARNING: torchaudio installation skipped (optional)"
+    
+    # Install jetson-stats for GPU monitoring
+    echo "Installing jetson-stats for Jetson GPU monitoring..."
+    pip install jetson-stats 2>/dev/null || \
+        echo "WARNING: jetson-stats installation failed (optional, for GPU monitoring)"
+    
+    # Add user to jtop group if not already (requires re-login to take effect)
+    if ! groups | grep -q jtop; then
+        echo "Adding user to jtop group (may require re-login for full access)..."
+        sudo usermod -aG jtop "$USER" 2>/dev/null || \
+            echo "NOTE: Could not add user to jtop group. Run: sudo usermod -aG jtop $USER"
+    fi
         
 else
     # ============================================

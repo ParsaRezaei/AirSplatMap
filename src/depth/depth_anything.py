@@ -283,7 +283,7 @@ class DepthAnythingV3Estimator(BaseDepthEstimator):
     
     def __init__(
         self,
-        model_size: str = "base",
+        model_size: str = None,  # Auto-detect based on platform
         device: str = "cuda",
         max_resolution: int = 518,
     ):
@@ -291,11 +291,21 @@ class DepthAnythingV3Estimator(BaseDepthEstimator):
         Initialize Depth Anything V3.
         
         Args:
-            model_size: 'small', 'base', 'large', or 'giant'
+            model_size: 'small', 'base', 'large', or 'giant' (auto-detects for ARM)
             device: 'cuda' or 'cpu'
             max_resolution: Maximum image dimension for processing
         """
         super().__init__(device)
+        
+        # Auto-detect model size based on platform
+        if model_size is None:
+            import platform
+            if platform.machine().startswith('aarch'):
+                model_size = 'small'  # Use small model for ARM/Jetson
+                logger.info("DA3: Using 'small' model for ARM platform")
+            else:
+                model_size = 'base'  # Default for x86
+        
         self.model_size = model_size.lower()
         self.max_resolution = max_resolution
         self._model = None

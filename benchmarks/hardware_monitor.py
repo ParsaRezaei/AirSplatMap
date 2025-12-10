@@ -4,16 +4,27 @@ Hardware Monitoring for Benchmarks
 
 Tracks GPU, CPU, and memory usage during benchmark runs.
 Provides per-method and aggregate statistics.
+
+Supports:
+- Desktop NVIDIA GPUs via pynvml
+- NVIDIA Jetson via jtop or sysfs fallback
+- CPU/RAM via psutil
+- PyTorch CUDA memory tracking
 """
 
 import threading
 import time
 import logging
+import os
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
+
+# Detect if running on Jetson
+_IS_JETSON = os.path.exists('/etc/nv_tegra_release') or os.path.exists('/sys/devices/gpu.0')
 
 # Try to import monitoring libraries
 try:
@@ -23,13 +34,25 @@ except ImportError:
     _PSUTIL_AVAILABLE = False
     logger.debug("psutil not available - CPU/RAM monitoring disabled")
 
-try:
-    import pynvml
-    pynvml.nvmlInit()
-    _NVML_AVAILABLE = True
-except Exception:
-    _NVML_AVAILABLE = False
-    logger.debug("pynvml not available - GPU monitoring disabled")
+# Try pynvml for desktop NVIDIA GPUs
+_NVML_AVAILABLE = False
+if not _IS_JETSON:
+    try:
+        import pynvml
+        pynvml.nvmlInit()
+        _NVML_AVAILABLE = True
+    except Exception:
+        logger.debug("pynvml not available - desktop GPU monitoring disabled")
+
+# Try jtop for Jetson
+_JTOP_AVAILABLE = False
+if _IS_JETSON:
+    try:
+        from jtop import jtop
+        _JTOP_AVAILABLE = True
+        logger.debug("jtop available for Jetson monitoring")
+    except ImportError:
+        logger.debug("jtop not available - install with: sudo pip3 install jetson-stats")
 
 try:
     import torch
@@ -205,12 +228,27 @@ class HardwareMonitor:
         self._thread: Optional[threading.Thread] = None
         self._process: Optional[Any] = None
         self._gpu_handle: Optional[Any] = None
+        self._jtop: Optional[Any] = None
         
         # Initialize process handle
         self._init_process_handle(pid)
         
-        # Initialize GPU handle
-        if _NVML_AVAILABLE:
+        # Initialize GPU handle based on platform
+        if _IS_JETSON:
+            # Jetson: try jtop
+            if _JTOP_AVAILABLE:
+                try:
+                    from jtop import jtop
+                    self._jtop = jtop()
+                    self._jtop.start()
+                    logger.info("Jetson GPU monitoring enabled via jtop")
+                except Exception as e:
+                    logger.warning(f"Could not start jtop: {e}")
+                    self._jtop = None
+            else:
+                logger.info("Jetson GPU monitoring via sysfs (install jetson-stats for better monitoring)")
+        elif _NVML_AVAILABLE:
+            # Desktop NVIDIA: use pynvml
             try:
                 self._gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(gpu_index)
             except Exception as e:
@@ -278,6 +316,171 @@ class HardwareMonitor:
         except:
             return []
     
+    def _read_jetson_gpu_stats(self) -> Dict[str, Any]:
+        """Read GPU stats on Jetson via sysfs or jtop."""
+        stats = {
+            'gpu_utilization': 0.0,
+            'gpu_memory_used_gb': 0.0,
+            'gpu_memory_total_gb': 0.0,
+            'gpu_temperature_c': 0.0,
+            'gpu_power_w': 0.0,
+        }
+        
+        # Try jtop first (most reliable)
+        if _JTOP_AVAILABLE and hasattr(self, '_jtop') and self._jtop is not None:
+            try:
+                if self._jtop.ok():
+                    # GPU utilization
+                    gpu_stats = self._jtop.stats.get('GPU', 0)
+                    if isinstance(gpu_stats, (int, float)):
+                        stats['gpu_utilization'] = float(gpu_stats)
+                    
+                    # Memory - Jetson shares memory between CPU and GPU
+                    # Use torch to get actual GPU memory usage
+                    if _TORCH_AVAILABLE and torch.cuda.is_available():
+                        stats['gpu_memory_used_gb'] = torch.cuda.memory_allocated() / (1024**3)
+                        stats['gpu_memory_total_gb'] = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                    
+                    # Temperature
+                    temps = self._jtop.temperature
+                    if temps:
+                        # Try to get GPU temperature
+                        gpu_temp = temps.get('GPU', temps.get('gpu', temps.get('GPU-therm', 0)))
+                        if isinstance(gpu_temp, dict):
+                            gpu_temp = gpu_temp.get('temp', 0)
+                        stats['gpu_temperature_c'] = float(gpu_temp) if gpu_temp else 0.0
+                    
+                    # Power
+                    power = self._jtop.power
+                    if power:
+                        # Total power or GPU power
+                        total_power = power.get('tot', power.get('total', {}))
+                        if isinstance(total_power, dict):
+                            stats['gpu_power_w'] = float(total_power.get('power', 0)) / 1000.0  # mW to W
+                        elif isinstance(total_power, (int, float)):
+                            stats['gpu_power_w'] = float(total_power) / 1000.0
+                    
+                    return stats
+            except Exception as e:
+                logger.debug(f"jtop read error: {e}")
+        
+        # Fallback: Read directly from sysfs (works without jtop)
+        try:
+            # GPU utilization from devfreq
+            gpu_load_paths = [
+                '/sys/devices/gpu.0/load',
+                '/sys/devices/platform/gpu.0/load',
+                '/sys/devices/17000000.ga10b/load',  # Orin
+                '/sys/devices/17000000.gv11b/load',  # Xavier NX
+            ]
+            for path in gpu_load_paths:
+                if os.path.exists(path):
+                    with open(path, 'r') as f:
+                        # Load is typically in per-mille (0-1000)
+                        load = int(f.read().strip())
+                        stats['gpu_utilization'] = load / 10.0  # Convert to percentage
+                    break
+            
+            # GPU frequency and utilization via devfreq
+            devfreq_paths = [
+                '/sys/class/devfreq/17000000.ga10b',  # Orin
+                '/sys/class/devfreq/17000000.gv11b',  # Xavier
+                '/sys/class/devfreq/57000000.gpu',    # Older Jetsons
+            ]
+            for devfreq_path in devfreq_paths:
+                if os.path.exists(devfreq_path):
+                    # Try to get busy percentage
+                    busy_path = os.path.join(devfreq_path, 'device/utilization')
+                    if os.path.exists(busy_path):
+                        with open(busy_path, 'r') as f:
+                            stats['gpu_utilization'] = float(f.read().strip())
+                    break
+            
+            # Temperature from thermal zones
+            thermal_zones = [
+                '/sys/devices/virtual/thermal/thermal_zone0/temp',  # GPU on some models
+                '/sys/devices/virtual/thermal/thermal_zone1/temp',
+                '/sys/devices/virtual/thermal/thermal_zone2/temp',
+            ]
+            # Try to find GPU thermal zone
+            for i in range(10):
+                zone_type_path = f'/sys/devices/virtual/thermal/thermal_zone{i}/type'
+                zone_temp_path = f'/sys/devices/virtual/thermal/thermal_zone{i}/temp'
+                if os.path.exists(zone_type_path):
+                    with open(zone_type_path, 'r') as f:
+                        zone_type = f.read().strip().lower()
+                    if 'gpu' in zone_type and os.path.exists(zone_temp_path):
+                        with open(zone_temp_path, 'r') as f:
+                            stats['gpu_temperature_c'] = int(f.read().strip()) / 1000.0
+                        break
+            
+            # Power from INA sensors (Jetson power rails)
+            # Try multiple paths for different Jetson models
+            power_hwmon_paths = [
+                '/sys/bus/i2c/drivers/ina3221/1-0040/hwmon',  # Orin via i2c driver
+                '/sys/bus/i2c/drivers/ina3221/7-0040/hwmon',  # Xavier via i2c driver
+                '/sys/devices/platform/bus@0/c240000.i2c/i2c-1/1-0040/hwmon',  # Orin direct path
+            ]
+            
+            power_found = False
+            for power_base in power_hwmon_paths:
+                if not os.path.exists(power_base):
+                    continue
+                    
+                # Find hwmon directory (hwmon0, hwmon1, etc.)
+                try:
+                    hwmon_dirs = [d for d in os.listdir(power_base) if d.startswith('hwmon')]
+                except:
+                    continue
+                    
+                for hwmon in hwmon_dirs:
+                    hwmon_path = os.path.join(power_base, hwmon)
+                    
+                    # Try power1_input first (direct power reading)
+                    power_file = os.path.join(hwmon_path, 'power1_input')
+                    if os.path.exists(power_file):
+                        try:
+                            with open(power_file, 'r') as f:
+                                stats['gpu_power_w'] = int(f.read().strip()) / 1000000.0
+                            power_found = True
+                            break
+                        except:
+                            pass
+                    
+                    # Calculate power from voltage * current (P = V * I)
+                    # VDD_IN is typically channel 1 on Jetson Orin
+                    voltage_file = os.path.join(hwmon_path, 'in1_input')  # mV
+                    current_file = os.path.join(hwmon_path, 'curr1_input')  # mA
+                    
+                    if os.path.exists(voltage_file) and os.path.exists(current_file):
+                        try:
+                            with open(voltage_file, 'r') as f:
+                                voltage_mv = int(f.read().strip())
+                            with open(current_file, 'r') as f:
+                                current_ma = int(f.read().strip())
+                            # Power in W = (mV * mA) / 1,000,000
+                            stats['gpu_power_w'] = (voltage_mv * current_ma) / 1000000.0
+                            power_found = True
+                            break
+                        except:
+                            pass
+                
+                if power_found:
+                    break
+            
+        except Exception as e:
+            logger.debug(f"Jetson sysfs read error: {e}")
+        
+        # Always use PyTorch for memory on Jetson (shared memory architecture)
+        if _TORCH_AVAILABLE and torch.cuda.is_available():
+            try:
+                stats['gpu_memory_used_gb'] = torch.cuda.memory_allocated() / (1024**3)
+                stats['gpu_memory_total_gb'] = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+            except:
+                pass
+        
+        return stats
+    
     def _take_snapshot(self) -> HardwareSnapshot:
         """Take a single hardware measurement."""
         snapshot = HardwareSnapshot(timestamp=time.time())
@@ -316,8 +519,24 @@ class HardwareMonitor:
             except Exception as e:
                 logger.debug(f"psutil error: {e}")
         
-        # GPU via pynvml - system-wide stats
-        if _NVML_AVAILABLE and self._gpu_handle:
+        # GPU monitoring - different paths for desktop vs Jetson
+        if _IS_JETSON:
+            # Jetson: use jtop or sysfs
+            jetson_stats = self._read_jetson_gpu_stats()
+            snapshot.gpu_utilization = jetson_stats['gpu_utilization']
+            snapshot.gpu_memory_used_gb = jetson_stats['gpu_memory_used_gb']
+            snapshot.gpu_memory_total_gb = jetson_stats['gpu_memory_total_gb']
+            if snapshot.gpu_memory_total_gb > 0:
+                snapshot.gpu_memory_percent = (snapshot.gpu_memory_used_gb / snapshot.gpu_memory_total_gb) * 100
+            snapshot.gpu_temperature_c = jetson_stats['gpu_temperature_c']
+            snapshot.gpu_power_w = jetson_stats['gpu_power_w']
+            
+            # Process GPU memory via PyTorch on Jetson
+            if _TORCH_AVAILABLE and torch.cuda.is_available():
+                snapshot.process_gpu_memory_gb = torch.cuda.memory_allocated() / (1024**3)
+        
+        elif _NVML_AVAILABLE and self._gpu_handle:
+            # Desktop: use pynvml
             try:
                 util = pynvml.nvmlDeviceGetUtilizationRates(self._gpu_handle)
                 snapshot.gpu_utilization = util.gpu
@@ -348,12 +567,13 @@ class HardwareMonitor:
             except Exception as e:
                 logger.debug(f"NVML error: {e}")
         
-        # Fallback GPU memory via PyTorch
+        # Fallback GPU memory via PyTorch (if nothing else worked)
         elif _TORCH_AVAILABLE and torch.cuda.is_available():
             try:
                 snapshot.gpu_memory_used_gb = torch.cuda.memory_allocated() / (1024**3)
                 snapshot.gpu_memory_total_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
                 snapshot.gpu_memory_percent = (snapshot.gpu_memory_used_gb / snapshot.gpu_memory_total_gb) * 100
+                snapshot.process_gpu_memory_gb = snapshot.gpu_memory_used_gb
             except:
                 pass
         
@@ -395,6 +615,14 @@ class HardwareMonitor:
         self._running = False
         if self._thread:
             self._thread.join(timeout=2.0)
+        
+        # Clean up jtop if used
+        if self._jtop is not None:
+            try:
+                self._jtop.close()
+            except:
+                pass
+            self._jtop = None
         
         # Mark end
         self._marks['__end__'] = len(self._snapshots)
@@ -562,6 +790,7 @@ def get_system_info() -> Dict[str, Any]:
         'cpu': {},
         'memory': {},
         'gpu': {},
+        'platform': 'jetson' if _IS_JETSON else 'desktop',
     }
     
     if _PSUTIL_AVAILABLE:
@@ -579,7 +808,37 @@ def get_system_info() -> Dict[str, Any]:
         mem = psutil.virtual_memory()
         info['memory']['total_gb'] = round(mem.total / (1024**3), 2)
     
-    if _NVML_AVAILABLE:
+    # GPU info - different approaches for Jetson vs Desktop
+    if _IS_JETSON:
+        # Jetson: get info from PyTorch or sysfs
+        if _TORCH_AVAILABLE and torch.cuda.is_available():
+            props = torch.cuda.get_device_properties(0)
+            info['gpu']['name'] = props.name
+            info['gpu']['memory_total_gb'] = round(props.total_memory / (1024**3), 2)
+        
+        # Try to get Jetson model
+        try:
+            if os.path.exists('/etc/nv_tegra_release'):
+                with open('/etc/nv_tegra_release', 'r') as f:
+                    info['gpu']['tegra_release'] = f.read().strip().split('\n')[0]
+        except:
+            pass
+        
+        # Try to get JetPack version
+        try:
+            if os.path.exists('/etc/apt/sources.list.d/nvidia-l4t-apt-source.list'):
+                with open('/etc/apt/sources.list.d/nvidia-l4t-apt-source.list', 'r') as f:
+                    content = f.read()
+                    if 'r36' in content:
+                        info['gpu']['jetpack'] = '6.x'
+                    elif 'r35' in content:
+                        info['gpu']['jetpack'] = '5.x'
+        except:
+            pass
+        
+        info['gpu']['monitoring'] = 'jtop' if _JTOP_AVAILABLE else 'sysfs'
+    
+    elif _NVML_AVAILABLE:
         try:
             handle = pynvml.nvmlDeviceGetHandleByIndex(0)
             info['gpu']['name'] = pynvml.nvmlDeviceGetName(handle)
@@ -594,6 +853,8 @@ def get_system_info() -> Dict[str, Any]:
                 info['gpu']['power_limit_w'] = power_limit / 1000
             except:
                 pass
+            
+            info['gpu']['monitoring'] = 'nvml'
         except Exception as e:
             logger.debug(f"Could not get GPU info: {e}")
     
@@ -601,9 +862,9 @@ def get_system_info() -> Dict[str, Any]:
         props = torch.cuda.get_device_properties(0)
         info['gpu']['name'] = props.name
         info['gpu']['memory_total_gb'] = round(props.total_memory / (1024**3), 2)
+        info['gpu']['monitoring'] = 'pytorch'
     
     return info
-
 
 def print_hardware_stats(stats: HardwareStats, title: str = "Hardware Usage"):
     """Print hardware stats in a nice format."""

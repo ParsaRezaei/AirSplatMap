@@ -329,6 +329,19 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
     # RGB-D SLAM methods like ORB-SLAM3 would be is_monocular=False
     is_monocular = True  # All current methods are monocular
     
+    # Cleanup estimator to free GPU memory
+    if hasattr(estimator, 'cleanup'):
+        estimator.cleanup()
+    del estimator
+    try:
+        import torch
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        import gc
+        gc.collect()
+    except ImportError:
+        pass
+    
     return BenchmarkResult(
         method=method,
         dataset=dataset_name,

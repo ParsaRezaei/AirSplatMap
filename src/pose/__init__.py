@@ -81,6 +81,18 @@ class BasePoseEstimator(ABC):
         """Reset estimator state."""
         self._current_pose = np.eye(4)
         self._initialized = False
+    
+    def cleanup(self):
+        """Cleanup resources and free GPU memory. Override in subclasses."""
+        self.reset()
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+        except ImportError:
+            pass
 
 
 class ORBPoseEstimator(BasePoseEstimator):
@@ -796,6 +808,22 @@ class LoFTRPoseEstimator(BasePoseEstimator):
         super().reset()
         self._prev_gray = None
         self._prev_tensor = None
+    
+    def cleanup(self):
+        """Release GPU memory."""
+        super().cleanup()
+        self._prev_tensor = None
+        if self._matcher is not None:
+            del self._matcher
+            self._matcher = None
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+        except ImportError:
+            pass
 
 
 class SuperPointPoseEstimator(BasePoseEstimator):
@@ -990,6 +1018,26 @@ class SuperPointPoseEstimator(BasePoseEstimator):
         super().reset()
         self._prev_gray = None
         self._prev_feats = None
+    
+    def cleanup(self):
+        """Release GPU memory."""
+        super().cleanup()
+        self._prev_gray = None
+        self._prev_feats = None
+        if self._extractor is not None:
+            del self._extractor
+            self._extractor = None
+        if hasattr(self, '_matcher') and self._matcher is not None:
+            del self._matcher
+            self._matcher = None
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+        except ImportError:
+            pass
 
 
 class LightGluePoseEstimator(BasePoseEstimator):
@@ -1275,6 +1323,26 @@ class LightGluePoseEstimator(BasePoseEstimator):
         super().reset()
         self._prev_gray = None
         self._prev_feats = None
+    
+    def cleanup(self):
+        """Release GPU memory."""
+        super().cleanup()
+        self._prev_gray = None
+        self._prev_feats = None
+        if self._extractor is not None:
+            del self._extractor
+            self._extractor = None
+        if self._matcher is not None:
+            del self._matcher
+            self._matcher = None
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+        except ImportError:
+            pass
 
 
 class RAFTPoseEstimator(BasePoseEstimator):
@@ -1497,6 +1565,22 @@ class RAFTPoseEstimator(BasePoseEstimator):
     def reset(self):
         super().reset()
         self._prev_gray = None
+    
+    def cleanup(self):
+        """Release GPU memory."""
+        super().cleanup()
+        self._prev_gray = None
+        if self._raft is not None:
+            del self._raft
+            self._raft = None
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+        except ImportError:
+            pass
 
 
 class R2D2PoseEstimator(BasePoseEstimator):
@@ -1714,6 +1798,24 @@ class R2D2PoseEstimator(BasePoseEstimator):
         self._prev_gray = None
         self._prev_kp = None
         self._prev_desc = None
+    
+    def cleanup(self):
+        """Release GPU memory."""
+        super().cleanup()
+        self._prev_gray = None
+        self._prev_kp = None
+        self._prev_desc = None
+        if self._extractor is not None:
+            del self._extractor
+            self._extractor = None
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+        except ImportError:
+            pass
 
 
 class RoMaPoseEstimator(BasePoseEstimator):
@@ -1756,10 +1858,23 @@ class RoMaPoseEstimator(BasePoseEstimator):
             try:
                 from romatch import roma_outdoor, roma_indoor
                 
+                # Use fallback correlation for ARM/Jetson (no fused-local-corr available)
+                # Also reduce resolution for memory efficiency on edge devices
+                import platform
+                is_arm = platform.machine().startswith('aarch')
+                
+                roma_kwargs = {'device': self._device}
+                if is_arm:
+                    # Disable custom corr and use smaller resolution for ARM
+                    roma_kwargs['use_custom_corr'] = False
+                    roma_kwargs['coarse_res'] = 280  # Default is 560
+                    roma_kwargs['upsample_res'] = 420  # Default is 864
+                    logger.info("RoMa: Using ARM-optimized settings (no fused-local-corr)")
+                
                 if model == 'indoor':
-                    self._roma = roma_indoor(device=self._device)
+                    self._roma = roma_indoor(**roma_kwargs)
                 else:
-                    self._roma = roma_outdoor(device=self._device)
+                    self._roma = roma_outdoor(**roma_kwargs)
                 
                 self._available = True
                 logger.info(f"RoMa ({model}) initialized on {self._device}")
@@ -1927,6 +2042,23 @@ class RoMaPoseEstimator(BasePoseEstimator):
     def reset(self):
         super().reset()
         self._prev_gray = None
+    
+    def cleanup(self):
+        """Release GPU memory."""
+        super().cleanup()
+        self._prev_gray = None
+        self._prev_tensor = None if hasattr(self, '_prev_tensor') else None
+        if self._roma is not None:
+            del self._roma
+            self._roma = None
+        try:
+            import torch
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            import gc
+            gc.collect()
+        except ImportError:
+            pass
 
 
 # Registry of available estimators

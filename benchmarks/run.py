@@ -197,6 +197,16 @@ def run_pose_benchmark(
     results = []
     for method in methods:
         try:
+            # Clear GPU memory before each method
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                import gc
+                gc.collect()
+            except ImportError:
+                pass
+            
             logger.info(f"  Testing {method}...")
             result = run_benchmark(
                 method=method,
@@ -209,6 +219,16 @@ def run_pose_benchmark(
             logger.info(f"    ATE={result.ate_rmse:.4f}m, FPS={result.fps:.1f}")
         except Exception as e:
             logger.error(f"    {method} failed: {e}")
+        finally:
+            # Force cleanup after each method
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                import gc
+                gc.collect()
+            except ImportError:
+                pass
     
     return results
 
@@ -295,6 +315,13 @@ def run_gs_benchmark(
             logger.error(f"    {engine} failed: {e}")
             import traceback
             traceback.print_exc()
+        finally:
+            # Critical: Free GPU memory after each engine test
+            import torch
+            import gc
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            gc.collect()
     
     return results
 
@@ -553,6 +580,16 @@ def run_pipeline_benchmark(
             logger.error(f"    Failed: {e}")
             import traceback
             traceback.print_exc()
+        finally:
+            # Critical: Delete engine and free GPU memory
+            try:
+                del engine
+            except:
+                pass
+            import gc
+            gc.collect()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
     
     return results
 
@@ -1104,8 +1141,9 @@ def main():
         
         args.pose_methods = list(list_pose_estimators().keys())
         # Exclude stereo methods (require stereo camera pairs, not available in TUM)
-        # Exclude depth_pro (full model) as it uses too much VRAM, keep depth_pro_lite
-        excluded_depth = ('stereo', 'stereo_fast', 'stereo_sgbm', 'stereo_bm', 'none', 'depth_pro')
+        # Exclude depth_pro/lite - both OOM on Jetson 8GB (1.9GB model)
+        excluded_depth = ('stereo', 'stereo_fast', 'stereo_sgbm', 'stereo_bm', 'none', 
+                         'depth_pro', 'depth_pro_lite', 'midas_small', 'midas_large')
         args.depth_methods = [k for k, v in list_depth_estimators().items() 
                              if k not in excluded_depth
                              and v.get('available', True)]
