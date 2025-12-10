@@ -1,1 +1,0 @@
-dashboard/start_dashboard.sh

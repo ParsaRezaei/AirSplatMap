@@ -135,19 +135,8 @@ def list_engines():
         try:
             import torch
             from gsplat import rasterization
-            # Simple test - if this imports without error and _C is not None
-            from gsplat.cuda._wrapper import _make_lazy_cuda_func
-            # Try to trigger compilation with a small test
-            means = torch.rand(2, 3, device='cuda')
-            quats = torch.tensor([[1, 0, 0, 0], [1, 0, 0, 0]], dtype=torch.float32, device='cuda')
-            scales = torch.ones(2, 3, device='cuda') * 0.1
-            opacities = torch.ones(2, device='cuda')
-            colors = torch.ones(2, 3, device='cuda')
-            viewmat = torch.eye(4, device='cuda')
-            viewmat[2, 3] = -3.0
-            K = torch.tensor([[500, 0, 320], [0, 500, 240], [0, 0, 1]], dtype=torch.float32, device='cuda')
-            _ = rasterization(means=means, quats=quats, scales=scales, opacities=opacities, 
-                            colors=colors, viewmats=viewmat[None], Ks=K[None], width=640, height=480)
+            # Just check import works - actual JIT compilation happens on first use
+            # Full test is too slow (JIT compilation can take minutes on first run)
             _gsplat_works = True
         except Exception as e:
             _gsplat_works = False

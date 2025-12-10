@@ -346,12 +346,17 @@ class SplaTAMEngine(BaseGSEngine):
         self._cameras.append(curr_data)
         self._w2c_list.append(w2c)
         
-        # First frame: initialize Gaussians from depth
-        if len(self._cameras) == 1 and depth is not None:
-            self._initialize_gaussians_from_frame(curr_data)
-            self._keyframes.append(0)
+        # Check if Gaussians need to be initialized
+        # Initialize from the first frame that has valid depth
+        if 'cam_unnorm_rots' not in self._params:
+            if depth is not None:
+                logger.info(f"Initializing Gaussians from frame {len(self._cameras)-1} (first with depth)")
+                self._initialize_gaussians_from_frame(curr_data)
+                self._keyframes.append(len(self._cameras) - 1)
+            else:
+                logger.debug(f"Frame {len(self._cameras)-1} has no depth, waiting for depth to initialize")
         else:
-            # Subsequent frames: track and map
+            # Gaussians initialized: track and map
             self._process_frame(curr_data)
         
         self._frame_idx += 1
@@ -587,8 +592,17 @@ class SplaTAMEngine(BaseGSEngine):
         self._optimizer = torch.optim.Adam(param_groups, eps=1e-15)
     
     def _process_frame(self, frame_data: Dict) -> None:
-        """Process a new frame (tracking + mapping)."""
+        """Process a new frame (tracking + mapping).
+        
+        Note: This should only be called after Gaussians have been initialized.
+        The add_frame method handles initialization logic.
+        """
         time_idx = len(self._cameras) - 1
+        
+        # Safety check - should not happen if add_frame logic is correct
+        if 'cam_unnorm_rots' not in self._params:
+            logger.warning("_process_frame called before Gaussians initialized, skipping")
+            return
         
         # Extend camera parameters if needed
         if time_idx >= self._params['cam_unnorm_rots'].shape[-1]:
@@ -617,6 +631,10 @@ class SplaTAMEngine(BaseGSEngine):
     
     def _extend_camera_params(self, new_size: int) -> None:
         """Extend camera parameter tensors."""
+        if 'cam_unnorm_rots' not in self._params:
+            logger.warning("Cannot extend camera params: not initialized")
+            return
+            
         old_size = self._params['cam_unnorm_rots'].shape[-1]
         if new_size <= old_size:
             return

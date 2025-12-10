@@ -335,6 +335,11 @@ class GraphdecoEngine(BaseGSEngine):
         optimizer_type = self._config.get('optimizer_type', 'default')
         self._gaussians = self._GaussianModel(sh_degree, optimizer_type)
         
+        # Initialize exposure_mapping as empty dict (will be populated as frames are added)
+        # This prevents AttributeError if initialization from depth fails
+        if not hasattr(self._gaussians, 'exposure_mapping'):
+            self._gaussians.exposure_mapping = {}
+        
         # Setup background
         bg_color = [1, 1, 1] if self._config.get('white_background', False) else [0, 0, 0]
         self._background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -569,6 +574,9 @@ class GraphdecoEngine(BaseGSEngine):
             self._add_gaussians_from_depth(rgb_float, depth, pose_world_cam)
         
         # Add to exposure mapping if not present
+        # Ensure exposure_mapping exists (may not if create_from_pcd wasn't called yet)
+        if not hasattr(self._gaussians, 'exposure_mapping'):
+            self._gaussians.exposure_mapping = {}
         if camera.image_name not in self._gaussians.exposure_mapping:
             idx = len(self._gaussians.exposure_mapping)
             self._gaussians.exposure_mapping[camera.image_name] = idx
@@ -620,6 +628,12 @@ class GraphdecoEngine(BaseGSEngine):
         """Initialize Gaussians by back-projecting depth to 3D points."""
         logger.debug(f"_init_gaussians_from_rgbd: depth shape={depth.shape}, range=[{depth.min():.3f}, {depth.max():.3f}]")
         
+        # Auto-detect if depth is in millimeters and convert to meters
+        depth = depth.copy()
+        if depth.max() > 100:  # Likely in millimeters
+            logger.info(f"Depth appears to be in millimeters (max={depth.max():.1f}), converting to meters")
+            depth = depth / 1000.0
+        
         height, width = depth.shape
         fx = self._intrinsics['fx']
         fy = self._intrinsics['fy']
@@ -629,8 +643,8 @@ class GraphdecoEngine(BaseGSEngine):
         # Create pixel grid
         u, v = np.meshgrid(np.arange(width), np.arange(height))
         
-        # Filter valid depth
-        valid_mask = (depth > 0) & (depth < 10.0) & np.isfinite(depth)  # 10m max depth
+        # Filter valid depth (now in meters)
+        valid_mask = (depth > 0.01) & (depth < 10.0) & np.isfinite(depth)  # 1cm to 10m
         
         # Subsample for efficiency (take every Nth pixel)
         subsample = self._config.get('depth_subsample', 4)
@@ -686,6 +700,11 @@ class GraphdecoEngine(BaseGSEngine):
             logger.debug(f"Skipping Gaussian addition (at limit {current_count}/{max_gaussians})")
             return
         
+        # Auto-detect if depth is in millimeters and convert to meters
+        depth = depth.copy()
+        if depth.max() > 100:  # Likely in millimeters
+            depth = depth / 1000.0
+        
         height, width = depth.shape
         fx = self._intrinsics['fx']
         fy = self._intrinsics['fy']
@@ -695,8 +714,8 @@ class GraphdecoEngine(BaseGSEngine):
         # Create pixel grid
         u, v = np.meshgrid(np.arange(width), np.arange(height))
         
-        # Filter valid depth
-        valid_mask = (depth > 0) & (depth < 10.0)
+        # Filter valid depth (in meters)
+        valid_mask = (depth > 0.01) & (depth < 10.0)
         
         # More aggressive subsampling for subsequent frames
         subsample = self._config.get('add_gaussians_subsample', 8)

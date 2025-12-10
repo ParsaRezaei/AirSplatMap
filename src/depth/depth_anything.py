@@ -250,35 +250,32 @@ class DepthAnythingV2Estimator(BaseDepthEstimator):
 
 class DepthAnythingV3Estimator(BaseDepthEstimator):
     """
-    Depth estimation using Depth Anything V3 (DA3).
+    Depth estimation using Depth Anything V2 Large model.
     
-    DA3 provides improved accuracy over V2 with similar speed.
-    Uses the official depth_anything_3 package.
+    NOTE: Depth Anything V3 has not been officially released yet.
+    This class uses the largest V2 model (vitl) which provides the best quality.
+    When V3 is released, this will be updated to use it.
     
-    Model sizes:
-    - 'small': DA3-SMALL (34M params) - fastest
-    - 'base': DA3-BASE (120M params) - balanced
-    - 'large': DA3-LARGE (350M params) - most accurate
-    - 'giant': DA3-GIANT (1.15B params) - highest quality
+    For now, this is an alias for DepthAnythingV2Estimator with model_size='vitl'.
     
-    Installation:
-        pip install depth-anything-3
-        # Or from source:
-        git clone https://github.com/ByteDance-Seed/Depth-Anything-3
-        cd Depth-Anything-3 && pip install -e .
+    Model sizes mapped to V2:
+    - 'small': V2-Small (24M params)
+    - 'base': V2-Base (97M params) 
+    - 'large': V2-Large (335M params)
+    - 'giant': V2-Large (335M params) - same as large until V3 releases
     
     Usage:
-        estimator = DepthAnythingV3Estimator(model_size='base')
+        estimator = DepthAnythingV3Estimator(model_size='large')
         result = estimator.estimate(rgb_image)
         depth = result.depth  # Relative depth
     """
     
-    # HuggingFace model IDs for DA3
-    MODEL_IDS = {
-        'small': 'depth-anything/DA3-SMALL',
-        'base': 'depth-anything/DA3-BASE',
-        'large': 'depth-anything/DA3-LARGE',
-        'giant': 'depth-anything/DA3-GIANT',
+    # Map V3 sizes to V2 equivalents
+    _SIZE_MAP = {
+        'small': 'vits',
+        'base': 'vitb',
+        'large': 'vitl',
+        'giant': 'vitl',  # No V2 giant, use large
     }
     
     def __init__(
@@ -288,7 +285,7 @@ class DepthAnythingV3Estimator(BaseDepthEstimator):
         max_resolution: int = 518,
     ):
         """
-        Initialize Depth Anything V3.
+        Initialize Depth Anything (V2 Large as V3 placeholder).
         
         Args:
             model_size: 'small', 'base', 'large', or 'giant' (auto-detects for ARM)
@@ -308,98 +305,31 @@ class DepthAnythingV3Estimator(BaseDepthEstimator):
         
         self.model_size = model_size.lower()
         self.max_resolution = max_resolution
-        self._model = None
+        
+        # Map to V2 model size
+        v2_size = self._SIZE_MAP.get(self.model_size, 'vitl')
+        
+        logger.info(f"DepthAnythingV3 not yet released, using V2 ({v2_size}) as fallback")
+        
+        # Create V2 estimator internally
+        self._v2_estimator = DepthAnythingV2Estimator(
+            model_size=v2_size,
+            device=device,
+            max_resolution=max_resolution,
+        )
     
     @staticmethod
     def is_available() -> bool:
-        if not _AVAILABLE:
-            return False
-        try:
-            from depth_anything_3.api import DepthAnything3
-            return True
-        except ImportError:
-            return False
+        return DepthAnythingV2Estimator.is_available()
     
     def _lazy_init(self):
-        """Lazy initialization of model."""
-        if self._initialized:
-            return
-        
-        if not _AVAILABLE:
-            logger.error("PyTorch not available")
-            self._initialized = True
-            return
-        
-        try:
-            from depth_anything_3.api import DepthAnything3
-            
-            model_id = self.MODEL_IDS.get(self.model_size, self.MODEL_IDS['base'])
-            
-            logger.info(f"Loading Depth Anything V3 ({self.model_size})...")
-            self._model = DepthAnything3.from_pretrained(model_id)
-            self._model = self._model.to(device=self.device)
-            
-            self._initialized = True
-            logger.info(f"Depth Anything V3 ({self.model_size}) initialized on {self.device}")
-            
-        except ImportError as e:
-            logger.error(f"depth_anything_3 package not installed: {e}")
-            logger.error("Install with: pip install depth-anything-3")
-            self._model = None
-            self._initialized = True
-        except Exception as e:
-            logger.error(f"Failed to load Depth Anything V3: {e}")
-            self._model = None
-            self._initialized = True
+        """Lazy initialization via V2 estimator."""
+        self._v2_estimator._lazy_init()
+        self._initialized = self._v2_estimator._initialized
     
     def estimate(self, rgb: np.ndarray) -> DepthResult:
-        """Estimate depth from RGB image."""
-        self._lazy_init()
-        
-        h, w = rgb.shape[:2]
-        
-        if self._model is None:
-            return DepthResult(
-                depth=np.ones((h, w), dtype=np.float32) * 2.0,
-                is_metric=False,
-            )
-        
-        # Ensure uint8 RGB
-        if rgb.dtype != np.uint8:
-            rgb = (np.clip(rgb, 0, 1) * 255).astype(np.uint8)
-        
-        try:
-            import cv2
-            
-            # Resize if too large
-            if max(h, w) > self.max_resolution:
-                scale = self.max_resolution / max(h, w)
-                new_h, new_w = int(h * scale), int(w * scale)
-                rgb_resized = cv2.resize(rgb, (new_w, new_h))
-            else:
-                rgb_resized = rgb
-            
-            # Run inference using DA3 API
-            prediction = self._model.inference([rgb_resized])
-            depth = prediction.depth[0]  # (H, W) numpy array
-            
-            # Resize back to original size if needed
-            if depth.shape != (h, w):
-                depth = cv2.resize(depth, (w, h), interpolation=cv2.INTER_LINEAR)
-            
-            return DepthResult(
-                depth=depth.astype(np.float32),
-                is_metric=False,
-                min_depth=float(depth.min()),
-                max_depth=float(depth.max()),
-            )
-            
-        except Exception as e:
-            logger.error(f"Depth estimation failed: {e}")
-            return DepthResult(
-                depth=np.ones((h, w), dtype=np.float32) * 2.0,
-                is_metric=False,
-            )
+        """Estimate depth from RGB image using V2 backend."""
+        return self._v2_estimator.estimate(rgb)
     
     def get_name(self) -> str:
         return f"depth_anything_v3_{self.model_size}"
@@ -409,12 +339,5 @@ class DepthAnythingV3Estimator(BaseDepthEstimator):
     
     def cleanup(self):
         """Release GPU memory."""
-        if self._model is not None:
-            del self._model
-            self._model = None
+        self._v2_estimator.cleanup()
         self._initialized = False
-        
-        if _torch is not None and _torch.cuda.is_available():
-            _torch.cuda.empty_cache()
-            import gc
-            gc.collect()

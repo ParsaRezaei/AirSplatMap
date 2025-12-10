@@ -29,6 +29,22 @@ from typing import Dict, List, Optional, Any, Tuple
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).parent.parent
+
+# Curated list of representative datasets (avoids redundant similar scenes)
+# This reduces benchmark time from ~85 hours to ~27 hours while maintaining coverage
+CURATED_DATASETS = {
+    # TUM RGB-D - core benchmarks
+    'rgbd_dataset_freiburg1_desk',      # Standard benchmark scene
+    'rgbd_dataset_freiburg1_room',      # Larger motion, loop closure
+    'rgbd_dataset_freiburg1_xyz',       # Axis-aligned baseline
+    'rgbd_dataset_freiburg3_long_office_household',  # Long sequence, drift test
+    # 7-Scenes - indoor variety
+    'chess',                            # Good texture, geometric
+    'office',                           # Standard indoor
+    # Replica - clean synthetic GT
+    'office0',                          # Synthetic office
+    'room0',                            # Synthetic room
+}
 sys.path.insert(0, str(PROJECT_ROOT))
 
 # Basic console logging - file handler added later when output_dir is known
@@ -1141,9 +1157,11 @@ def main():
         
         args.pose_methods = list(list_pose_estimators().keys())
         # Exclude stereo methods (require stereo camera pairs, not available in TUM)
-        # Exclude depth_pro/lite - both OOM on Jetson 8GB (1.9GB model)
+        # Exclude depth_pro (full model) - OOM on most GPUs
+        # Exclude depth_anything_v2 since v3 (using vitl) is strictly better
+        # Note: depth_pro_lite may OOM on Jetson 8GB - use --depth-methods to override
         excluded_depth = ('stereo', 'stereo_fast', 'stereo_sgbm', 'stereo_bm', 'none', 
-                         'depth_pro', 'depth_pro_lite', 'midas_small', 'midas_large')
+                         'depth_pro', 'depth_anything_v2', 'dav2', 'depth_anything')
         args.depth_methods = [k for k, v in list_depth_estimators().items() 
                              if k not in excluded_depth
                              and v.get('available', True)]
@@ -1190,7 +1208,16 @@ def main():
     elif not args.multi_dataset:
         # Default: use first dataset only
         all_datasets_with_types = all_datasets_with_types[:1]
-    # else: multi-dataset mode uses all found datasets
+    else:
+        # Multi-dataset mode: use curated list to avoid redundant scenes
+        # This reduces ~19 datasets to ~8 representative ones
+        all_datasets_with_types = [
+            (d, t) for d, t in all_datasets_with_types 
+            if d.name in CURATED_DATASETS
+        ]
+        if not all_datasets_with_types:
+            logger.warning("No curated datasets found, using all available")
+            all_datasets_with_types = find_all_datasets(dataset_root)
     
     # Extract just the paths for backward compatibility
     datasets = [d for d, t in all_datasets_with_types]

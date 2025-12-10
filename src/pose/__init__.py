@@ -149,8 +149,24 @@ class ORBPoseEstimator(BasePoseEstimator):
             )
         
         # Extract matched points
-        pts1 = np.float32([self._prev_kp[m.queryIdx].pt for m in good_matches])
-        pts2 = np.float32([kp[m.trainIdx].pt for m in good_matches])
+        pts1 = np.float32([self._prev_kp[m.queryIdx].pt for m in good_matches]).reshape(-1, 2)
+        pts2 = np.float32([kp[m.trainIdx].pt for m in good_matches]).reshape(-1, 2)
+        
+        # Ensure contiguous arrays for OpenCV
+        pts1 = np.ascontiguousarray(pts1)
+        pts2 = np.ascontiguousarray(pts2)
+        
+        # Ensure we have valid points
+        if pts1.shape[0] < 8 or pts2.shape[0] < 8:
+            self._prev_gray = gray
+            self._prev_kp = kp
+            self._prev_desc = desc
+            return PoseResult(
+                pose=self._current_pose.copy(),
+                num_inliers=0,
+                tracking_status="lost",
+                confidence=0.0,
+            )
         
         # Estimate essential matrix
         E, mask = cv2.findEssentialMat(
@@ -311,6 +327,10 @@ class RobustFlowEstimator(BasePoseEstimator):
                 confidence=0.0,
             )
         
+        # Ensure contiguous arrays for OpenCV
+        good_prev = np.ascontiguousarray(good_prev)
+        good_next = np.ascontiguousarray(good_next)
+        
         # Estimate essential matrix
         E, mask = cv2.findEssentialMat(
             good_prev, good_next, self._K,
@@ -419,8 +439,12 @@ class SIFTPoseEstimator(BasePoseEstimator):
                 confidence=0.0,
             )
         
-        pts1 = np.float32([self._prev_kp[m.queryIdx].pt for m in good_matches])
-        pts2 = np.float32([kp[m.trainIdx].pt for m in good_matches])
+        pts1 = np.float32([self._prev_kp[m.queryIdx].pt for m in good_matches]).reshape(-1, 2)
+        pts2 = np.float32([kp[m.trainIdx].pt for m in good_matches]).reshape(-1, 2)
+        
+        # Ensure contiguous arrays for OpenCV
+        pts1 = np.ascontiguousarray(pts1)
+        pts2 = np.ascontiguousarray(pts2)
         
         E, mask = cv2.findEssentialMat(
             pts1, pts2, self._K,
@@ -571,8 +595,8 @@ class KeyframePoseEstimator(BasePoseEstimator):
             if len(matches) < 15:
                 continue
             
-            pts1 = np.float32([kf_kp[m.queryIdx].pt for m in matches])
-            pts2 = np.float32([kp[m.trainIdx].pt for m in matches])
+            pts1 = np.ascontiguousarray(np.float32([kf_kp[m.queryIdx].pt for m in matches]).reshape(-1, 2))
+            pts2 = np.ascontiguousarray(np.float32([kp[m.trainIdx].pt for m in matches]).reshape(-1, 2))
             
             E, mask = cv2.findEssentialMat(pts1, pts2, self._K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
             
@@ -595,8 +619,8 @@ class KeyframePoseEstimator(BasePoseEstimator):
             matches = sorted(matches, key=lambda x: x.distance)[:100]
             
             if len(matches) >= 8:
-                pts1 = np.float32([self._prev_kp[m.queryIdx].pt for m in matches])
-                pts2 = np.float32([kp[m.trainIdx].pt for m in matches])
+                pts1 = np.ascontiguousarray(np.float32([self._prev_kp[m.queryIdx].pt for m in matches]).reshape(-1, 2))
+                pts2 = np.ascontiguousarray(np.float32([kp[m.trainIdx].pt for m in matches]).reshape(-1, 2))
                 
                 E, mask = cv2.findEssentialMat(pts1, pts2, self._K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
                 
@@ -767,6 +791,10 @@ class LoFTRPoseEstimator(BasePoseEstimator):
         # Scale points back to original resolution
         mkpts0 = mkpts0 / scale
         mkpts1 = mkpts1 / scale
+        
+        # Ensure contiguous arrays for OpenCV
+        mkpts0 = np.ascontiguousarray(mkpts0.reshape(-1, 2))
+        mkpts1 = np.ascontiguousarray(mkpts1.reshape(-1, 2))
         
         # Estimate essential matrix
         E, mask = cv2.findEssentialMat(mkpts0, mkpts1, self._K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
@@ -977,6 +1005,10 @@ class SuperPointPoseEstimator(BasePoseEstimator):
         # Get matched points
         pts0 = self._lafs_to_points(self._prev_feats['lafs'])[matches0] / scale
         pts1 = self._lafs_to_points(curr_feats['lafs'])[matches1] / scale
+        
+        # Ensure contiguous arrays for OpenCV
+        pts0 = np.ascontiguousarray(pts0.reshape(-1, 2))
+        pts1 = np.ascontiguousarray(pts1.reshape(-1, 2))
         
         # Estimate essential matrix
         E, mask = cv2.findEssentialMat(pts0, pts1, self._K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
@@ -1529,6 +1561,10 @@ class RAFTPoseEstimator(BasePoseEstimator):
         pts1 = pts1 / scale
         pts2 = pts2 / scale
         
+        # Ensure contiguous arrays for OpenCV
+        pts1 = np.ascontiguousarray(pts1.reshape(-1, 2))
+        pts2 = np.ascontiguousarray(pts2.reshape(-1, 2))
+        
         # Estimate essential matrix
         E, mask = cv2.findEssentialMat(pts1, pts2, self._K, method=cv2.RANSAC, prob=0.999, threshold=0.5)
         
@@ -1754,6 +1790,10 @@ class R2D2PoseEstimator(BasePoseEstimator):
         # Get matched points and scale back
         pts1 = self._prev_kp[matches0] / scale
         pts2 = kp[matches1] / scale
+        
+        # Ensure contiguous arrays for OpenCV
+        pts1 = np.ascontiguousarray(pts1.reshape(-1, 2))
+        pts2 = np.ascontiguousarray(pts2.reshape(-1, 2))
         
         # Estimate essential matrix
         E, mask = cv2.findEssentialMat(pts1, pts2, self._K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
@@ -2006,6 +2046,10 @@ class RoMaPoseEstimator(BasePoseEstimator):
         pts1 = pts1 / scale
         pts2 = pts2 / scale
         
+        # Ensure contiguous arrays for OpenCV
+        pts1 = np.ascontiguousarray(pts1.reshape(-1, 2))
+        pts2 = np.ascontiguousarray(pts2.reshape(-1, 2))
+        
         # Estimate essential matrix
         E, mask = cv2.findEssentialMat(pts1, pts2, self._K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
         
@@ -2102,8 +2146,17 @@ def get_pose_estimator(name: str, **kwargs) -> BasePoseEstimator:
 
 
 def list_pose_estimators() -> Dict[str, Dict[str, Any]]:
-    """List available pose estimators."""
-    return {
+    """List available pose estimators with availability status."""
+    
+    # Check which estimators are actually available
+    def check_available(name: str) -> bool:
+        try:
+            est = get_pose_estimator(name)
+            return est is not None
+        except Exception:
+            return False
+    
+    estimators = {
         'orb': {
             'description': 'Fast ORB-based visual odometry',
             'speed': 'fast',
@@ -2166,6 +2219,12 @@ def list_pose_estimators() -> Dict[str, Dict[str, Any]]:
             'requires': 'romatch',
         },
     }
+    
+    # Add availability status
+    for name in estimators:
+        estimators[name]['available'] = check_available(name)
+    
+    return estimators
 
 
 __all__ = [

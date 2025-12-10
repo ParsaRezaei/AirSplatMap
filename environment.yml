@@ -101,6 +101,10 @@ dependencies:
       - pyglm>=2.5.0
       - configargparse>=1.5.0
       
+      # ----- Hardware Monitoring -----
+      - psutil>=5.9.0
+      - nvidia-ml-py>=12.0.0  # GPU monitoring (replaces deprecated pynvml)
+      
       # ----- Deep Learning Core -----
       - timm>=0.9.0
       - torchmetrics>=1.0.0
