@@ -1157,11 +1157,11 @@ def main():
         
         args.pose_methods = list(list_pose_estimators().keys())
         # Exclude stereo methods (require stereo camera pairs, not available in TUM)
-        # Exclude depth_pro (full model) - OOM on most GPUs
-        # Exclude depth_anything_v2 since v3 (using vitl) is strictly better
-        # Note: depth_pro_lite may OOM on Jetson 8GB - use --depth-methods to override
-        excluded_depth = ('stereo', 'stereo_fast', 'stereo_sgbm', 'stereo_bm', 'none', 
-                         'depth_pro', 'depth_anything_v2', 'dav2', 'depth_anything')
+        # Exclude depth_pro and depth_pro_lite - both OOM on Jetson 8GB (1.9GB model)
+        # Exclude depth_anything_v2 since v3 is available
+        excluded_depth = ('stereo', 'stereo_fast', 'stereo_sgbm', 'stereo_bm', 'none',
+                         'depth_pro', 'depth_pro_lite',  # OOM on Jetson
+                         'depth_anything_v2', 'dav2', 'depth_anything')
         args.depth_methods = [k for k, v in list_depth_estimators().items() 
                              if k not in excluded_depth
                              and v.get('available', True)]
