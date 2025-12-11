@@ -55,6 +55,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def log_gpu_memory(prefix: str = ""):
+    """Log current GPU memory usage."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            allocated = torch.cuda.memory_allocated() / (1024**3)
+            reserved = torch.cuda.memory_reserved() / (1024**3)
+            max_allocated = torch.cuda.max_memory_allocated() / (1024**3)
+            logger.info(f"{prefix}GPU Memory: {allocated:.2f}GB allocated, {reserved:.2f}GB reserved, {max_allocated:.2f}GB peak")
+    except Exception as e:
+        logger.debug(f"Could not get GPU memory: {e}")
+
+
 def setup_file_logging(output_dir: Path):
     """Add file handler to log to output directory."""
     log_file = output_dir / "benchmark.log"
@@ -317,6 +330,7 @@ def run_gs_benchmark(
     for engine in engines:
         try:
             logger.info(f"  Testing {engine}...")
+            log_gpu_memory(f"    [Before {engine}] ")
             result = _run_gs(
                 engine_name=engine,
                 dataset_path=str(dataset_path),
@@ -327,6 +341,7 @@ def run_gs_benchmark(
             result_dict = asdict(result)
             results.append(result_dict)
             logger.info(f"    PSNR={result.psnr:.2f}dB, SSIM={result.ssim:.4f}, Gaussians={result.final_gaussians:,}")
+            log_gpu_memory(f"    [After {engine}] ")
         except Exception as e:
             logger.error(f"    {engine} failed: {e}")
             import traceback
@@ -663,6 +678,7 @@ def run_pipeline_benchmark(
             results.append(asdict(result))
             
             logger.info(f"    PSNR={result.psnr:.2f}dB, SSIM={result.ssim:.4f}, {result.num_gaussians:,} Gaussians")
+            log_gpu_memory(f"    ")
             
         except Exception as e:
             logger.error(f"    Failed: {e}")
