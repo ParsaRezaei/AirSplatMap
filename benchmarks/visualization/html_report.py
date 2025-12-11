@@ -178,7 +178,12 @@ def generate_html_report(
     # Hardware stats
     hw = hardware_stats.get('overall', {}) if hardware_stats else {}
     duration = hw.get('duration_seconds', 0)
-    gpu_mem_max = hw.get('process', {}).get('gpu_memory_gb_max', 0) if hw else 0
+    # Use system-wide GPU memory (more reliable than process-specific)
+    gpu_stats = hw.get('gpu', {}) if hw else {}
+    gpu_mem_max = gpu_stats.get('memory_used_gb_max', 0)
+    # Validate - reject obviously bad values (overflow errors from pynvml)
+    if gpu_mem_max > 100:  # No GPU has >100GB memory
+        gpu_mem_max = 0
     
     # Generate HTML
     html = f'''<!DOCTYPE html>

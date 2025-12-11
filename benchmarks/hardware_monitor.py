@@ -542,9 +542,17 @@ class HardwareMonitor:
                 snapshot.gpu_utilization = util.gpu
                 
                 mem = pynvml.nvmlDeviceGetMemoryInfo(self._gpu_handle)
-                snapshot.gpu_memory_used_gb = mem.used / (1024**3)
-                snapshot.gpu_memory_total_gb = mem.total / (1024**3)
-                snapshot.gpu_memory_percent = (mem.used / mem.total) * 100
+                # Validate memory values (reject obviously invalid readings)
+                # Max reasonable GPU memory is ~100GB (A100 80GB is currently largest)
+                mem_used_gb = mem.used / (1024**3)
+                mem_total_gb = mem.total / (1024**3)
+                
+                if 0 <= mem_used_gb <= 100 and 0 < mem_total_gb <= 100:
+                    snapshot.gpu_memory_used_gb = mem_used_gb
+                    snapshot.gpu_memory_total_gb = mem_total_gb
+                    snapshot.gpu_memory_percent = (mem.used / mem.total) * 100
+                else:
+                    logger.debug(f"Invalid GPU memory reading: {mem_used_gb:.2f}/{mem_total_gb:.2f} GB")
                 
                 # Process-specific GPU memory
                 snapshot.process_gpu_memory_gb = self._get_process_gpu_memory()
