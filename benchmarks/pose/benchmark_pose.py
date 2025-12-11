@@ -248,15 +248,18 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
     
     # Auto-detect dataset type and load appropriate source
     source = _get_dataset_source(dataset_path)
-    frames = list(source)
     
-    if max_frames:
-        frames = frames[:max_frames]
+    # Get total frame count and intrinsics without loading all frames
+    total_frames = len(source)
+    intrinsics = source.get_intrinsics()
     
-    if skip_frames > 1:
-        frames = frames[::skip_frames]
+    # Calculate which frame indices to process
+    if max_frames and max_frames < total_frames:
+        frame_indices = set(range(0, max_frames, skip_frames))
+    else:
+        frame_indices = set(range(0, total_frames, skip_frames))
     
-    if len(frames) == 0:
+    if len(frame_indices) == 0:
         raise ValueError(f"No frames found in {dataset_path}")
     
     # Initialize estimator
@@ -266,20 +269,24 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
     if hasattr(estimator, '_available') and not estimator._available:
         raise RuntimeError(f"Pose estimator '{method}' failed to initialize (missing dependencies)")
     
-    intrinsics = frames[0].intrinsics
     estimator.set_intrinsics_from_dict(intrinsics)
     
-    # Run estimation
+    # Run estimation - stream frames to avoid loading all into memory
     estimated_poses = []
     gt_poses = []
     inliers_list = []
     confidence_list = []
     latencies_ms = []
     lost_frames = 0
+    frames_processed = 0
     
     t0 = time.time()
     
-    for frame in frames:
+    for frame in source:
+        # Skip frames not in our indices
+        if frame.idx not in frame_indices:
+            continue
+            
         frame_start = time.time()
         result = estimator.estimate(frame.rgb)
         frame_end = time.time()
@@ -293,9 +300,11 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
         
         if result.num_inliers < 8:
             lost_frames += 1
+        
+        frames_processed += 1
     
     total_time = time.time() - t0
-    fps = len(frames) / total_time
+    fps = frames_processed / total_time
     
     # Compute latency statistics
     latencies_ms = np.array(latencies_ms)
@@ -345,7 +354,7 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
     return BenchmarkResult(
         method=method,
         dataset=dataset_name,
-        num_frames=len(frames),
+        num_frames=frames_processed,
         total_time=round(total_time, 2),
         fps=round(fps, 2),
         is_monocular=is_monocular,
