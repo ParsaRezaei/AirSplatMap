@@ -536,26 +536,34 @@ class HardwareMonitor:
                 snapshot.process_gpu_memory_gb = torch.cuda.memory_allocated() / (1024**3)
         
         elif _NVML_AVAILABLE and self._gpu_handle:
-            # Desktop: use pynvml
+            # Desktop: use pynvml for utilization/temp/power, PyTorch for memory
             try:
                 util = pynvml.nvmlDeviceGetUtilizationRates(self._gpu_handle)
                 snapshot.gpu_utilization = util.gpu
                 
-                mem = pynvml.nvmlDeviceGetMemoryInfo(self._gpu_handle)
-                # Validate memory values (reject obviously invalid readings)
-                # Max reasonable GPU memory is ~100GB (A100 80GB is currently largest)
-                mem_used_gb = mem.used / (1024**3)
-                mem_total_gb = mem.total / (1024**3)
-                
-                if 0 <= mem_used_gb <= 100 and 0 < mem_total_gb <= 100:
-                    snapshot.gpu_memory_used_gb = mem_used_gb
-                    snapshot.gpu_memory_total_gb = mem_total_gb
-                    snapshot.gpu_memory_percent = (mem.used / mem.total) * 100
+                # Use PyTorch for GPU memory (more accurate for ML workloads)
+                if _TORCH_AVAILABLE and torch.cuda.is_available():
+                    # PyTorch memory tracking
+                    snapshot.gpu_memory_used_gb = torch.cuda.memory_allocated() / (1024**3)
+                    snapshot.gpu_memory_total_gb = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                    if snapshot.gpu_memory_total_gb > 0:
+                        snapshot.gpu_memory_percent = (snapshot.gpu_memory_used_gb / snapshot.gpu_memory_total_gb) * 100
+                    snapshot.process_gpu_memory_gb = snapshot.gpu_memory_used_gb
+                    
+                    # Also track reserved memory (includes caching allocator overhead)
+                    # This gives a more complete picture of GPU memory pressure
                 else:
-                    logger.debug(f"Invalid GPU memory reading: {mem_used_gb:.2f}/{mem_total_gb:.2f} GB")
-                
-                # Process-specific GPU memory
-                snapshot.process_gpu_memory_gb = self._get_process_gpu_memory()
+                    # Fallback to pynvml if PyTorch not available
+                    mem = pynvml.nvmlDeviceGetMemoryInfo(self._gpu_handle)
+                    mem_used_gb = mem.used / (1024**3)
+                    mem_total_gb = mem.total / (1024**3)
+                    
+                    if 0 <= mem_used_gb <= 100 and 0 < mem_total_gb <= 100:
+                        snapshot.gpu_memory_used_gb = mem_used_gb
+                        snapshot.gpu_memory_total_gb = mem_total_gb
+                        snapshot.gpu_memory_percent = (mem.used / mem.total) * 100
+                    
+                    snapshot.process_gpu_memory_gb = self._get_process_gpu_memory()
                 
                 try:
                     snapshot.gpu_temperature_c = pynvml.nvmlDeviceGetTemperature(
@@ -575,7 +583,7 @@ class HardwareMonitor:
             except Exception as e:
                 logger.debug(f"NVML error: {e}")
         
-        # Fallback GPU memory via PyTorch (if nothing else worked)
+        # Fallback GPU memory via PyTorch (if pynvml not available)
         elif _TORCH_AVAILABLE and torch.cuda.is_available():
             try:
                 snapshot.gpu_memory_used_gb = torch.cuda.memory_allocated() / (1024**3)
