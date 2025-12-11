@@ -1845,9 +1845,9 @@ class R2D2PoseEstimator(BasePoseEstimator):
         self._prev_gray = None
         self._prev_kp = None
         self._prev_desc = None
-        if self._extractor is not None:
-            del self._extractor
-            self._extractor = None
+        if self._r2d2 is not None:
+            del self._r2d2
+            self._r2d2 = None
         try:
             import torch
             if torch.cuda.is_available():

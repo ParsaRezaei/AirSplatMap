@@ -371,6 +371,7 @@ class PipelineResult:
 
 def run_pipeline_benchmark(
     dataset_path: Path,
+    dataset_type: str = 'tum',
     gs_engine: str = 'gsplat',
     pose_methods: List[str] = None,
     depth_methods: List[str] = None,
@@ -386,7 +387,6 @@ def run_pipeline_benchmark(
     - Estimated pose + GT depth  
     - Estimated pose + estimated depth (real-world scenario)
     """
-    from src.pipeline.frames import TumRGBDSource
     from src.engines import get_engine
     from src.pose import get_pose_estimator
     from src.depth import get_depth_estimator
@@ -402,8 +402,8 @@ def run_pipeline_benchmark(
     dataset_name = dataset_path.name
     logger.info(f"Running pipeline benchmark on {dataset_name}")
     
-    # Load dataset
-    source = TumRGBDSource(str(dataset_path))
+    # Load dataset using appropriate source for dataset type
+    source = get_dataset_source(dataset_path, dataset_type)
     frames = list(source)[:max_frames]
     
     if not frames:
@@ -517,6 +517,28 @@ def run_pipeline_benchmark(
     for config_name, pose_source, depth_source in configs:
         logger.info(f"  Testing {config_name} with {gs_engine}...")
         
+        # Check GPU health before each test
+        if torch.cuda.is_available():
+            try:
+                torch.cuda.synchronize()
+                # Quick memory check
+                free_mem = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)
+                if free_mem < 1e9:  # Less than 1GB free
+                    logger.warning(f"Low GPU memory ({free_mem/1e9:.1f}GB free), forcing cleanup...")
+                    import gc
+                    gc.collect()
+                    torch.cuda.empty_cache()
+            except RuntimeError as e:
+                logger.error(f"CUDA error before test, attempting recovery: {e}")
+                import gc
+                gc.collect()
+                torch.cuda.empty_cache()
+                try:
+                    torch.cuda.synchronize()
+                except:
+                    logger.error("CUDA recovery failed, skipping remaining tests")
+                    break
+        
         try:
             torch.cuda.empty_cache()
             
@@ -597,14 +619,20 @@ def run_pipeline_benchmark(
             import traceback
             traceback.print_exc()
         finally:
-            # Critical: Delete engine and free GPU memory
+            # Critical: Delete engine and free GPU memory aggressively
             try:
-                del engine
+                if 'engine' in dir():
+                    del engine
             except:
                 pass
             import gc
             gc.collect()
             if torch.cuda.is_available():
+                # Synchronize to catch any async CUDA errors
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()
+                # Force garbage collection of CUDA tensors
+                gc.collect()
                 torch.cuda.empty_cache()
     
     return results
@@ -1364,6 +1392,7 @@ def main():
                 logger.info(f"  Running pipeline with {engine}...")
                 engine_results = run_pipeline_benchmark(
                     dataset,
+                    dataset_type=dataset_types.get(str(dataset), 'tum'),
                     gs_engine=engine,
                     pose_methods=pipeline_pose_methods,
                     depth_methods=pipeline_depth_methods,
