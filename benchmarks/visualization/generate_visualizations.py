@@ -214,7 +214,7 @@ def generate_comprehensive_visualizations(
     gs_by_dataset = group_by_dataset(gs_results)
     
     for dataset in sorted(all_datasets):
-        logger.info(f"📂 Generating plots for {dataset}...")
+        logger.info(f"[+] Generating plots for {dataset}...")
         dataset_dir = plots_dir / dataset
         
         # Pose plots
@@ -225,9 +225,9 @@ def generate_comprehensive_visualizations(
             try:
                 _generate_pose_metrics_bar(dataset_pose, pose_dir / "metrics_bar.png", dataset)
                 _generate_pose_accuracy_plot(dataset_pose, pose_dir / "accuracy.png", dataset)
-                logger.info(f"    ✓ {dataset}/pose/")
+                logger.info(f"    [OK] {dataset}/pose/")
             except Exception as e:
-                logger.warning(f"    ✗ {dataset}/pose failed: {e}")
+                logger.warning(f"    [FAIL] {dataset}/pose failed: {e}")
         
         # Depth plots
         dataset_depth = depth_by_dataset.get(dataset, [])
@@ -237,9 +237,9 @@ def generate_comprehensive_visualizations(
             try:
                 _generate_depth_metrics_bar(dataset_depth, depth_dir / "metrics_bar.png", dataset)
                 _generate_depth_threshold_plot(dataset_depth, depth_dir / "thresholds.png", dataset)
-                logger.info(f"    ✓ {dataset}/depth/")
+                logger.info(f"    [OK] {dataset}/depth/")
             except Exception as e:
-                logger.warning(f"    ✗ {dataset}/depth failed: {e}")
+                logger.warning(f"    [FAIL] {dataset}/depth failed: {e}")
         
         # GS plots
         dataset_gs = gs_by_dataset.get(dataset, [])
@@ -249,19 +249,19 @@ def generate_comprehensive_visualizations(
             try:
                 _generate_gs_quality_bar(dataset_gs, gs_dir / "quality.png", dataset)
                 _generate_gs_efficiency_plot(dataset_gs, gs_dir / "efficiency.png", dataset)
-                logger.info(f"    ✓ {dataset}/gs/")
+                logger.info(f"    [OK] {dataset}/gs/")
             except Exception as e:
-                logger.warning(f"    ✗ {dataset}/gs failed: {e}")
+                logger.warning(f"    [FAIL] {dataset}/gs failed: {e}")
     
     # 3D trajectory plots if data available
     if trajectory_data:
         try:
             _generate_trajectory_plots(trajectory_data, general_dir)
-            logger.info("    ✓ general/trajectories/")
+            logger.info("    [OK] general/trajectories/")
         except Exception as e:
-            logger.warning(f"    ✗ trajectories failed: {e}")
+            logger.warning(f"    [FAIL] trajectories failed: {e}")
     
-    logger.info("✅ Visualization generation complete!")
+    logger.info("Visualization generation complete!")
 
 
 # =============================================================================
