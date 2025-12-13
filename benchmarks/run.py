@@ -664,6 +664,20 @@ def run_depth_benchmark(
         dataset_name = dataset_path.name
         save_depth_cache(estimated_depths, gt_depths, depth_errors, cache_dir, dataset_name)
     
+    # CRITICAL: Clean up large data structures to free RAM
+    if 'all_frames' in dir():
+        del all_frames
+    if 'estimated_depths' in dir():
+        del estimated_depths
+    if 'gt_depths' in dir():
+        del gt_depths
+    if 'raw_depths' in dir():
+        del raw_depths
+    import gc
+    gc.collect()
+    safe_cuda_cleanup()
+    logger.info("  Depth benchmark cleanup complete")
+    
     return results
 
 # =============================================================================
@@ -1983,6 +1997,15 @@ def main():
         print(f"  DATASET {dataset_idx + 1}/{len(datasets)}: {dataset_name}")
         print(f"{'='*80}")
         
+        # CRITICAL: Aggressive cleanup between datasets to prevent OOM
+        if dataset_idx > 0:
+            logger.info(f"Cleaning up memory before {dataset_name}...")
+            import gc
+            gc.collect()
+            safe_cuda_cleanup()
+            # Log memory state
+            log_gpu_memory(f"[Before {dataset_name}] ")
+        
         # Check CUDA health before starting a new dataset
         if not global_cuda_healthy:
             logger.error(f"Skipping {dataset_name} - CUDA context corrupted from previous dataset")
@@ -2116,6 +2139,13 @@ def main():
         
         # Store per-dataset results
         all_results['per_dataset'][dataset_name] = dataset_results
+        
+        # CRITICAL: Clean up after each dataset to prevent OOM on next dataset
+        logger.info(f"Cleaning up after {dataset_name}...")
+        import gc
+        gc.collect()
+        safe_cuda_cleanup()
+        log_gpu_memory(f"[After {dataset_name}] ")
     
     # Stop hardware monitoring and collect results
     if hardware_monitor:
