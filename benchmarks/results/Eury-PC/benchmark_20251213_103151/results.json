@@ -1,0 +1,398 @@
+{
+  "timestamp": "2025-12-13T10:31:51.163517",
+  "datasets": [
+    "rgbd_dataset_freiburg1_desk",
+    "rgbd_dataset_freiburg1_desk2"
+  ],
+  "system_info": {
+    "cpu": {
+      "cores_physical": 8,
+      "cores_logical": 16,
+      "freq_mhz": 3600.0,
+      "freq_max_mhz": 3600.0
+    },
+    "memory": {
+      "total_gb": 63.91
+    },
+    "gpu": {
+      "name": "NVIDIA GeForce RTX 2080 Ti",
+      "memory_total_gb": 11.0,
+      "power_limit_w": 331.0,
+      "monitoring": "nvml"
+    },
+    "platform": "desktop"
+  },
+  "pose": [],
+  "depth": [],
+  "gs": [],
+  "pipeline": [
+    {
+      "name": "GT_pose_GT_depth",
+      "pose_source": "gt",
+      "depth_source": "gt",
+      "gs_engine": "graphdeco",
+      "dataset": "rgbd_dataset_freiburg1_desk",
+      "psnr": 15.954602254430347,
+      "ssim": 0.5673856616020203,
+      "total_time": 4.883034706115723,
+      "fps": 20.479068042411352,
+      "num_gaussians": 51565,
+      "lpips": 0.6470023632049561,
+      "pose_ate": 0.0,
+      "depth_abs_rel": 0.0
+    },
+    {
+      "name": "GT_pose_midas_depth",
+      "pose_source": "gt",
+      "depth_source": "midas",
+      "gs_engine": "graphdeco",
+      "dataset": "rgbd_dataset_freiburg1_desk",
+      "psnr": 13.187098129424783,
+      "ssim": 0.499391108751297,
+      "total_time": 4.444911003112793,
+      "fps": 22.497638294663158,
+      "num_gaussians": 52800,
+      "lpips": 0.7741649985313416,
+      "pose_ate": 0.0,
+      "depth_abs_rel": 0.6065386533737183
+    },
+    {
+      "name": "orb_pose_GT_depth",
+      "pose_source": "orb",
+      "depth_source": "gt",
+      "gs_engine": "graphdeco",
+      "dataset": "rgbd_dataset_freiburg1_desk",
+      "psnr": 7.266729843203111,
+      "ssim": 0.2461257867515087,
+      "total_time": 2.925203323364258,
+      "fps": 34.18565786565244,
+      "num_gaussians": 51565,
+      "lpips": 0.8482006311416626,
+      "pose_ate": 0.45737472689509984,
+      "depth_abs_rel": 0.0
+    },
+    {
+      "name": "orb_pose_midas_depth",
+      "pose_source": "orb",
+      "depth_source": "midas",
+      "gs_engine": "graphdeco",
+      "dataset": "rgbd_dataset_freiburg1_desk",
+      "psnr": 11.483421893558155,
+      "ssim": 0.49055716395378113,
+      "total_time": 3.11181640625,
+      "fps": 32.135571944139336,
+      "num_gaussians": 52800,
+      "lpips": 0.7769685029983521,
+      "pose_ate": 0.45737472689509984,
+      "depth_abs_rel": 0.6065386533737183
+    },
+    {
+      "name": "GT_pose_GT_depth",
+      "pose_source": "gt",
+      "depth_source": "gt",
+      "gs_engine": "graphdeco",
+      "dataset": "rgbd_dataset_freiburg1_desk2",
+      "psnr": 14.79375171606334,
+      "ssim": 0.5469256401062011,
+      "total_time": 4.107134580612183,
+      "fps": 24.34787515170605,
+      "num_gaussians": 51493,
+      "lpips": 0.6824738144874573,
+      "pose_ate": 0.0,
+      "depth_abs_rel": 0.0
+    },
+    {
+      "name": "GT_pose_midas_depth",
+      "pose_source": "gt",
+      "depth_source": "midas",
+      "gs_engine": "graphdeco",
+      "dataset": "rgbd_dataset_freiburg1_desk2",
+      "psnr": 11.893190449811106,
+      "ssim": 0.4733705997467041,
+      "total_time": 3.968888521194458,
+      "fps": 25.195970979276705,
+      "num_gaussians": 52800,
+      "lpips": 0.8220115065574646,
+      "pose_ate": 0.0,
+      "depth_abs_rel": 0.5415474772453308
+    },
+    {
+      "name": "orb_pose_GT_depth",
+      "pose_source": "orb",
+      "depth_source": "gt",
+      "gs_engine": "graphdeco",
+      "dataset": "rgbd_dataset_freiburg1_desk2",
+      "psnr": 8.464070689965734,
+      "ssim": 0.3673834815621376,
+      "total_time": 2.8846957683563232,
+      "fps": 34.66570065965022,
+      "num_gaussians": 51493,
+      "lpips": 0.8226158142089843,
+      "pose_ate": 0.907928000455817,
+      "depth_abs_rel": 0.0
+    },
+    {
+      "name": "orb_pose_midas_depth",
+      "pose_source": "orb",
+      "depth_source": "midas",
+      "gs_engine": "graphdeco",
+      "dataset": "rgbd_dataset_freiburg1_desk2",
+      "psnr": 9.074312262615512,
+      "ssim": 0.3356554456055164,
+      "total_time": 2.684922218322754,
+      "fps": 37.24502680843733,
+      "num_gaussians": 52800,
+      "lpips": 0.8288498520851135,
+      "pose_ate": 0.907928000455817,
+      "depth_abs_rel": 0.5415474772453308
+    }
+  ],
+  "hardware": {
+    "overall": {
+      "duration_seconds": 76.86,
+      "num_samples": 144,
+      "cpu": {
+        "system_percent_mean": 44.7,
+        "system_percent_max": 87.6
+      },
+      "ram": {
+        "system_used_gb_mean": 27.93,
+        "system_used_gb_max": 28.81,
+        "system_percent_mean": 43.7
+      },
+      "process": {
+        "cpu_percent_mean": 311.7,
+        "cpu_percent_max": 777.0,
+        "ram_gb_mean": 2.32,
+        "ram_gb_max": 3.28,
+        "gpu_memory_gb_mean": 0.15,
+        "gpu_memory_gb_max": 0.6
+      },
+      "gpu": {
+        "utilization_mean": 24.9,
+        "utilization_max": 65,
+        "memory_used_gb_mean": 0.15,
+        "memory_used_gb_max": 0.6,
+        "memory_percent_mean": 1.4,
+        "memory_percent_max": 5.4,
+        "temperature_c_mean": 36.0,
+        "temperature_c_max": 42,
+        "power_w_mean": 99.4,
+        "power_w_max": 212.8
+      },
+      "energy_wh": 2.1226
+    },
+    "phases": {
+      "pipeline_rgbd_dataset_freiburg1_desk": {
+        "duration_seconds": 42.38,
+        "num_samples": 80,
+        "cpu": {
+          "system_percent_mean": 44.5,
+          "system_percent_max": 87.6
+        },
+        "ram": {
+          "system_used_gb_mean": 27.66,
+          "system_used_gb_max": 28.81,
+          "system_percent_mean": 43.3
+        },
+        "process": {
+          "cpu_percent_mean": 294.5,
+          "cpu_percent_max": 738.6,
+          "ram_gb_mean": 2.08,
+          "ram_gb_max": 3.28,
+          "gpu_memory_gb_mean": 0.14,
+          "gpu_memory_gb_max": 0.6
+        },
+        "gpu": {
+          "utilization_mean": 24.7,
+          "utilization_max": 65,
+          "memory_used_gb_mean": 0.14,
+          "memory_used_gb_max": 0.6,
+          "memory_percent_mean": 1.3,
+          "memory_percent_max": 5.4,
+          "temperature_c_mean": 35.4,
+          "temperature_c_max": 41,
+          "power_w_mean": 98.7,
+          "power_w_max": 205.9
+        },
+        "energy_wh": 1.162
+      },
+      "pipeline_rgbd_dataset_freiburg1_desk2": {
+        "duration_seconds": 33.31,
+        "num_samples": 63,
+        "cpu": {
+          "system_percent_mean": 45.6,
+          "system_percent_max": 78.9
+        },
+        "ram": {
+          "system_used_gb_mean": 28.31,
+          "system_used_gb_max": 28.74,
+          "system_percent_mean": 44.3
+        },
+        "process": {
+          "cpu_percent_mean": 338.5,
+          "cpu_percent_max": 777.0,
+          "ram_gb_mean": 2.65,
+          "ram_gb_max": 3.01,
+          "gpu_memory_gb_mean": 0.16,
+          "gpu_memory_gb_max": 0.52
+        },
+        "gpu": {
+          "utilization_mean": 25.3,
+          "utilization_max": 62,
+          "memory_used_gb_mean": 0.16,
+          "memory_used_gb_max": 0.52,
+          "memory_percent_mean": 1.5,
+          "memory_percent_max": 4.7,
+          "temperature_c_mean": 36.9,
+          "temperature_c_max": 42,
+          "power_w_mean": 101.2,
+          "power_w_max": 212.8
+        },
+        "energy_wh": 0.9361
+      }
+    },
+    "monitoring": {
+      "sample_interval_s": 0.5,
+      "total_samples": 144,
+      "psutil_available": true,
+      "nvml_available": true
+    }
+  },
+  "per_dataset": {
+    "rgbd_dataset_freiburg1_desk": {
+      "pose": [],
+      "depth": [],
+      "gs": [],
+      "pipeline": [
+        {
+          "name": "GT_pose_GT_depth",
+          "pose_source": "gt",
+          "depth_source": "gt",
+          "gs_engine": "graphdeco",
+          "dataset": "rgbd_dataset_freiburg1_desk",
+          "psnr": 15.954602254430347,
+          "ssim": 0.5673856616020203,
+          "total_time": 4.883034706115723,
+          "fps": 20.479068042411352,
+          "num_gaussians": 51565,
+          "lpips": 0.6470023632049561,
+          "pose_ate": 0.0,
+          "depth_abs_rel": 0.0
+        },
+        {
+          "name": "GT_pose_midas_depth",
+          "pose_source": "gt",
+          "depth_source": "midas",
+          "gs_engine": "graphdeco",
+          "dataset": "rgbd_dataset_freiburg1_desk",
+          "psnr": 13.187098129424783,
+          "ssim": 0.499391108751297,
+          "total_time": 4.444911003112793,
+          "fps": 22.497638294663158,
+          "num_gaussians": 52800,
+          "lpips": 0.7741649985313416,
+          "pose_ate": 0.0,
+          "depth_abs_rel": 0.6065386533737183
+        },
+        {
+          "name": "orb_pose_GT_depth",
+          "pose_source": "orb",
+          "depth_source": "gt",
+          "gs_engine": "graphdeco",
+          "dataset": "rgbd_dataset_freiburg1_desk",
+          "psnr": 7.266729843203111,
+          "ssim": 0.2461257867515087,
+          "total_time": 2.925203323364258,
+          "fps": 34.18565786565244,
+          "num_gaussians": 51565,
+          "lpips": 0.8482006311416626,
+          "pose_ate": 0.45737472689509984,
+          "depth_abs_rel": 0.0
+        },
+        {
+          "name": "orb_pose_midas_depth",
+          "pose_source": "orb",
+          "depth_source": "midas",
+          "gs_engine": "graphdeco",
+          "dataset": "rgbd_dataset_freiburg1_desk",
+          "psnr": 11.483421893558155,
+          "ssim": 0.49055716395378113,
+          "total_time": 3.11181640625,
+          "fps": 32.135571944139336,
+          "num_gaussians": 52800,
+          "lpips": 0.7769685029983521,
+          "pose_ate": 0.45737472689509984,
+          "depth_abs_rel": 0.6065386533737183
+        }
+      ]
+    },
+    "rgbd_dataset_freiburg1_desk2": {
+      "pose": [],
+      "depth": [],
+      "gs": [],
+      "pipeline": [
+        {
+          "name": "GT_pose_GT_depth",
+          "pose_source": "gt",
+          "depth_source": "gt",
+          "gs_engine": "graphdeco",
+          "dataset": "rgbd_dataset_freiburg1_desk2",
+          "psnr": 14.79375171606334,
+          "ssim": 0.5469256401062011,
+          "total_time": 4.107134580612183,
+          "fps": 24.34787515170605,
+          "num_gaussians": 51493,
+          "lpips": 0.6824738144874573,
+          "pose_ate": 0.0,
+          "depth_abs_rel": 0.0
+        },
+        {
+          "name": "GT_pose_midas_depth",
+          "pose_source": "gt",
+          "depth_source": "midas",
+          "gs_engine": "graphdeco",
+          "dataset": "rgbd_dataset_freiburg1_desk2",
+          "psnr": 11.893190449811106,
+          "ssim": 0.4733705997467041,
+          "total_time": 3.968888521194458,
+          "fps": 25.195970979276705,
+          "num_gaussians": 52800,
+          "lpips": 0.8220115065574646,
+          "pose_ate": 0.0,
+          "depth_abs_rel": 0.5415474772453308
+        },
+        {
+          "name": "orb_pose_GT_depth",
+          "pose_source": "orb",
+          "depth_source": "gt",
+          "gs_engine": "graphdeco",
+          "dataset": "rgbd_dataset_freiburg1_desk2",
+          "psnr": 8.464070689965734,
+          "ssim": 0.3673834815621376,
+          "total_time": 2.8846957683563232,
+          "fps": 34.66570065965022,
+          "num_gaussians": 51493,
+          "lpips": 0.8226158142089843,
+          "pose_ate": 0.907928000455817,
+          "depth_abs_rel": 0.0
+        },
+        {
+          "name": "orb_pose_midas_depth",
+          "pose_source": "orb",
+          "depth_source": "midas",
+          "gs_engine": "graphdeco",
+          "dataset": "rgbd_dataset_freiburg1_desk2",
+          "psnr": 9.074312262615512,
+          "ssim": 0.3356554456055164,
+          "total_time": 2.684922218322754,
+          "fps": 37.24502680843733,
+          "num_gaussians": 52800,
+          "lpips": 0.8288498520851135,
+          "pose_ate": 0.907928000455817,
+          "depth_abs_rel": 0.5415474772453308
+        }
+      ]
+    }
+  }
+}

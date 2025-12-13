@@ -1154,6 +1154,9 @@ def run_pipeline_benchmark(
                 except:
                     pass
             
+            # Check if engine is using fallback rendering (gsplat CUDA issue)
+            using_fallback = getattr(engine, '_using_fallback', False)
+            
             result = PipelineResult(
                 name=config_name,
                 pose_source=pose_source,
@@ -1169,7 +1172,14 @@ def run_pipeline_benchmark(
                 pose_ate=float(pose_errors.get(pose_source, 0)) if pose_source != 'gt' else 0.0,
                 depth_abs_rel=float(depth_errors.get(depth_source, 0)) if depth_source != 'gt' else 0.0,
             )
-            results.append(asdict(result))
+            result_dict = asdict(result)
+            
+            # Mark fallback results so they're clearly identified
+            if using_fallback:
+                result_dict['note'] = 'FALLBACK: gsplat CUDA toolkit not found - results invalid'
+                logger.warning(f"    Results marked as invalid - gsplat using fallback rendering")
+            
+            results.append(result_dict)
             
             logger.info(f"    PSNR={result.psnr:.2f}dB, SSIM={result.ssim:.4f}, LPIPS={result.lpips:.4f}, {result.num_gaussians:,} Gaussians")
             log_gpu_memory(f"    ")
@@ -1311,15 +1321,18 @@ def print_pipeline_results(results: List[Dict]):
     print("\n" + "=" * 80)
     print("COMBINED PIPELINE RESULTS")
     print("=" * 80)
-    print(f"{'Configuration':<35} {'PSNR':<10} {'SSIM':<10} {'LPIPS':<10} {'Pose ATE':<12} {'Depth Err':<10}")
-    print("-" * 80)
+    print(f"{'Configuration':<35} {'PSNR':<10} {'SSIM':<10} {'LPIPS':<10} {'Pose ATE':<12} {'Depth Err':<10} {'Note'}")
+    print("-" * 100)
     
     for r in sorted(results, key=lambda x: -x['psnr']):
         pose_ate = f"{r['pose_ate']:.4f}m" if r['pose_ate'] > 0 else "GT"
         depth_err = f"{r['depth_abs_rel']:.4f}" if r['depth_abs_rel'] > 0 else "GT"
         lpips_val = f"{r.get('lpips', 0):.4f}" if r.get('lpips', 0) > 0 else "-"
+        note = r.get('note', '')
+        if 'FALLBACK' in note:
+            note = '*FALLBACK*'
         print(f"{r['name']:<35} {r['psnr']:<10.2f} {r['ssim']:<10.4f} {lpips_val:<10} "
-              f"{pose_ate:<12} {depth_err:<10}")
+              f"{pose_ate:<12} {depth_err:<10} {note}")
 
 
 # =============================================================================
@@ -1785,11 +1798,11 @@ def main():
         if torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0)
             gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1e9
-            logger.info(f"✓ GPU available: {gpu_name} ({gpu_mem:.1f} GB)")
-            print(f"\n🎮 GPU: {gpu_name} ({gpu_mem:.1f} GB VRAM)")
+            logger.info(f"GPU available: {gpu_name} ({gpu_mem:.1f} GB)")
+            print(f"\n[GPU] {gpu_name} ({gpu_mem:.1f} GB VRAM)")
         else:
-            logger.warning("⚠️ No GPU available - benchmarks will be slow!")
-            print("\n⚠️  WARNING: No GPU detected - benchmarks will run on CPU (very slow)")
+            logger.warning("No GPU available - benchmarks will be slow!")
+            print("\n[WARNING] No GPU detected - benchmarks will run on CPU (very slow)")
     except ImportError:
         logger.warning("PyTorch not available - cannot check GPU")
     
@@ -1816,6 +1829,12 @@ def main():
                           and v.get('available', True)]
         
         logger.info(f"Comprehensive mode: {len(args.pose_methods)} pose, {len(args.depth_methods)} depth, {len(args.gs_engines)} GS")
+        
+        # Comprehensive mode implies running ALL benchmark types
+        # unless user explicitly specifies which sections to run
+        if not (args.pose or args.depth or args.gs or args.pipeline):
+            # No specific section specified - run everything
+            args.all = True
     
     # Default to all if nothing specified
     run_all = args.all or not (args.pose or args.depth or args.gs or args.pipeline)
@@ -2201,7 +2220,7 @@ def main():
         print(f"       ├── {ddir.name[:20]+'...' if len(ddir.name) > 20 else ddir.name}/  - {dcount} plots")
     if len(dataset_dirs) > 3:
         print(f"       └── ... and {len(dataset_dirs) - 3} more dataset folders")
-    print(f"\n🔗 Latest results: benchmarks/results/{hostname}/latest/")
+    print(f"\n=> Latest results: benchmarks/results/{hostname}/latest/")
 
 
 if __name__ == '__main__':

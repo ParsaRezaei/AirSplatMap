@@ -525,8 +525,14 @@ class GSplatEngine(BaseGSEngine):
             if not hasattr(self, '_rasterization_error_logged'):
                 self._rasterization_error_logged = True
                 logger.warning(f"gsplat rasterization failed: {err_msg}, using fallback")
+                logger.warning("gsplat requires CUDA toolkit (nvcc) to be installed and in PATH.")
+                logger.warning("On Windows: Install CUDA Toolkit from NVIDIA. On Linux: apt install nvidia-cuda-toolkit")
             
-            # Fallback to simple point rendering
+            # Mark that we're using fallback (for benchmark results)
+            self._using_fallback = True
+            
+            # Fallback to simple point rendering - returns zeros (black) which gives bad metrics
+            # This is intentional to make it clear gsplat isn't working
             return torch.zeros(height, width, 3, device=self.device)
     
     def _sh_to_rgb(self, sh: torch.Tensor, positions: torch.Tensor, camera_pos: torch.Tensor) -> torch.Tensor:

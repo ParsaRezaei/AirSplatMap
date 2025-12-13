@@ -75,22 +75,23 @@ set "DISTUTILS_USE_SDK=1"
 
 REM ============================================
 REM Setup Visual Studio Build Tools (for gsplat JIT compilation)
+REM IMPORTANT: Use VS 2019 for CUDA 12.1 compatibility (VS 2022 v17.10+ is too new)
 REM ============================================
 set "VSCMD_START_DIR=%CD%"
 
-REM Try VS 2022 first, then 2019
-if exist "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" (
-    call "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
-) else if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" (
-    call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
-) else if exist "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat" (
-    call "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
-) else if exist "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat" (
+REM Try VS 2019 first (required for CUDA 12.1), then 2022
+if exist "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat" (
     call "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
 ) else if exist "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat" (
     call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
 ) else if exist "C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build\vcvars64.bat" (
     call "C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+) else if exist "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" (
+    call "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+) else if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" (
+    call "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+) else if exist "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat" (
+    call "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
 )
 
 REM ============================================
@@ -202,13 +203,14 @@ if ($cudaPath) {
     $env:CUDA_HOME = $cudaPath
     
     # Also setup MSVC for this session (needed for building extensions)
+    # IMPORTANT: Use VS 2019 for CUDA 12.1 compatibility (VS 2022 v17.10+ is too new)
     $vsPathsToTry = @(
-        "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat",
-        "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat",
-        "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat",
         "C:\Program Files (x86)\Microsoft Visual Studio\2019\BuildTools\VC\Auxiliary\Build\vcvars64.bat",
         "C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat",
-        "C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build\vcvars64.bat"
+        "C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build\vcvars64.bat",
+        "C:\Program Files\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat",
+        "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat",
+        "C:\Program Files\Microsoft Visual Studio\2022\Professional\VC\Auxiliary\Build\vcvars64.bat"
     )
     
     $vsPath = $null
@@ -242,6 +244,9 @@ set > "$tempEnv"
     
     $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
     $gsSubmodules = "$scriptDir\submodules\gaussian-splatting\submodules"
+    
+    # Set DISTUTILS_USE_SDK to avoid VC environment activation issues
+    $env:DISTUTILS_USE_SDK = "1"
     
     $ErrorActionPreference = "Continue"
     
@@ -318,18 +323,18 @@ $da3Path = "$scriptDir\submodules\Depth-Anything-3"
 if (Test-Path "$da3Path\pyproject.toml") {
     Write-Host "Found DA3 at: $da3Path" -ForegroundColor Green
     
-    # Install DA3 dependencies first (some may conflict, so install key ones)
-    Write-Host "Installing DA3 dependencies..." -ForegroundColor Cyan
+    # Install xformers first (required for DA3 attention) - must match torch version
+    # Use xformers 0.0.27 which is compatible with torch 2.3.1
+    Write-Host "Installing xformers (compatible with torch 2.3.1)..." -ForegroundColor Cyan
     $ErrorActionPreference = "Continue"
-    pip install einops huggingface_hub omegaconf evo e3nn moviepy plyfile safetensors trimesh open3d pillow_heif 2>&1 | Out-Host
+    pip install xformers==0.0.27 --index-url https://download.pytorch.org/whl/cu121 2>&1 | Out-Host
     
-    # Install xformers (required for DA3 attention)
-    Write-Host "Installing xformers..." -ForegroundColor Cyan
-    pip install xformers 2>&1 | Out-Host
+    # Install addict (missing from DA3 pyproject.toml but required)
+    pip install addict 2>&1 | Out-Host
     
-    # Install DA3 in editable mode
-    Write-Host "Installing DA3 package..." -ForegroundColor Cyan
-    pip install -e "$da3Path" --no-deps 2>&1 | Out-Host
+    # Install DA3 in editable mode WITH all its dependencies
+    Write-Host "Installing DA3 package with all dependencies..." -ForegroundColor Cyan
+    pip install -e "$da3Path" 2>&1 | Out-Host
     $ErrorActionPreference = "Stop"
     
     # Verify DA3 installation
@@ -354,4 +359,30 @@ Write-Host "  - Gaussian Splatting (diff-gaussian-rasterization)" -ForegroundCol
 Write-Host "  - gsplat (JIT compilation)" -ForegroundColor White  
 Write-Host "  - Depth Anything V3 (DA3)" -ForegroundColor White
 Write-Host ""
+
+# ============================================
+# Final Step: Reinstall correct PyTorch with CUDA
+# (Some packages like gsplat/xformers may have installed CPU-only torch)
+# ============================================
+Write-Host ""
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host "Final: Ensuring correct PyTorch with CUDA..." -ForegroundColor Cyan
+Write-Host "==============================================" -ForegroundColor Cyan
+
+$ErrorActionPreference = "Continue"
+pip uninstall torch torchvision torchaudio -y 2>&1 | Out-Null
+pip install torch==2.3.1+cu121 torchvision==0.18.1+cu121 torchaudio==2.3.1+cu121 --index-url https://download.pytorch.org/whl/cu121 2>&1 | Out-Host
+$ErrorActionPreference = "Stop"
+
+# Final verification
+Write-Host ""
+Write-Host "Final PyTorch verification:" -ForegroundColor Cyan
+$ErrorActionPreference = "Continue"
+python -c "import torch; print(f'  PyTorch: {torch.__version__}'); print(f'  CUDA available: {torch.cuda.is_available()}'); print(f'  CUDA version: {torch.version.cuda}') if torch.cuda.is_available() else print('  WARNING: CUDA not available!')"
+$ErrorActionPreference = "Stop"
+
+Write-Host ""
+Write-Host "==============================================" -ForegroundColor Green
+Write-Host "Setup Complete!" -ForegroundColor Green
+Write-Host "==============================================" -ForegroundColor Green
 
