@@ -454,10 +454,12 @@ class GraphdecoEngine(BaseGSEngine):
             colors = colors.reshape(-1, 3)
         
         # Validate points - remove NaN, Inf, and extreme outliers that can corrupt CUDA
+        # Also check for zero-variance which can cause numerical issues
         valid_mask = (
             np.isfinite(points).all(axis=1) & 
             np.isfinite(colors).all(axis=1) &
-            (np.abs(points) < 1000).all(axis=1)  # Remove extreme outliers
+            (np.abs(points) < 100).all(axis=1) &  # Tighter outlier threshold
+            (np.abs(points) > 1e-6).any(axis=1)   # Avoid points at exact origin
         )
         
         if not valid_mask.all():
@@ -465,6 +467,12 @@ class GraphdecoEngine(BaseGSEngine):
             logger.warning(f"Removing {n_invalid} invalid points (NaN/Inf/outliers) from point cloud")
             points = points[valid_mask]
             colors = colors[valid_mask]
+        
+        # Additional validation: check for degenerate point distributions
+        if len(points) > 0:
+            std_dev = np.std(points, axis=0)
+            if np.any(std_dev < 1e-6) or np.any(std_dev > 100):
+                logger.warning(f"Point cloud has extreme spread (std={std_dev}), may cause instability")
         
         if len(points) == 0:
             logger.error("No valid points remaining after filtering!")
@@ -553,12 +561,34 @@ class GraphdecoEngine(BaseGSEngine):
         else:
             rgb_float = rgb.astype(np.float32)
         
-        rgb_tensor = torch.from_numpy(rgb_float).permute(2, 0, 1).cuda()
+        # Validate RGB values before CUDA transfer to prevent corruption
+        rgb_float = np.clip(rgb_float, 0.0, 1.0)
+        if not np.all(np.isfinite(rgb_float)):
+            logger.warning(f"Frame {frame_id}: RGB contains NaN/Inf, replacing with zeros")
+            rgb_float = np.nan_to_num(rgb_float, nan=0.0, posinf=1.0, neginf=0.0)
+        
+        try:
+            # Ensure CUDA is in a good state before transfer
+            if torch.cuda.is_available():
+                torch.cuda.synchronize()
+            rgb_tensor = torch.from_numpy(rgb_float.copy()).permute(2, 0, 1).cuda()
+        except RuntimeError as e:
+            logger.error(f"CUDA error during RGB transfer: {e}")
+            raise
         
         # Handle depth
         depth_tensor = None
         if depth is not None:
-            depth_tensor = torch.from_numpy(depth.astype(np.float32)).cuda()
+            depth_np = depth.astype(np.float32)
+            # Validate depth values
+            if not np.all(np.isfinite(depth_np)):
+                logger.warning(f"Frame {frame_id}: Depth contains NaN/Inf, cleaning")
+                depth_np = np.nan_to_num(depth_np, nan=0.0, posinf=0.0, neginf=0.0)
+            try:
+                depth_tensor = torch.from_numpy(depth_np.copy()).cuda()
+            except RuntimeError as e:
+                logger.error(f"CUDA error during depth transfer: {e}")
+                raise
         
         # Create camera
         camera = OnlineCamera(
@@ -673,7 +703,16 @@ class GraphdecoEngine(BaseGSEngine):
         u, v = np.meshgrid(np.arange(width), np.arange(height))
         
         # Filter valid depth (now in meters) - be more conservative with estimated depth
+        # Also remove statistical outliers based on median
         valid_mask = (depth > 0.05) & (depth < 8.0) & np.isfinite(depth)  # 5cm to 8m
+        
+        # Remove depth outliers using IQR (helps with MiDaS artifacts)
+        if np.sum(valid_mask) > 1000:
+            valid_depths = depth[valid_mask]
+            q1, q3 = np.percentile(valid_depths, [5, 95])
+            iqr = q3 - q1
+            depth_inlier_mask = (depth >= q1 - 1.5*iqr) & (depth <= q3 + 1.5*iqr)
+            valid_mask = valid_mask & depth_inlier_mask
         
         # Subsample for efficiency (take every Nth pixel)
         subsample = self._config.get('depth_subsample', 4)
@@ -746,8 +785,8 @@ class GraphdecoEngine(BaseGSEngine):
         # Create pixel grid
         u, v = np.meshgrid(np.arange(width), np.arange(height))
         
-        # Filter valid depth (in meters)
-        valid_mask = (depth > 0.01) & (depth < 10.0)
+        # Filter valid depth (in meters) - also check for finite values
+        valid_mask = (depth > 0.01) & (depth < 10.0) & np.isfinite(depth)
         
         # More aggressive subsampling for subsequent frames
         subsample = self._config.get('add_gaussians_subsample', 8)
@@ -757,7 +796,7 @@ class GraphdecoEngine(BaseGSEngine):
         
         u_valid = u[valid_mask]
         v_valid = v[valid_mask]
-        z_valid = depth[valid_mask]
+        z_valid = depth[valid_mask].astype(np.float32)
         
         if len(z_valid) == 0:
             return
@@ -766,15 +805,28 @@ class GraphdecoEngine(BaseGSEngine):
         x_cam = (u_valid - cx) * z_valid / fx
         y_cam = (v_valid - cy) * z_valid / fy
         z_cam = z_valid
-        points_cam = np.stack([x_cam, y_cam, z_cam], axis=1)
+        points_cam = np.stack([x_cam, y_cam, z_cam], axis=1).astype(np.float32)
         
         # Transform to world coordinates
-        R = pose_world_cam[:3, :3]
-        t = pose_world_cam[:3, 3]
+        R = pose_world_cam[:3, :3].astype(np.float32)
+        t = pose_world_cam[:3, 3].astype(np.float32)
         points_world = (R @ points_cam.T).T + t
         
         # Get colors
-        colors = rgb[valid_mask]
+        colors = rgb[valid_mask].astype(np.float32)
+        colors = np.clip(colors, 0.0, 1.0)
+        
+        # Validate points before extending
+        valid_points = (
+            np.isfinite(points_world).all(axis=1) &
+            (np.abs(points_world) < 100).all(axis=1)
+        )
+        if not valid_points.all():
+            points_world = points_world[valid_points]
+            colors = colors[valid_points]
+        
+        if len(points_world) == 0:
+            return
         
         # Add to existing Gaussians
         self._extend_gaussians(points_world, colors)
