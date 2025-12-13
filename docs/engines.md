@@ -11,6 +11,7 @@ AirSplatMap supports multiple 3D Gaussian Splatting engines, each with different
 | **monogs** | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ✅ | ✅ | ✅ |
 | **splatam** | ⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐ | ❌ | ✅ | ❌ |
 | **gslam** | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ❌ | ✅ | ❌ |
+| **da3gs** | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ❌ | ✅ | ✅ |
 | **photoslam** | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | ✅ | ✅ |
 
 ## Choosing an Engine
@@ -151,6 +152,26 @@ engine = get_engine("gslam")
 **Cons:**
 - Complex configuration
 - Requires RGB-D
+
+### DA3GS (Depth Anything V3 + Gaussian Splatting)
+
+End-to-end depth estimation and Gaussian prediction using Depth Anything V3.
+
+```python
+engine = get_engine("da3gs")
+```
+
+**Pros:**
+- Integrated depth estimation
+- Works with RGB-only input
+- No separate depth model needed
+
+**Cons:**
+- Batch-based (not incremental)
+- Slower than dedicated engines
+- Requires Depth Anything V3 submodule
+
+**Note:** DA3GS is a batch engine - it processes all frames first, then optimizes.
 
 ### Photo-SLAM (Photorealistic)
 

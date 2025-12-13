@@ -18,7 +18,7 @@ Camera/Drone → Pose Estimation → 3D Gaussian Splatting → Web Dashboard
 |---------|-------------|
 | 🚀 **Multiple 3DGS Engines** | GSplat, GraphDeco, MonoGS, SplaTAM, Photo-SLAM |
 | 📍 **Visual Odometry** | ORB, SIFT, LoFTR, SuperPoint, RealSense VIO |
-| 🎯 **Depth Estimation** | MiDaS, Depth Anything, ZoeDepth |
+| 🎯 **Depth Estimation** | MiDaS, Depth Anything V2/V3, Depth Pro |
 | 🌐 **Web Dashboard** | Real-time 3D visualization in browser |
 | 📊 **Benchmarks** | Automated evaluation with plots |
 | 🤖 **ArduPilot** | MAVLink integration for drones/rovers |
@@ -439,7 +439,8 @@ AirSplatMap/
 | `graphdeco` | ⭐⭐⭐ | ❌ | Best quality |
 | `monogs` | ⭐⭐⭐⭐ | ✅ | SLAM with tracking |
 | `splatam` | ⭐⭐ | ❌ | RGB-D dense reconstruction |
-| `photoslam` | ⭐⭐⭐⭐ | ✅ | Photorealistic |
+| `da3gs` | ⭐⭐ | ❌ | End-to-end depth + Gaussians |
+| `gslam` | ⭐⭐⭐ | ❌ | Large scenes with submaps |
 
 ```python
 from src.engines import get_engine, list_engines

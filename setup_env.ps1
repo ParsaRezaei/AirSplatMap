@@ -129,15 +129,60 @@ set "CUDA_PATH="
 set "DISTUTILS_USE_SDK="
 '@
 
-# Write activation scripts
+# Create PowerShell activation script
+$activateScriptPS = @'
+# AirSplatMap CUDA/MSVC Environment Setup for PowerShell
+# This script runs automatically when you activate the airsplatmap environment
+
+# Save original PATH for deactivation
+$env:AIRSPLATMAP_OLD_PATH = $env:PATH
+
+# Required for PyTorch CUDA extension building with MSVC
+$env:DISTUTILS_USE_SDK = "1"
+
+# Setup CUDA Toolkit - try multiple versions
+$cudaPaths = @(
+    "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.1",
+    "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.2",
+    "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.4",
+    "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8"
+)
+foreach ($cudaPath in $cudaPaths) {
+    if (Test-Path "$cudaPath\bin\nvcc.exe") {
+        $env:CUDA_HOME = $cudaPath
+        $env:CUDA_PATH = $cudaPath
+        $env:PATH = "$cudaPath\bin;" + $env:PATH
+        break
+    }
+}
+'@
+
+$deactivateScriptPS = @'
+# Restore original PATH on deactivation
+if ($env:AIRSPLATMAP_OLD_PATH) {
+    $env:PATH = $env:AIRSPLATMAP_OLD_PATH
+    Remove-Item Env:\AIRSPLATMAP_OLD_PATH -ErrorAction SilentlyContinue
+}
+Remove-Item Env:\CUDA_HOME -ErrorAction SilentlyContinue
+Remove-Item Env:\CUDA_PATH -ErrorAction SilentlyContinue
+Remove-Item Env:\DISTUTILS_USE_SDK -ErrorAction SilentlyContinue
+'@
+
+# Write activation scripts - both .bat and .ps1
 $activateScriptPath = Join-Path $activateDir "cuda_msvc_setup.bat"
 $deactivateScriptPath = Join-Path $deactivateDir "cuda_msvc_cleanup.bat"
+$activateScriptPathPS = Join-Path $activateDir "cuda_msvc_setup.ps1"
+$deactivateScriptPathPS = Join-Path $deactivateDir "cuda_msvc_cleanup.ps1"
 
 $activateScript | Out-File -FilePath $activateScriptPath -Encoding ASCII
 $deactivateScript | Out-File -FilePath $deactivateScriptPath -Encoding ASCII
+$activateScriptPS | Out-File -FilePath $activateScriptPathPS -Encoding ASCII
+$deactivateScriptPS | Out-File -FilePath $deactivateScriptPathPS -Encoding ASCII
 
-Write-Host "Created activation hook: $activateScriptPath" -ForegroundColor Green
-Write-Host "Created deactivation hook: $deactivateScriptPath" -ForegroundColor Green
+Write-Host "Created activation hook (cmd): $activateScriptPath" -ForegroundColor Green
+Write-Host "Created activation hook (ps1): $activateScriptPathPS" -ForegroundColor Green
+Write-Host "Created deactivation hook (cmd): $deactivateScriptPath" -ForegroundColor Green
+Write-Host "Created deactivation hook (ps1): $deactivateScriptPathPS" -ForegroundColor Green
 
 # Activate the environment
 Write-Host ""
@@ -284,15 +329,44 @@ set > "$tempEnv"
 }
 
 # ============================================
-# Test gsplat (JIT compilation)
+# Pre-build gsplat CUDA kernels (JIT compilation)
 # ============================================
 Write-Host ""
 Write-Host "==============================================" -ForegroundColor Cyan
-Write-Host "Testing gsplat availability..." -ForegroundColor Cyan
+Write-Host "Pre-building gsplat CUDA kernels..." -ForegroundColor Cyan
 Write-Host "==============================================" -ForegroundColor Cyan
 
+# gsplat uses JIT compilation which requires both nvcc and cl (MSVC) in PATH
+# Since MSVC environment is already active from building gaussian-splatting extensions,
+# we can trigger the gsplat JIT compilation now
+
 $ErrorActionPreference = "Continue"
-python -c "import gsplat; print('  gsplat import: OK')" 2>&1
+
+# Test if gsplat can compile by importing and running a simple operation
+$gsplatTestScript = @'
+import torch
+import gsplat
+
+# Trigger JIT compilation by calling project_gaussians
+try:
+    means = torch.randn(10, 3, device='cuda')
+    scales = torch.ones(10, 3, device='cuda') * 0.1
+    quats = torch.randn(10, 4, device='cuda')
+    quats = quats / quats.norm(dim=-1, keepdim=True)
+    viewmat = torch.eye(4, device='cuda')
+    
+    xys, depths, radii, conics, comp, num_tiles, cov3d = gsplat.project_gaussians(
+        means, scales, 1.0, quats, viewmat, 500.0, 500.0, 320.0, 240.0, 480, 640, 16, 0.01
+    )
+    print('gsplat JIT compilation: SUCCESS')
+except Exception as e:
+    print(f'gsplat JIT compilation: FAILED - {e}')
+'@
+
+$gsplatTestScript | Out-File -FilePath "$env:TEMP\test_gsplat.py" -Encoding UTF8
+python "$env:TEMP\test_gsplat.py" 2>&1 | Out-Host
+Remove-Item "$env:TEMP\test_gsplat.py" -ErrorAction SilentlyContinue
+
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
@@ -361,6 +435,36 @@ Write-Host "  - Depth Anything V3 (DA3)" -ForegroundColor White
 Write-Host ""
 
 # ============================================
+# Install Apple Depth Pro
+# ============================================
+Write-Host ""
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host "Installing Apple Depth Pro..." -ForegroundColor Cyan
+Write-Host "==============================================" -ForegroundColor Cyan
+
+$depthProPath = "$scriptDir\submodules\ml-depth-pro"
+
+if (Test-Path "$depthProPath\setup.py") {
+    Write-Host "Found Depth Pro at: $depthProPath" -ForegroundColor Green
+    
+    $ErrorActionPreference = "Continue"
+    # Install Depth Pro in editable mode
+    Write-Host "Installing Depth Pro package..." -ForegroundColor Cyan
+    pip install -e "$depthProPath" 2>&1 | Out-Host
+    $ErrorActionPreference = "Stop"
+    
+    # Verify Depth Pro installation
+    Write-Host ""
+    Write-Host "Verifying Depth Pro installation..." -ForegroundColor Cyan
+    $ErrorActionPreference = "Continue"
+    python -c "import depth_pro; print('  Depth Pro import: OK')" 2>&1
+    $ErrorActionPreference = "Stop"
+} else {
+    Write-Host "WARNING: Depth Pro submodule not found at $depthProPath" -ForegroundColor Yellow
+    Write-Host "Run: git submodule update --init --recursive" -ForegroundColor Yellow
+}
+
+# ============================================
 # Final Step: Reinstall correct PyTorch with CUDA
 # (Some packages like gsplat/xformers may have installed CPU-only torch)
 # ============================================
@@ -372,17 +476,43 @@ Write-Host "==============================================" -ForegroundColor Cya
 $ErrorActionPreference = "Continue"
 pip uninstall torch torchvision torchaudio -y 2>&1 | Out-Null
 pip install torch==2.3.1+cu121 torchvision==0.18.1+cu121 torchaudio==2.3.1+cu121 --index-url https://download.pytorch.org/whl/cu121 2>&1 | Out-Host
+
+# Reinstall xformers after torch to ensure compatibility
+Write-Host "Reinstalling xformers for torch 2.3.1..." -ForegroundColor Cyan
+pip install xformers==0.0.27 --index-url https://download.pytorch.org/whl/cu121 2>&1 | Out-Host
 $ErrorActionPreference = "Stop"
 
 # Final verification
 Write-Host ""
-Write-Host "Final PyTorch verification:" -ForegroundColor Cyan
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host "Final Verification..." -ForegroundColor Cyan
+Write-Host "==============================================" -ForegroundColor Cyan
+
 $ErrorActionPreference = "Continue"
 python -c "import torch; print(f'  PyTorch: {torch.__version__}'); print(f'  CUDA available: {torch.cuda.is_available()}'); print(f'  CUDA version: {torch.version.cuda}') if torch.cuda.is_available() else print('  WARNING: CUDA not available!')"
+python -c "import simple_knn; print('  simple_knn: OK')" 2>&1
+python -c "import diff_gaussian_rasterization; print('  diff_gaussian_rasterization: OK')" 2>&1
+python -c "import gsplat; print('  gsplat: OK')" 2>&1
+python -c "import xformers; print('  xformers: OK')" 2>&1
+python -c "from depth_anything_3.api import DepthAnything3; print('  DA3: OK')" 2>&1
+python -c "import depth_pro; print('  Depth Pro: OK')" 2>&1
+python -c "from src.engines import list_engines; print(f'  Engines: {list(list_engines().keys())}')" 2>&1
 $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "==============================================" -ForegroundColor Green
 Write-Host "Setup Complete!" -ForegroundColor Green
 Write-Host "==============================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "All components installed:" -ForegroundColor Cyan
+Write-Host "  - PyTorch 2.3.1 with CUDA 12.1" -ForegroundColor White
+Write-Host "  - Gaussian Splatting (diff-gaussian-rasterization, simple_knn)" -ForegroundColor White
+Write-Host "  - gsplat (JIT compilation)" -ForegroundColor White  
+Write-Host "  - xformers 0.0.27" -ForegroundColor White
+Write-Host "  - Depth Anything V3 (DA3)" -ForegroundColor White
+Write-Host "  - Apple Depth Pro" -ForegroundColor White
+Write-Host ""
+Write-Host "To use the environment:" -ForegroundColor Yellow
+Write-Host "  conda activate airsplatmap" -ForegroundColor White
+Write-Host ""
 

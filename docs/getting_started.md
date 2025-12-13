@@ -80,11 +80,9 @@ start_dashboard.bat       # Windows
 ### Option 2: TUM Dataset Demo
 
 ```bash
-# Download TUM dataset
-cd scripts/tools
-./download_tum.sh           # Linux/macOS
-download_tum.bat            # Windows
-cd ../..
+# Download TUM dataset manually from:
+# https://vision.in.tum.de/data/datasets/rgbd-dataset/download
+# Extract to datasets/tum/
 
 # Run demo
 python scripts/demos/live_tum_demo.py --sequence fr1_desk --engine gsplat
@@ -127,11 +125,13 @@ print(f"Processed {summary['frames']} frames, {summary['gaussians']} Gaussians")
 
 ### TUM RGB-D
 
+Download manually from https://vision.in.tum.de/data/datasets/rgbd-dataset/download
+
 ```bash
-# Download all default sequences
-cd scripts/tools
-./download_tum.sh           # Linux/macOS
-download_tum.bat            # Windows
+# Extract to datasets/tum/ directory
+mkdir -p datasets/tum
+cd datasets/tum
+# Download and extract sequences like rgbd_dataset_freiburg1_desk.tgz
 ```
 
 Available sequences:

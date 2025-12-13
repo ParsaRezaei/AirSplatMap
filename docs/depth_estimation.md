@@ -8,7 +8,7 @@ AirSplatMap supports monocular depth estimation for RGB-only inputs where depth 
 |--------|-------|---------|-----|--------|-------------|
 | `depth_pro` | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | ✅ | Apple Depth Pro (metric, sharp) |
 | `depth_pro_lite` | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ✅ | ✅ | Depth Pro Lite (faster) |
-| `zoedepth` | ⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | ✅ | ZoeDepth (metric) |
+| `ground_truth` | N/A | N/A | ❌ | ✅ | Passthrough for sensor depth |
 | `depth_anything_v3` | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | ❌ | Depth Anything V3 (latest) |
 | `depth_anything_v2` | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ✅ | ❌ | Depth Anything V2 |
 | `midas` | ⭐⭐⭐ | ⭐⭐⭐⭐ | ✅ | ❌ | MiDaS DPT-Large |

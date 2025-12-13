@@ -464,13 +464,6 @@ class GSplatEngine(BaseGSEngine):
         # gsplat expects world-to-camera transform
         viewmat = torch.linalg.inv(pose)  # (4, 4)
         
-        # Intrinsic matrix
-        K = torch.tensor([
-            [fx, 0, cx],
-            [0, fy, cy],
-            [0, 0, 1]
-        ], dtype=torch.float32, device=self.device)
-        
         # Get Gaussian parameters
         means = self._means  # (N, 3)
         scales = torch.exp(self._scales)  # (N, 3)
@@ -478,41 +471,71 @@ class GSplatEngine(BaseGSEngine):
         opacities = torch.sigmoid(self._opacities)  # (N,)
         
         # Compute colors from SH
-        sh_degree = self._config['sh_degree']
         colors = self._sh_to_rgb(self._sh_coeffs, means, pose[:3, 3])
-        
-        # Build covariance from scales and quaternions
-        # gsplat.rasterization expects specific format
         
         try:
             # Ensure CUDA is synchronized before rasterization
             if self.device.type == 'cuda':
                 torch.cuda.synchronize()
             
-            # Debug shapes
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug(f"means: {means.shape}, quats: {quats.shape}, scales: {scales.shape}")
-                logger.debug(f"opacities: {opacities.shape}, colors: {colors.shape}")
-                logger.debug(f"viewmat: {viewmat.unsqueeze(0).shape}, K: {K.unsqueeze(0).shape}")
+            # gsplat 0.1.x API uses project_gaussians + rasterize_gaussians
+            # This is the prebuilt Windows-compatible version
             
-            # Use gsplat's rasterization
-            # Note: backgrounds needs to be (C, 3) where C is batch size, not (H, W, 3)
-            rendered, alphas, meta = gsplat.rasterization(
-                means=means,
-                quats=quats,
+            # Tile/block size for rasterization
+            BLOCK_X, BLOCK_Y = 16, 16
+            tile_bounds = (
+                (width + BLOCK_X - 1) // BLOCK_X,
+                (height + BLOCK_Y - 1) // BLOCK_Y,
+                1
+            )
+            block = (BLOCK_X, BLOCK_Y, 1)
+            img_size = (width, height)
+            
+            # Near/far planes
+            near_plane = 0.01
+            far_plane = 100.0
+            
+            # Compute 2D projection using gsplat.project_gaussians
+            # viewmat is world-to-camera (4x4)
+            xys, depths, radii, conics, compensation, num_tiles_hit, cov3d = gsplat.project_gaussians(
+                means3d=means,
                 scales=scales,
-                opacities=opacities,
-                colors=colors,
-                viewmats=viewmat.unsqueeze(0),  # (1, 4, 4)
-                Ks=K.unsqueeze(0),  # (1, 3, 3)
-                width=width,
-                height=height,
-                sh_degree=None,  # We pre-computed colors
-                # backgrounds omitted to use default (zeros)
+                glob_scale=1.0,
+                quats=quats,
+                viewmat=viewmat,
+                fx=fx,
+                fy=fy,
+                cx=cx,
+                cy=cy,
+                img_height=height,
+                img_width=width,
+                block_width=BLOCK_X,
+                clip_thresh=0.01,
             )
             
-            # rendered is (1, H, W, 3)
-            return rendered[0]  # (H, W, 3)
+            # Check if any Gaussians are visible
+            visible_mask = radii > 0
+            if visible_mask.sum() == 0:
+                return torch.zeros(height, width, 3, device=self.device)
+            
+            # Rasterize using gsplat.rasterize_gaussians
+            out_img, out_alpha = gsplat.rasterize_gaussians(
+                xys=xys,
+                depths=depths,
+                radii=radii,
+                conics=conics,
+                num_tiles_hit=num_tiles_hit,
+                colors=colors,
+                opacity=opacities,
+                img_height=height,
+                img_width=width,
+                block_width=BLOCK_X,
+                background=self._bg_color,
+                return_alpha=True,
+            )
+            
+            # out_img is (H, W, 3)
+            return out_img
             
         except Exception as e:
             # Convert exception to string safely to avoid codec errors
@@ -525,14 +548,11 @@ class GSplatEngine(BaseGSEngine):
             if not hasattr(self, '_rasterization_error_logged'):
                 self._rasterization_error_logged = True
                 logger.warning(f"gsplat rasterization failed: {err_msg}, using fallback")
-                logger.warning("gsplat requires CUDA toolkit (nvcc) to be installed and in PATH.")
-                logger.warning("On Windows: Install CUDA Toolkit from NVIDIA. On Linux: apt install nvidia-cuda-toolkit")
             
             # Mark that we're using fallback (for benchmark results)
             self._using_fallback = True
             
-            # Fallback to simple point rendering - returns zeros (black) which gives bad metrics
-            # This is intentional to make it clear gsplat isn't working
+            # Fallback - returns zeros (black) which gives bad metrics
             return torch.zeros(height, width, 3, device=self.device)
     
     def _sh_to_rgb(self, sh: torch.Tensor, positions: torch.Tensor, camera_pos: torch.Tensor) -> torch.Tensor:

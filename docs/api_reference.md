@@ -17,7 +17,7 @@ from src.engines.base import BaseGSEngine
 from src.pose import get_pose_estimator, list_pose_estimators
 
 # Depth estimation
-from benchmarks.depth.benchmark_depth import get_depth_estimator, list_depth_estimators
+from src.depth import get_depth_estimator, list_depth_estimators
 
 # Dashboard
 from dashboard.web_dashboard import Server
@@ -263,7 +263,7 @@ estimator = get_pose_estimator("orb")
 estimator = get_pose_estimator("loftr", device="cuda")
 ```
 
-**Available methods:** `orb`, `sift`, `robust_flow`, `flow`, `keyframe`, `loftr`, `superpoint`
+**Available methods:** `orb`, `sift`, `robust_flow`, `flow`, `keyframe`, `loftr`, `superpoint`, `lightglue`, `raft`, `r2d2`, `roma`
 
 ### `list_pose_estimators()`
 
@@ -343,18 +343,19 @@ class PoseResult:
 ### `get_depth_estimator(name)`
 
 ```python
-from benchmarks.depth.benchmark_depth import get_depth_estimator
+from src.depth import get_depth_estimator
 
 estimator = get_depth_estimator("midas")
-depth = estimator.estimate(rgb_image)
+result = estimator.estimate(rgb_image)
+depth = result.depth  # HxW float32
 ```
 
-**Available methods:** `midas`, `midas_small`, `depth_anything`, `depth_anything_vits`, `zoedepth`
+**Available methods:** `midas`, `midas_small`, `depth_anything_v2`, `depth_anything_v3`, `depth_pro`, `depth_pro_lite`, `stereo`, `ground_truth`
 
 ### `list_depth_estimators()`
 
 ```python
-from benchmarks.depth.benchmark_depth import list_depth_estimators
+from src.depth import list_depth_estimators
 
 for name, info in list_depth_estimators().items():
     print(f"{name}: {info['description']}")

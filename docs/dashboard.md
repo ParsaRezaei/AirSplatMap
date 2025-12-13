@@ -134,9 +134,7 @@ C:\Videos\recording.avi
 
 ### Via Script
 
-```bash
-python scripts/tools/add_realsense_to_dashboard.py
-```
+Live sources can be added directly via the dashboard UI or programmatically.
 
 ### Programmatic
 

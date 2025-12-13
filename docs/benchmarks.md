@@ -5,14 +5,20 @@ AirSplatMap includes a comprehensive benchmarking suite for evaluating pose esti
 ## Quick Start
 
 ```bash
-# Run all benchmarks (quick mode)
-python -m benchmarks all --quick
+# Run pipeline benchmark (most common)
+python -m benchmarks.run --pipeline --quick
 
-# Generate reports only (from existing results)
-python -m benchmarks report
+# Run specific benchmarks
+python -m benchmarks.run --pose                 # Pose only
+python -m benchmarks.run --depth                # Depth only  
+python -m benchmarks.run --gs                   # Gaussian splatting only
+python -m benchmarks.run --pipeline             # Combined pipeline tests
+
+# Specify methods and datasets
+python -m benchmarks.run --pipeline --datasets freiburg1_desk --depth-methods midas depth_pro --pose-methods orb --gs-engines gsplat graphdeco
 
 # View interactive HTML report
-# Open benchmarks/results/report.html
+# Open benchmarks/results/<hostname>/benchmark_<timestamp>/report.html
 ```
 
 ## Benchmark Suite Structure
@@ -20,22 +26,23 @@ python -m benchmarks report
 ```
 benchmarks/
 ├── __init__.py           # Package init with paths
-├── __main__.py           # CLI entry point
+├── run.py                # Main CLI entry point
+├── hardware_monitor.py   # GPU/CPU monitoring
 ├── pose/
 │   └── benchmark_pose.py   # Pose estimation evaluation
 ├── depth/
 │   └── benchmark_depth.py  # Depth estimation evaluation
 ├── gaussian_splatting/
 │   └── benchmark_gs.py     # 3DGS engine evaluation
-├── runners/              # Modular benchmark runners
-│   ├── pose.py
-│   ├── depth.py
-│   └── gs.py
 ├── visualization/
+│   ├── html_report.py      # HTML report generation
 │   └── plot_utils.py       # Plotting utilities
 └── results/
-    ├── report.html         # Interactive HTML report
-    └── *.json              # Raw results
+    └── <hostname>/         # Results per machine
+        └── benchmark_<timestamp>/
+            ├── report.html    # Interactive HTML report
+            ├── results.json   # Raw results
+            └── plots/         # Generated visualizations
 ```
 
 ## Pose Estimation Benchmark

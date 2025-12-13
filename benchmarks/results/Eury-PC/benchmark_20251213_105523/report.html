@@ -1,0 +1,2251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AirSplatMap Benchmark Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-hover: #252532;
+            --accent: #6366f1;
+            --accent-light: #818cf8;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: #2d2d3a;
+            --shadow: rgba(0, 0, 0, 0.4);
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 260px;
+            height: 100vh;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 24px 0;
+            overflow-y: auto;
+            z-index: 100;
+        }
+        
+        .sidebar-header {
+            padding: 0 24px 24px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 16px;
+        }
+        
+        .sidebar-header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--accent-light);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .sidebar-header p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+        
+        .nav-section {
+            padding: 8px 16px;
+        }
+        
+        .nav-section-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 8px;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-size: 0.9rem;
+        }
+        
+        .nav-item:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        
+        .nav-item.active {
+            background: var(--accent);
+            color: white;
+        }
+        
+        .nav-item .icon {
+            font-size: 1.1rem;
+            width: 24px;
+            text-align: center;
+        }
+        
+        /* Main content */
+        .main {
+            margin-left: 260px;
+            padding: 32px;
+            min-height: 100vh;
+        }
+        
+        /* Page sections */
+        .page {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        
+        .stat-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        
+        /* Charts */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .chart-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            overflow: hidden;
+            min-width: 0;
+        }
+        
+        .chart-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-secondary);
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+        
+        /* Tables */
+        .table-container {
+            overflow-x: hidden;
+            overflow-y: auto;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        
+        th, td {
+            padding: 12px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        th {
+            background: var(--bg-secondary);
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+        
+        tbody tr:hover {
+            background: var(--bg-hover);
+        }
+        
+        .best {
+            color: var(--success);
+            font-weight: 600;
+        }
+        
+        /* Filters */
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding: 16px;
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+        
+        /* Fix chart overflow */
+        .chart-container {
+            overflow: hidden;
+            min-width: 0;
+        }
+        
+        .chart-grid {
+            overflow: hidden;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .filter-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        
+        .filter-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .filter-chip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        .filter-chip:hover {
+            border-color: var(--accent);
+        }
+        
+        .filter-chip.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+        
+        .filter-chip input {
+            display: none;
+        }
+        
+        /* 3D Plot */
+        .plot-3d {
+            height: 500px;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        /* Select dropdown */
+        select {
+            padding: 10px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            cursor: pointer;
+            min-width: 180px;
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        /* Filter options (checkboxes) */
+        .filter-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 8px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        
+        .filter-options label {
+            cursor: pointer;
+            padding: 6px 12px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        
+        .filter-options label:hover {
+            background: var(--bg-hover);
+        }
+        
+        .filter-options label.selected {
+            background: var(--accent);
+            color: white;
+        }
+        
+        .filter-options input[type="checkbox"] {
+            accent-color: var(--accent);
+            margin-right: 4px;
+        }
+        
+        /* Tab buttons */
+        .tab-btn {
+            padding: 8px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        .tab-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        
+        .tab-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+        
+        .engine-tab {
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        
+        .engine-tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-hover);
+        }
+        
+        .engine-tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+        
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .badge-success { background: rgba(34, 197, 94, 0.15); color: var(--success); }
+        .badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+        .badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+        
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+        
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .chart-grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        
+        @media (max-width: 1024px) {
+            .sidebar { width: 70px; padding: 12px 0; }
+            .sidebar-header { padding: 0 8px 12px; }
+            .sidebar-header h1 span { display: none; }
+            .sidebar-header p { display: none; }
+            .nav-section-title { display: none; }
+            .nav-item span:not(.icon) { display: none; }
+            .nav-item { justify-content: center; padding: 12px 8px; }
+            .nav-item .icon { font-size: 1.2rem; }
+            .main { margin-left: 70px; padding: 16px; }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar { 
+                width: 100%; 
+                height: auto; 
+                position: relative; 
+                display: flex; 
+                flex-wrap: wrap;
+                justify-content: center;
+                padding: 8px;
+            }
+            .sidebar-header { 
+                width: 100%; 
+                text-align: center; 
+                border-bottom: none;
+                padding: 8px;
+                margin-bottom: 0;
+            }
+            .sidebar-header h1 span { display: inline; }
+            .nav-section { 
+                display: flex; 
+                padding: 4px;
+            }
+            .nav-section-title { display: none; }
+            .nav-item { padding: 8px 12px; }
+            .nav-item span:not(.icon) { display: none; }
+            .main { margin-left: 0; padding: 12px; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+            .stat-card { padding: 12px; }
+            .stat-value { font-size: 1.25rem; }
+            .filters { flex-direction: column; }
+            .filter-group { width: 100%; }
+            .table-container { font-size: 0.8rem; }
+            table th, table td { padding: 8px 6px; }
+        }
+        
+        @media (max-width: 480px) {
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .chart-wrapper { height: 200px; }
+            .plot-3d { height: 300px; }
+        }
+        
+        /* Ensure charts don't overflow */
+        canvas {
+            max-width: 100% !important;
+        }
+        
+        .main {
+            overflow-x: hidden;
+        }
+        
+        /* Range Slider Styles */
+        #trajSliderMin, #trajSliderMax {
+            -webkit-appearance: none;
+            appearance: none;
+            pointer-events: none;
+        }
+        
+        #trajSliderMin::-webkit-slider-thumb, #trajSliderMax::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            pointer-events: auto;
+            border: 2px solid #1e3a5f;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            transition: transform 0.15s, background 0.15s;
+        }
+        
+        #trajSliderMin::-webkit-slider-thumb:hover, #trajSliderMax::-webkit-slider-thumb:hover {
+            background: #60a5fa;
+            transform: scale(1.15);
+        }
+        
+        #trajSliderMin::-moz-range-thumb, #trajSliderMax::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            pointer-events: auto;
+            border: 2px solid #1e3a5f;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h1>🚀 <span>AirSplatMap</span></h1>
+            <p>Benchmark Report • 2025-12-13 10:56</p>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">Overview</div>
+            <div class="nav-item active" onclick="showPage('overview')">
+                <span class="icon">📊</span>
+                <span>Dashboard</span>
+            </div>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">Benchmarks</div>
+            <div class="nav-item" onclick="showPage('pose')">
+                <span class="icon">📍</span>
+                <span>Pose Estimation</span>
+            </div>
+            <div class="nav-item" onclick="showPage('depth')">
+                <span class="icon">📏</span>
+                <span>Depth Estimation</span>
+            </div>
+            <div class="nav-item" onclick="showPage('gs')">
+                <span class="icon">✨</span>
+                <span>Gaussian Splatting</span>
+            </div>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">Analysis</div>
+            <div class="nav-item" onclick="showPage('pipeline')">
+                <span class="icon">🔗</span>
+                <span>Pipeline Results</span>
+            </div>
+            <div class="nav-item" onclick="showPage('comparison')">
+                <span class="icon">⚖️</span>
+                <span>Method Comparison</span>
+            </div>
+            <div class="nav-item" onclick="showPage('trajectory')">
+                <span class="icon">🗺️</span>
+                <span>3D Trajectories</span>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Overview Page -->
+        <div id="overview" class="page active">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">Dashboard</h2>
+            <p style="color: var(--text-muted); margin-bottom: 32px;">
+                Benchmark run completed in 0h 1m • 1 datasets tested
+            </p>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">Pose Tests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">Depth Tests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">GS Tests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">0.5GB</div>
+                    <div class="stat-label">Peak GPU Memory</div>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Pose Estimation Accuracy (ATE RMSE)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="overviewPoseChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Depth Estimation Accuracy (AbsRel)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="overviewDepthChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Gaussian Splatting Quality (PSNR)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="overviewGSChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Processing Speed (FPS)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="overviewSpeedChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pose Page -->
+        <div id="pose" class="page">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">📍 Pose Estimation</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Visual odometry and SLAM accuracy metrics
+            </p>
+            
+            <div class="filters">
+                <div class="filter-group">
+                    <div class="filter-label">Dataset</div>
+                    <select id="poseDatasetFilter" onchange="updatePosePage()">
+                        <option value="all">All Datasets (Averaged)</option>
+                        <option value="unknown">unknown</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Absolute Trajectory Error (ATE) - Lower is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="poseATEChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Relative Pose Error (RPE) - Lower is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="poseRPEChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Processing Speed (FPS) - Higher is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="poseFPSChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Results Table</div>
+                </div>
+                <div class="table-container">
+                    <table id="poseTable">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Dataset</th>
+                                <th>ATE RMSE (m)</th>
+                                <th>RPE Trans (m)</th>
+                                <th>RPE Rot (°)</th>
+                                <th>FPS</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Depth Page -->
+        <div id="depth" class="page">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">📏 Depth Estimation</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Monocular depth prediction quality metrics
+            </p>
+            
+            <div class="filters">
+                <div class="filter-group">
+                    <div class="filter-label">Dataset</div>
+                    <select id="depthDatasetFilter" onchange="updateDepthPage()">
+                        <option value="all">All Datasets (Averaged)</option>
+                        <option value="unknown">unknown</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Absolute Relative Error - Lower is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="depthAbsRelChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Threshold Accuracy (δ < 1.25) - Higher is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="depthDeltaChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Processing Speed (FPS) - Higher is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="depthFPSChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Results Table</div>
+                </div>
+                <div class="table-container">
+                    <table id="depthTable">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Dataset</th>
+                                <th>AbsRel</th>
+                                <th>RMSE</th>
+                                <th>δ < 1.25</th>
+                                <th>FPS</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- GS Page -->
+        <div id="gs" class="page">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">✨ Gaussian Splatting</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                3D reconstruction and rendering quality
+            </p>
+            
+            <div class="filters">
+                <div class="filter-group">
+                    <div class="filter-label">Dataset</div>
+                    <select id="gsDatasetFilter" onchange="updateGSPage()">
+                        <option value="all">All Datasets (Averaged)</option>
+                        <option value="unknown">unknown</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">PSNR (dB) - Higher is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="gsPSNRChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">SSIM - Higher is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="gsSSIMChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Number of Gaussians</div>
+                    <div class="chart-wrapper">
+                        <canvas id="gsGaussiansChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Render FPS</div>
+                    <div class="chart-wrapper">
+                        <canvas id="gsFPSChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Results Table</div>
+                </div>
+                <div class="table-container">
+                    <table id="gsTable">
+                        <thead>
+                            <tr>
+                                <th>Engine</th>
+                                <th>Dataset</th>
+                                <th>PSNR (dB)</th>
+                                <th>SSIM</th>
+                                <th>LPIPS</th>
+                                <th>Gaussians</th>
+                                <th>FPS</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Comparison Page -->
+        <div id="comparison" class="page">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">⚖️ Method Comparison</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Side-by-side comparison across all benchmarks
+            </p>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">🏆 Best Performers Summary</div>
+                </div>
+                <div id="bestSummary" style="padding: 16px;"></div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Pose: Speed vs Accuracy (lower ATE is better)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="poseTradeoffChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Depth: Speed vs Accuracy (lower AbsRel is better)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="depthTradeoffChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">GS: Speed vs Quality (higher PSNR is better)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="gsTradeoffChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pipeline Page -->
+        <div id="pipeline" class="page">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">🔗 Pipeline Results</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Combined pipeline results: Pose + Depth + Gaussian Splatting
+            </p>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">🏆 Best Pipeline Configuration</div>
+                </div>
+                <div id="bestPipelineSummary" style="padding: 16px;"></div>
+            </div>
+            
+            <!-- Heatmap Section -->
+            <div class="card" style="margin-top: 24px;">
+                <div class="card-header" style="flex-direction: column; align-items: flex-start; gap: 16px;">
+                    <div class="card-title">Pipeline Quality Heatmaps</div>
+                    <div style="display: flex; gap: 24px; flex-wrap: wrap; width: 100%;">
+                        <!-- Metric Tabs -->
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Metric</div>
+                            <div id="metricTabs" style="display: flex; gap: 4px;">
+                                <button class="tab-btn active" onclick="switchMetric('psnr')">PSNR</button>
+                                <button class="tab-btn" onclick="switchMetric('ssim')">SSIM</button>
+                            </div>
+                        </div>
+                        <!-- Dataset Filter -->
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Dataset</div>
+                            <select id="pipelineDatasetFilter" onchange="updatePipelineHeatmaps()" style="padding: 8px 12px;">
+                                <option value="all">All Datasets (Averaged)</option>
+                                <option value="unknown">unknown</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- GS Engine Tabs -->
+                <div id="engineTabs" style="display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--border); overflow-x: auto;">
+                </div>
+                
+                <!-- Heatmap Container - Responsive with aspect ratio -->
+                <div id="heatmapContainer" style="padding: 20px; position: relative; width: 100%; min-height: 400px;">
+                    <div id="pipelineHeatmap" style="width: 100%; height: 100%; min-height: 380px;"></div>
+                </div>
+            </div>
+            
+            <!-- Results Table -->
+            <div class="card" style="margin-top: 24px;">
+                <div class="card-header">
+                    <div class="card-title">Pipeline Results Table</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">
+                        Showing <span id="pipelineTableCount">0</span> configurations
+                    </div>
+                </div>
+                <div class="table-container" style="max-height: 400px; overflow-y: auto; overflow-x: hidden;">
+                    <table id="pipelineTable" style="table-layout: auto; width: 100%;">
+                        <thead>
+                            <tr>
+                                <th style="width: 15%;">Pose</th>
+                                <th style="width: 18%;">Depth</th>
+                                <th style="width: 15%;">Engine</th>
+                                <th style="width: 22%;">Dataset</th>
+                                <th style="width: 10%;">PSNR</th>
+                                <th style="width: 10%;">SSIM</th>
+                                <th style="width: 10%;">ATE</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Trajectory Page -->
+        <div id="trajectory" class="page">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">🗺️ 3D Trajectory Visualization</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Interactive 3D view of camera trajectories from pose estimation
+            </p>
+            
+            <div class="filters">
+                <div class="filter-group">
+                    <div class="filter-label">Dataset</div>
+                    <select id="trajDatasetFilter" onchange="updateTrajectoryPlot()">
+                        <option value="">No trajectory data available</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <div class="filter-label">Trajectories</div>
+                    <div id="trajMethodCheckboxes" class="filter-options"></div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div id="trajectoryPlot" class="plot-3d"></div>
+                
+                <!-- Time Range Slider -->
+                <div style="padding: 16px; border-top: 1px solid #2d2d3a;">
+                    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
+                        <span style="color: #94a3b8; font-size: 13px; min-width: 80px;">Time Range:</span>
+                        <span id="trajRangeLabel" style="color: #60a5fa; font-size: 13px;">0% - 100%</span>
+                    </div>
+                    <div id="trajSliderContainer" style="position: relative; height: 40px; background: #1a1a24; border-radius: 8px; padding: 0 10px;">
+                        <div id="trajSliderTrack" style="position: absolute; top: 50%; left: 10px; right: 10px; height: 6px; background: #2d2d3a; border-radius: 3px; transform: translateY(-50%);"></div>
+                        <div id="trajSliderRange" style="position: absolute; top: 50%; height: 6px; background: linear-gradient(90deg, #3b82f6, #60a5fa); border-radius: 3px; transform: translateY(-50%);"></div>
+                        <input type="range" id="trajSliderMin" min="0" max="100" value="0" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; -webkit-appearance: none; background: transparent; pointer-events: none;">
+                        <input type="range" id="trajSliderMax" min="0" max="100" value="100" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; -webkit-appearance: none; background: transparent; pointer-events: none;">
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+                        <span style="color: #64748b; font-size: 11px;">Start</span>
+                        <span style="color: #64748b; font-size: 11px;">End</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">Trajectory Statistics</div>
+                <div class="stats-grid" style="margin-top: 16px;">
+                    <div class="stat-card">
+                        <div class="stat-value" id="trajFrames">-</div>
+                        <div class="stat-label">Frames Processed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="trajATE">-</div>
+                        <div class="stat-label">Best ATE (m)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="trajMethods">-</div>
+                        <div class="stat-label">Methods Selected</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        // Data
+        const data = {"datasets": ["unknown"], "datasets_with_trajectories": [], "pose": {"all": [], "aggregated": {}, "by_dataset": {}}, "depth": {"all": [], "aggregated": {}, "by_dataset": {}}, "gs": {"all": [], "aggregated": {}, "by_dataset": {}}, "pipeline": [{"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 15.724411758491678, "ssim": 0.5606525838375092, "total_time": 4.782115697860718, "fps": 20.911246468740824, "num_gaussians": 51565, "lpips": 0.6505576252937317, "pose_ate": 0.0, "depth_abs_rel": 0.0}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 13.032935868989762, "ssim": 0.494513475894928, "total_time": 4.559619665145874, "fps": 21.931653809726416, "num_gaussians": 52800, "lpips": 0.7873762845993042, "pose_ate": 0.0, "depth_abs_rel": 0.6065386533737183}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 7.048894689678056, "ssim": 0.24368715323507786, "total_time": 2.697465181350708, "fps": 37.07184088653436, "num_gaussians": 51565, "lpips": 0.8602645516395568, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.0}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 11.42625193872935, "ssim": 0.49258949160575866, "total_time": 2.877187490463257, "fps": 34.756163903624845, "num_gaussians": 52800, "lpips": 0.7906740307807922, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.6065386533737183}, {"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 14.751092593219255, "ssim": 0.5455158591270447, "total_time": 4.193595886230469, "fps": 23.845883750588996, "num_gaussians": 51493, "lpips": 0.69126216173172, "pose_ate": 0.0, "depth_abs_rel": 0.0}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 11.821649628163689, "ssim": 0.46790601015090943, "total_time": 3.906991481781006, "fps": 25.59514154722828, "num_gaussians": 52800, "lpips": 0.8239699363708496, "pose_ate": 0.0, "depth_abs_rel": 0.5415474772453308}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 8.30846400682176, "ssim": 0.35741340219974516, "total_time": 2.906003475189209, "fps": 34.41152113332866, "num_gaussians": 51493, "lpips": 0.8271772980690002, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.0}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 8.831118504227755, "ssim": 0.32823584228754044, "total_time": 2.690495729446411, "fps": 37.16787166972227, "num_gaussians": 52800, "lpips": 0.8289730787277222, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.5415474772453308}], "hardware": {"overall": {"duration_seconds": 78.1, "num_samples": 144, "cpu": {"system_percent_mean": 42.1, "system_percent_max": 85.4}, "ram": {"system_used_gb_mean": 28.85, "system_used_gb_max": 30.1, "system_percent_mean": 45.2}, "process": {"cpu_percent_mean": 309.8, "cpu_percent_max": 826.7, "ram_gb_mean": 2.32, "ram_gb_max": 3.34, "gpu_memory_gb_mean": 0.14, "gpu_memory_gb_max": 0.53}, "gpu": {"utilization_mean": 21.0, "utilization_max": 65, "memory_used_gb_mean": 0.14, "memory_used_gb_max": 0.53, "memory_percent_mean": 1.3, "memory_percent_max": 4.8, "temperature_c_mean": 38.3, "temperature_c_max": 44, "power_w_mean": 100.0, "power_w_max": 214.2}, "energy_wh": 2.1688}, "phases": {"pipeline_rgbd_dataset_freiburg1_desk": {"duration_seconds": 43.73, "num_samples": 81, "cpu": {"system_percent_mean": 44.0, "system_percent_max": 85.4}, "ram": {"system_used_gb_mean": 28.73, "system_used_gb_max": 30.1, "system_percent_mean": 45.0}, "process": {"cpu_percent_mean": 290.3, "cpu_percent_max": 716.4, "ram_gb_mean": 2.04, "ram_gb_max": 3.34, "gpu_memory_gb_mean": 0.13, "gpu_memory_gb_max": 0.53}, "gpu": {"utilization_mean": 19.6, "utilization_max": 65, "memory_used_gb_mean": 0.13, "memory_used_gb_max": 0.53, "memory_percent_mean": 1.2, "memory_percent_max": 4.8, "temperature_c_mean": 37.9, "temperature_c_max": 44, "power_w_mean": 100.6, "power_w_max": 206.4}, "energy_wh": 1.2225}, "pipeline_rgbd_dataset_freiburg1_desk2": {"duration_seconds": 33.11, "num_samples": 62, "cpu": {"system_percent_mean": 40.4, "system_percent_max": 71.0}, "ram": {"system_used_gb_mean": 29.05, "system_used_gb_max": 29.46, "system_percent_mean": 45.5}, "process": {"cpu_percent_mean": 340.2, "cpu_percent_max": 826.7, "ram_gb_mean": 2.72, "ram_gb_max": 3.11, "gpu_memory_gb_mean": 0.16, "gpu_memory_gb_max": 0.52}, "gpu": {"utilization_mean": 23.1, "utilization_max": 65, "memory_used_gb_mean": 0.16, "memory_used_gb_max": 0.52, "memory_percent_mean": 1.5, "memory_percent_max": 4.7, "temperature_c_mean": 38.8, "temperature_c_max": 44, "power_w_mean": 99.9, "power_w_max": 214.2}, "energy_wh": 0.9189}}, "monitoring": {"sample_interval_s": 0.5, "total_samples": 144, "psutil_available": true, "nvml_available": true}}, "trajectories": {}, "estimated_trajectories": {}};
+        
+        // Chart instances
+        const charts = {};
+        
+        // Colors
+        const colors = [
+            '#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6',
+            '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#84cc16'
+        ];
+        
+        // Helper to create chart options with Y-axis label
+        function getChartOptions(yAxisLabel, showLegend = false) {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: showLegend,
+                        labels: { color: '#94a3b8', font: { size: 11 } }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#64748b' },
+                        grid: { color: '#2d2d3a' }
+                    },
+                    y: {
+                        title: { display: !!yAxisLabel, text: yAxisLabel, color: '#94a3b8', font: { size: 11 } },
+                        ticks: { color: '#64748b' },
+                        grid: { color: '#2d2d3a' }
+                    }
+                }
+            };
+        }
+        
+        const chartDefaults = getChartOptions('');
+        
+        // Navigation
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            event.currentTarget.classList.add('active');
+            
+            // Initialize page-specific charts
+            if (pageId === 'overview') initOverviewCharts();
+            else if (pageId === 'pose') updatePosePage();
+            else if (pageId === 'depth') updateDepthPage();
+            else if (pageId === 'gs') updateGSPage();
+            else if (pageId === 'pipeline') updatePipelinePage();
+            else if (pageId === 'comparison') initComparisonCharts();
+            else if (pageId === 'trajectory') initTrajectoryPage();
+        }
+        
+        // Helper functions
+        function getAggregatedData(results, keyField) {
+            const byMethod = {};
+            results.forEach(r => {
+                const key = r[keyField];
+                if (!byMethod[key]) byMethod[key] = [];
+                byMethod[key].push(r);
+            });
+            return byMethod;
+        }
+        
+        function mean(arr) {
+            return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+        }
+        
+        // Overview Charts
+        function initOverviewCharts() {
+            // Pose ATE
+            const poseAgg = getAggregatedData(data.pose.all, 'method');
+            const poseMethods = Object.keys(poseAgg);
+            const poseATE = poseMethods.map(m => mean(poseAgg[m].map(r => r.ate_rmse || 0)));
+            
+            if (charts.overviewPose) charts.overviewPose.destroy();
+            charts.overviewPose = new Chart(document.getElementById('overviewPoseChart'), {
+                type: 'bar',
+                data: {
+                    labels: poseMethods,
+                    datasets: [{ label: 'ATE RMSE', data: poseATE, backgroundColor: colors, borderRadius: 6 }]
+                },
+                options: getChartOptions('ATE RMSE (m)')
+            });
+            
+            // Depth AbsRel
+            const depthAgg = getAggregatedData(data.depth.all, 'method');
+            const depthMethods = Object.keys(depthAgg);
+            const depthAbsRel = depthMethods.map(m => mean(depthAgg[m].map(r => r.abs_rel || 0)));
+            
+            if (charts.overviewDepth) charts.overviewDepth.destroy();
+            charts.overviewDepth = new Chart(document.getElementById('overviewDepthChart'), {
+                type: 'bar',
+                data: {
+                    labels: depthMethods,
+                    datasets: [{ label: 'AbsRel', data: depthAbsRel, backgroundColor: colors.slice(2), borderRadius: 6 }]
+                },
+                options: getChartOptions('Absolute Relative Error')
+            });
+            
+            // GS PSNR
+            const gsAgg = getAggregatedData(data.gs.all, 'engine');
+            const gsEngines = Object.keys(gsAgg);
+            const gsPSNR = gsEngines.map(e => mean(gsAgg[e].map(r => r.psnr || 0)));
+            
+            if (charts.overviewGS) charts.overviewGS.destroy();
+            charts.overviewGS = new Chart(document.getElementById('overviewGSChart'), {
+                type: 'bar',
+                data: {
+                    labels: gsEngines,
+                    datasets: [{ label: 'PSNR', data: gsPSNR, backgroundColor: colors.slice(4), borderRadius: 6 }]
+                },
+                options: getChartOptions('PSNR (dB)')
+            });
+            
+            // Speed comparison - show all methods FPS
+            const allLabels = [];
+            const allFPS = [];
+            const allColors = [];
+            
+            // Pose methods
+            poseMethods.forEach((m) => {
+                const fps = mean(poseAgg[m].map(r => r.fps || 0));
+                if (fps > 0) {
+                    allLabels.push(m);
+                    allFPS.push(fps);
+                    allColors.push(colors[0]);
+                }
+            });
+            // Depth methods  
+            depthMethods.forEach((m) => {
+                const fps = mean(depthAgg[m].map(r => r.fps || 0));
+                if (fps > 0) {
+                    allLabels.push(m);
+                    allFPS.push(fps);
+                    allColors.push(colors[1]);
+                }
+            });
+            // GS engines
+            gsEngines.forEach((e) => {
+                const fps = mean(gsAgg[e].map(r => r.fps || 0));
+                if (fps > 0) {
+                    allLabels.push(e);
+                    allFPS.push(fps);
+                    allColors.push(colors[2]);
+                }
+            });
+            
+            if (charts.overviewSpeed) charts.overviewSpeed.destroy();
+            if (allFPS.length > 0) {
+                charts.overviewSpeed = new Chart(document.getElementById('overviewSpeedChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: allLabels,
+                        datasets: [{ label: 'FPS', data: allFPS, backgroundColor: allColors, borderRadius: 6 }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: {
+                                title: { display: true, text: 'Frames per Second', color: '#94a3b8', font: { size: 11 } },
+                                ticks: { color: '#64748b' },
+                                grid: { color: '#2d2d3a' }
+                            },
+                            y: {
+                                ticks: { 
+                                    color: '#64748b',
+                                    font: { size: 10 },
+                                    autoSkip: false,
+                                    maxRotation: 0,
+                                    minRotation: 0
+                                },
+                                grid: { color: '#2d2d3a' },
+                                afterFit: function(scale) {
+                                    scale.width = 120;
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                // No FPS data - show message
+                const ctx = document.getElementById('overviewSpeedChart').getContext('2d');
+                ctx.fillStyle = '#64748b';
+                ctx.font = '14px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText('No FPS data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
+            }
+        }
+        
+        // Pose Page
+        function updatePosePage() {
+            const filter = document.getElementById('poseDatasetFilter').value;
+            let results = data.pose.all;
+            const isAveraged = filter === 'all';
+            
+            if (!isAveraged) {
+                results = results.filter(r => r.dataset === filter);
+            }
+            
+            // Get aggregated data by method
+            const agg = getAggregatedData(results, 'method');
+            const methods = Object.keys(agg);
+            
+            // For averaged view, compute method averages
+            const chartData = methods.map(m => ({
+                method: m,
+                ate: mean(agg[m].map(r => r.ate_rmse || 0)),
+                rpe: mean(agg[m].map(r => r.rpe_trans_rmse || 0)),
+                fps: mean(agg[m].map(r => r.fps || 0)),
+                count: agg[m].length
+            }));
+            
+            if (charts.poseATE) charts.poseATE.destroy();
+            charts.poseATE = new Chart(document.getElementById('poseATEChart'), {
+                type: 'bar',
+                data: {
+                    labels: methods,
+                    datasets: [{
+                        label: isAveraged ? 'Avg ATE RMSE (m)' : 'ATE RMSE (m)',
+                        data: chartData.map(d => d.ate),
+                        backgroundColor: colors,
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            if (charts.poseRPE) charts.poseRPE.destroy();
+            charts.poseRPE = new Chart(document.getElementById('poseRPEChart'), {
+                type: 'bar',
+                data: {
+                    labels: methods,
+                    datasets: [{
+                        label: isAveraged ? 'Avg RPE Trans (m)' : 'RPE Trans (m)',
+                        data: chartData.map(d => d.rpe),
+                        backgroundColor: colors.slice(2),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            // FPS Chart
+            if (charts.poseFPS) charts.poseFPS.destroy();
+            charts.poseFPS = new Chart(document.getElementById('poseFPSChart'), {
+                type: 'bar',
+                data: {
+                    labels: methods,
+                    datasets: [{
+                        label: isAveraged ? 'Avg FPS' : 'FPS',
+                        data: chartData.map(d => d.fps),
+                        backgroundColor: colors.slice(4),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            // Update table - show averaged or individual results
+            const tbody = document.querySelector('#poseTable tbody');
+            
+            if (isAveraged) {
+                // Show one row per method with averages
+                const bestATE = Math.min(...chartData.map(d => d.ate));
+                const bestRPE = Math.min(...chartData.map(d => d.rpe));
+                const bestFPS = Math.max(...chartData.map(d => d.fps));
+                
+                tbody.innerHTML = chartData.map(d => `
+                    <tr>
+                        <td>${d.method}</td>
+                        <td><em>Avg (${d.count} datasets)</em></td>
+                        <td class="${d.ate === bestATE ? 'best' : ''}">${d.ate.toFixed(4)}</td>
+                        <td class="${d.rpe === bestRPE ? 'best' : ''}">${d.rpe.toFixed(4)}</td>
+                        <td>-</td>
+                        <td class="${d.fps === bestFPS ? 'best' : ''}">${d.fps.toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            } else {
+                // Show individual results
+                const bestATE = Math.min(...results.map(r => r.ate_rmse || Infinity));
+                const bestRPETrans = Math.min(...results.map(r => r.rpe_trans_rmse || Infinity));
+                const bestRPERot = Math.min(...results.map(r => r.rpe_rot_rmse || Infinity));
+                const bestFPS = Math.max(...results.map(r => r.fps || 0));
+                
+                tbody.innerHTML = results.map(r => `
+                    <tr>
+                        <td>${r.method}</td>
+                        <td>${r.dataset}</td>
+                        <td class="${r.ate_rmse === bestATE ? 'best' : ''}">${(r.ate_rmse || 0).toFixed(4)}</td>
+                        <td class="${r.rpe_trans_rmse === bestRPETrans ? 'best' : ''}">${(r.rpe_trans_rmse || 0).toFixed(4)}</td>
+                        <td class="${r.rpe_rot_rmse === bestRPERot ? 'best' : ''}">${(r.rpe_rot_rmse || 0).toFixed(2)}</td>
+                        <td class="${r.fps === bestFPS ? 'best' : ''}">${(r.fps || 0).toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+        
+        // Depth Page
+        function updateDepthPage() {
+            const filter = document.getElementById('depthDatasetFilter').value;
+            let results = data.depth.all;
+            const isAveraged = filter === 'all';
+            
+            if (!isAveraged) {
+                results = results.filter(r => r.dataset === filter);
+            }
+            
+            const agg = getAggregatedData(results, 'method');
+            const methods = Object.keys(agg);
+            
+            const chartData = methods.map(m => ({
+                method: m,
+                absrel: mean(agg[m].map(r => r.abs_rel || 0)),
+                rmse: mean(agg[m].map(r => r.rmse || 0)),
+                delta1: mean(agg[m].map(r => r.delta1 || 0)),
+                fps: mean(agg[m].map(r => r.fps || 0)),
+                count: agg[m].length
+            }));
+            
+            if (charts.depthAbsRel) charts.depthAbsRel.destroy();
+            charts.depthAbsRel = new Chart(document.getElementById('depthAbsRelChart'), {
+                type: 'bar',
+                data: {
+                    labels: methods,
+                    datasets: [{
+                        label: isAveraged ? 'Avg AbsRel' : 'AbsRel',
+                        data: chartData.map(d => d.absrel),
+                        backgroundColor: colors,
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            if (charts.depthDelta) charts.depthDelta.destroy();
+            charts.depthDelta = new Chart(document.getElementById('depthDeltaChart'), {
+                type: 'bar',
+                data: {
+                    labels: methods,
+                    datasets: [{
+                        label: isAveraged ? 'Avg δ < 1.25 (%)' : 'δ < 1.25 (%)',
+                        data: chartData.map(d => d.delta1 * 100),
+                        backgroundColor: colors.slice(2),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            // FPS Chart
+            if (charts.depthFPS) charts.depthFPS.destroy();
+            charts.depthFPS = new Chart(document.getElementById('depthFPSChart'), {
+                type: 'bar',
+                data: {
+                    labels: methods,
+                    datasets: [{
+                        label: isAveraged ? 'Avg FPS' : 'FPS',
+                        data: chartData.map(d => d.fps),
+                        backgroundColor: colors.slice(4),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            const tbody = document.querySelector('#depthTable tbody');
+            
+            if (isAveraged) {
+                const bestAbsRel = Math.min(...chartData.map(d => d.absrel));
+                const bestRMSE = Math.min(...chartData.map(d => d.rmse));
+                const bestDelta1 = Math.max(...chartData.map(d => d.delta1));
+                const bestFPS = Math.max(...chartData.map(d => d.fps));
+                
+                tbody.innerHTML = chartData.map(d => `
+                    <tr>
+                        <td>${d.method}</td>
+                        <td><em>Avg (${d.count} datasets)</em></td>
+                        <td class="${d.absrel === bestAbsRel ? 'best' : ''}">${d.absrel.toFixed(4)}</td>
+                        <td class="${d.rmse === bestRMSE ? 'best' : ''}">${d.rmse.toFixed(4)}</td>
+                        <td class="${d.delta1 === bestDelta1 ? 'best' : ''}">${(d.delta1 * 100).toFixed(1)}%</td>
+                        <td class="${d.fps === bestFPS ? 'best' : ''}">${d.fps.toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            } else {
+                const bestAbsRel = Math.min(...results.map(r => r.abs_rel || Infinity));
+                const bestRMSE = Math.min(...results.map(r => r.rmse || Infinity));
+                const bestDelta1 = Math.max(...results.map(r => r.delta1 || 0));
+                const bestFPS = Math.max(...results.map(r => r.fps || 0));
+                
+                tbody.innerHTML = results.map(r => `
+                    <tr>
+                        <td>${r.method}</td>
+                        <td>${r.dataset}</td>
+                        <td class="${r.abs_rel === bestAbsRel ? 'best' : ''}">${(r.abs_rel || 0).toFixed(4)}</td>
+                        <td class="${r.rmse === bestRMSE ? 'best' : ''}">${(r.rmse || 0).toFixed(4)}</td>
+                        <td class="${r.delta1 === bestDelta1 ? 'best' : ''}">${((r.delta1 || 0) * 100).toFixed(1)}%</td>
+                        <td class="${r.fps === bestFPS ? 'best' : ''}">${(r.fps || 0).toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+        
+        // GS Page
+        function updateGSPage() {
+            const filter = document.getElementById('gsDatasetFilter').value;
+            let results = data.gs.all;
+            const isAveraged = filter === 'all';
+            
+            if (!isAveraged) {
+                results = results.filter(r => r.dataset === filter);
+            }
+            
+            const agg = getAggregatedData(results, 'engine');
+            const engines = Object.keys(agg);
+            
+            const chartData = engines.map(e => ({
+                engine: e,
+                psnr: mean(agg[e].map(r => r.psnr || 0)),
+                ssim: mean(agg[e].map(r => r.ssim || 0)),
+                lpips: mean(agg[e].map(r => r.lpips || 0)),
+                gaussians: mean(agg[e].map(r => r.final_gaussians || 0)),
+                fps: mean(agg[e].map(r => r.fps || 0)),
+                count: agg[e].length
+            }));
+            
+            if (charts.gsPSNR) charts.gsPSNR.destroy();
+            charts.gsPSNR = new Chart(document.getElementById('gsPSNRChart'), {
+                type: 'bar',
+                data: {
+                    labels: engines,
+                    datasets: [{
+                        label: isAveraged ? 'Avg PSNR (dB)' : 'PSNR (dB)',
+                        data: chartData.map(d => d.psnr),
+                        backgroundColor: colors,
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            if (charts.gsSSIM) charts.gsSSIM.destroy();
+            charts.gsSSIM = new Chart(document.getElementById('gsSSIMChart'), {
+                type: 'bar',
+                data: {
+                    labels: engines,
+                    datasets: [{
+                        label: isAveraged ? 'Avg SSIM' : 'SSIM',
+                        data: chartData.map(d => d.ssim),
+                        backgroundColor: colors.slice(1),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            if (charts.gsGaussians) charts.gsGaussians.destroy();
+            charts.gsGaussians = new Chart(document.getElementById('gsGaussiansChart'), {
+                type: 'bar',
+                data: {
+                    labels: engines,
+                    datasets: [{
+                        label: isAveraged ? 'Avg Gaussians (K)' : 'Gaussians (K)',
+                        data: chartData.map(d => d.gaussians / 1000),
+                        backgroundColor: colors.slice(2),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            if (charts.gsFPS) charts.gsFPS.destroy();
+            charts.gsFPS = new Chart(document.getElementById('gsFPSChart'), {
+                type: 'bar',
+                data: {
+                    labels: engines,
+                    datasets: [{
+                        label: isAveraged ? 'Avg FPS' : 'FPS',
+                        data: chartData.map(d => d.fps),
+                        backgroundColor: colors.slice(3),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            const tbody = document.querySelector('#gsTable tbody');
+            
+            if (isAveraged) {
+                const bestPSNR = Math.max(...chartData.map(d => d.psnr));
+                const bestSSIM = Math.max(...chartData.map(d => d.ssim));
+                const bestLPIPS = Math.min(...chartData.map(d => d.lpips));
+                const bestFPS = Math.max(...chartData.map(d => d.fps));
+                
+                tbody.innerHTML = chartData.map(d => `
+                    <tr>
+                        <td>${d.engine}</td>
+                        <td><em>Avg (${d.count} datasets)</em></td>
+                        <td class="${d.psnr === bestPSNR ? 'best' : ''}">${d.psnr.toFixed(2)}</td>
+                        <td class="${d.ssim === bestSSIM ? 'best' : ''}">${d.ssim.toFixed(4)}</td>
+                        <td class="${d.lpips === bestLPIPS ? 'best' : ''}">${d.lpips.toFixed(4)}</td>
+                        <td>${Math.round(d.gaussians).toLocaleString()}</td>
+                        <td class="${d.fps === bestFPS ? 'best' : ''}">${d.fps.toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            } else {
+                const bestPSNR = Math.max(...results.map(r => r.psnr || 0));
+                const bestSSIM = Math.max(...results.map(r => r.ssim || 0));
+                const bestLPIPS = Math.min(...results.map(r => r.lpips || Infinity));
+                const bestFPS = Math.max(...results.map(r => r.fps || 0));
+                
+                tbody.innerHTML = results.map(r => `
+                    <tr>
+                        <td>${r.engine}</td>
+                        <td>${r.dataset}</td>
+                        <td class="${r.psnr === bestPSNR ? 'best' : ''}">${(r.psnr || 0).toFixed(2)}</td>
+                        <td class="${r.ssim === bestSSIM ? 'best' : ''}">${(r.ssim || 0).toFixed(4)}</td>
+                        <td class="${(r.lpips || Infinity) === bestLPIPS ? 'best' : ''}">${(r.lpips || 0).toFixed(4)}</td>
+                        <td>${(r.final_gaussians || 0).toLocaleString()}</td>
+                        <td class="${r.fps === bestFPS ? 'best' : ''}">${(r.fps || 0).toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+        
+        // Comparison Charts
+        function initComparisonCharts() {
+            // Aggregate data by method
+            const poseAgg = getAggregatedData(data.pose.all, 'method');
+            const depthAgg = getAggregatedData(data.depth.all, 'method');
+            const gsAgg = getAggregatedData(data.gs.all, 'engine');
+            
+            // Pose: Speed vs Accuracy scatter
+            const poseData = Object.keys(poseAgg).map((m, i) => ({
+                x: mean(poseAgg[m].map(r => r.fps || 0)),
+                y: mean(poseAgg[m].map(r => r.ate_rmse || 0)),
+                label: m
+            }));
+            
+            if (charts.poseTradeoff) charts.poseTradeoff.destroy();
+            charts.poseTradeoff = new Chart(document.getElementById('poseTradeoffChart'), {
+                type: 'scatter',
+                data: {
+                    datasets: poseData.map((d, i) => ({
+                        label: d.label,
+                        data: [{ x: d.x, y: d.y }],
+                        backgroundColor: colors[i % colors.length],
+                        pointRadius: 12,
+                        pointHoverRadius: 15
+                    }))
+                },
+                options: {
+                    ...chartDefaults,
+                    scales: {
+                        x: { title: { display: true, text: 'FPS →', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#2d2d3a' } },
+                        y: { title: { display: true, text: '← ATE (lower better)', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#2d2d3a' } }
+                    }
+                }
+            });
+            
+            // Depth: Speed vs Accuracy scatter
+            const depthData = Object.keys(depthAgg).map((m, i) => ({
+                x: mean(depthAgg[m].map(r => r.fps || 0)),
+                y: mean(depthAgg[m].map(r => r.abs_rel || 0)),
+                label: m
+            }));
+            
+            if (charts.depthTradeoff) charts.depthTradeoff.destroy();
+            charts.depthTradeoff = new Chart(document.getElementById('depthTradeoffChart'), {
+                type: 'scatter',
+                data: {
+                    datasets: depthData.map((d, i) => ({
+                        label: d.label,
+                        data: [{ x: d.x, y: d.y }],
+                        backgroundColor: colors[(i + 2) % colors.length],
+                        pointRadius: 12,
+                        pointHoverRadius: 15
+                    }))
+                },
+                options: {
+                    ...chartDefaults,
+                    scales: {
+                        x: { title: { display: true, text: 'FPS →', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#2d2d3a' } },
+                        y: { title: { display: true, text: '← AbsRel (lower better)', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#2d2d3a' } }
+                    }
+                }
+            });
+            
+            // GS: Speed vs Quality scatter
+            const gsData = Object.keys(gsAgg).map((e, i) => ({
+                x: mean(gsAgg[e].map(r => r.fps || 0)),
+                y: mean(gsAgg[e].map(r => r.psnr || 0)),
+                label: e
+            }));
+            
+            if (charts.gsTradeoff) charts.gsTradeoff.destroy();
+            charts.gsTradeoff = new Chart(document.getElementById('gsTradeoffChart'), {
+                type: 'scatter',
+                data: {
+                    datasets: gsData.map((d, i) => ({
+                        label: d.label,
+                        data: [{ x: d.x, y: d.y }],
+                        backgroundColor: colors[(i + 4) % colors.length],
+                        pointRadius: 12,
+                        pointHoverRadius: 15
+                    }))
+                },
+                options: {
+                    ...chartDefaults,
+                    scales: {
+                        x: { title: { display: true, text: 'FPS →', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#2d2d3a' } },
+                        y: { title: { display: true, text: 'PSNR (higher better) →', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#2d2d3a' } }
+                    }
+                }
+            });
+            
+            // Best methods summary
+            const bestPose = poseData.length ? poseData.reduce((a, b) => a.y < b.y ? a : b) : null;
+            const bestDepth = depthData.length ? depthData.reduce((a, b) => a.y < b.y ? a : b) : null;
+            const bestGS = gsData.length ? gsData.reduce((a, b) => a.y > b.y ? a : b) : null;
+            
+            // Summary text
+            const summaryDiv = document.getElementById('bestSummary');
+            summaryDiv.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                    <div style="padding: 16px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid ${colors[0]};">
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Best Pose Method</div>
+                        <div style="font-size: 1.2rem; font-weight: 600;">${bestPose ? bestPose.label : 'N/A'}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">ATE: ${bestPose ? bestPose.y.toFixed(4) : '-'}m @ ${bestPose ? bestPose.x.toFixed(1) : '-'} FPS</div>
+                    </div>
+                    <div style="padding: 16px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid ${colors[1]};">
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Best Depth Method</div>
+                        <div style="font-size: 1.2rem; font-weight: 600;">${bestDepth ? bestDepth.label : 'N/A'}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">AbsRel: ${bestDepth ? bestDepth.y.toFixed(4) : '-'} @ ${bestDepth ? bestDepth.x.toFixed(1) : '-'} FPS</div>
+                    </div>
+                    <div style="padding: 16px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid ${colors[2]};">
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Best GS Engine</div>
+                        <div style="font-size: 1.2rem; font-weight: 600;">${bestGS ? bestGS.label : 'N/A'}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">PSNR: ${bestGS ? bestGS.y.toFixed(2) : '-'}dB @ ${bestGS ? bestGS.x.toFixed(1) : '-'} FPS</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Trajectory Plot
+        function initTrajectoryPage() {
+            const poses = data.pose.all;
+            const datasetsWithTraj = data.datasets_with_trajectories || [];
+            
+            if (!poses.length || !datasetsWithTraj.length) {
+                document.getElementById('trajectoryPlot').innerHTML = 
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available</p></div>';
+                return;
+            }
+            
+            // Initialize range slider
+            initTrajectorySlider();
+            
+            // Populate method checkboxes with Ground Truth first
+            const methodContainer = document.getElementById('trajMethodCheckboxes');
+            const methods = [...new Set(poses.map(p => p.method))];
+            
+            // Ground truth checkbox
+            let checkboxesHtml = `
+                <label class="filter-chip selected" style="display: inline-flex; align-items: center; gap: 6px; margin: 4px;">
+                    <input type="checkbox" value="__GT__" checked onchange="updateTrajectoryPlot(); this.parentElement.classList.toggle('selected', this.checked)">
+                    <span style="width: 12px; height: 12px; background: #ffffff; border-radius: 50%; border: 1px solid #666;"></span>
+                    Ground Truth
+                </label>
+            `;
+            
+            // Method checkboxes
+            checkboxesHtml += methods.map((m, i) => `
+                <label class="filter-chip selected" style="display: inline-flex; align-items: center; gap: 6px; margin: 4px;">
+                    <input type="checkbox" value="${m}" checked onchange="updateTrajectoryPlot(); this.parentElement.classList.toggle('selected', this.checked)">
+                    <span style="width: 12px; height: 12px; background: ${colors[i % colors.length]}; border-radius: 50%;"></span>
+                    ${m}
+                </label>
+            `).join('');
+            
+            methodContainer.innerHTML = checkboxesHtml;
+            
+            // Update the plot
+            updateTrajectoryPlot();
+        }
+        
+        function initTrajectorySlider() {
+            const sliderMin = document.getElementById('trajSliderMin');
+            const sliderMax = document.getElementById('trajSliderMax');
+            const sliderRange = document.getElementById('trajSliderRange');
+            const rangeLabel = document.getElementById('trajRangeLabel');
+            
+            function updateSliderUI() {
+                const minVal = parseInt(sliderMin.value);
+                const maxVal = parseInt(sliderMax.value);
+                
+                // Ensure min doesn't exceed max
+                if (minVal > maxVal - 5) {
+                    sliderMin.value = maxVal - 5;
+                }
+                
+                // Update the range highlight
+                const minPercent = sliderMin.value;
+                const maxPercent = sliderMax.value;
+                sliderRange.style.left = `calc(${minPercent}% + 10px)`;
+                sliderRange.style.width = `calc(${maxPercent - minPercent}% - 0px)`;
+                
+                // Update label
+                rangeLabel.textContent = `${sliderMin.value}% - ${sliderMax.value}%`;
+            }
+            
+            sliderMin.addEventListener('input', () => {
+                updateSliderUI();
+                updateTrajectoryPlot();
+            });
+            
+            sliderMax.addEventListener('input', () => {
+                const minVal = parseInt(sliderMin.value);
+                if (parseInt(sliderMax.value) < minVal + 5) {
+                    sliderMax.value = minVal + 5;
+                }
+                updateSliderUI();
+                updateTrajectoryPlot();
+            });
+            
+            updateSliderUI();
+        }
+        
+        function sliceTrajectory(traj, startPercent, endPercent) {
+            const len = traj.x.length;
+            const startIdx = Math.floor(len * startPercent / 100);
+            const endIdx = Math.ceil(len * endPercent / 100);
+            return {
+                x: traj.x.slice(startIdx, endIdx),
+                y: traj.y.slice(startIdx, endIdx),
+                z: traj.z.slice(startIdx, endIdx),
+                num_points: endIdx - startIdx
+            };
+        }
+        
+        function updateTrajectoryPlot() {
+            const poses = data.pose.all;
+            if (!poses.length) return;
+            
+            const datasetFilter = document.getElementById('trajDatasetFilter').value;
+            
+            // Get selected items from checkboxes
+            const selectedItems = [...document.querySelectorAll('#trajMethodCheckboxes input:checked')]
+                .map(cb => cb.value);
+            
+            const showGT = selectedItems.includes('__GT__');
+            const selectedMethods = selectedItems.filter(v => v !== '__GT__');
+            
+            if (!selectedMethods.length && !showGT) {
+                document.getElementById('trajectoryPlot').innerHTML = 
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>Select at least one trajectory</p></div>';
+                return;
+            }
+            
+            // Filter results by dataset and selected methods
+            let filtered = poses.filter(p => p.dataset === datasetFilter && selectedMethods.includes(p.method));
+            
+            if (!filtered.length && !showGT) {
+                document.getElementById('trajectoryPlot').innerHTML = 
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>No data for selected dataset/methods</p></div>';
+                return;
+            }
+            
+            // Get ground truth trajectory for this dataset
+            const gtTrajFull = data.trajectories[datasetFilter];
+            
+            if (!gtTrajFull) {
+                document.getElementById('trajectoryPlot').innerHTML = 
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available for this dataset</p></div>';
+                return;
+            }
+            
+            // Get time range from slider
+            const startPercent = parseInt(document.getElementById('trajSliderMin')?.value || 0);
+            const endPercent = parseInt(document.getElementById('trajSliderMax')?.value || 100);
+            
+            // Slice trajectory based on time range
+            const gtTraj = sliceTrajectory(gtTrajFull, startPercent, endPercent);
+            
+            const traces = [];
+            const allMethods = [...new Set(poses.map(p => p.method))];
+            
+            // Add ground truth first if requested
+            if (showGT) {
+                traces.push({
+                    type: 'scatter3d',
+                    mode: 'lines',
+                    x: gtTraj.x,
+                    y: gtTraj.y,
+                    z: gtTraj.z,
+                    line: { color: '#ffffff', width: 4 },
+                    name: 'Ground Truth'
+                });
+            }
+            
+            // Generate estimated trajectories for each selected method
+            // Use actual estimated trajectories from cache if available, otherwise simulate
+            const estimatedTrajs = data.estimated_trajectories || {};
+            const datasetEstimatedFull = estimatedTrajs[datasetFilter] || {};
+            
+            selectedMethods.forEach((method) => {
+                const methodIdx = allMethods.indexOf(method);
+                const methodResult = filtered.find(p => p.method === method);
+                if (!methodResult) return;
+                
+                const ate = methodResult.ate_rmse || 0;
+                let x, y, z;
+                
+                // Try to use actual estimated trajectory from cache
+                if (datasetEstimatedFull[method]) {
+                    const estTrajFull = datasetEstimatedFull[method];
+                    const estTraj = sliceTrajectory(estTrajFull, startPercent, endPercent);
+                    x = estTraj.x;
+                    y = estTraj.y;
+                    z = estTraj.z;
+                } else {
+                    // Fallback: simulate trajectory with noise proportional to ATE
+                    const numPoints = gtTraj.x.length;
+                    const seed = method.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+                    const seededRandom = (i) => ((seed * (i + 1) * 9301 + 49297) % 233280) / 233280 - 0.5;
+                    const noiseScale = ate * 3;
+                    
+                    x = gtTraj.x.map((v, i) => v + seededRandom(i) * noiseScale);
+                    y = gtTraj.y.map((v, i) => v + seededRandom(i + numPoints) * noiseScale);
+                    z = gtTraj.z.map((v, i) => v + seededRandom(i + numPoints * 2) * noiseScale * 0.5);
+                }
+                
+                traces.push({
+                    type: 'scatter3d',
+                    mode: 'lines',
+                    x: x,
+                    y: y,
+                    z: z,
+                    line: { color: colors[methodIdx % colors.length], width: 3 },
+                    name: `${method} (ATE: ${ate.toFixed(3)}m)`
+                });
+            });
+            
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#94a3b8' },
+                legend: {
+                    x: 0,
+                    y: 1,
+                    bgcolor: 'rgba(26, 26, 36, 0.8)',
+                    bordercolor: '#2d2d3a',
+                    borderwidth: 1
+                },
+                scene: {
+                    xaxis: { title: 'X (m)', gridcolor: '#2d2d3a', zerolinecolor: '#3f3f5a', showbackground: true, backgroundcolor: '#1a1a24' },
+                    yaxis: { title: 'Y (m)', gridcolor: '#2d2d3a', zerolinecolor: '#3f3f5a', showbackground: true, backgroundcolor: '#1a1a24' },
+                    zaxis: { title: 'Z (m)', gridcolor: '#2d2d3a', zerolinecolor: '#3f3f5a', showbackground: true, backgroundcolor: '#1a1a24' },
+                    bgcolor: '#1a1a24',
+                    camera: { eye: { x: 1.5, y: 1.5, z: 1.2 } }
+                },
+                margin: { l: 0, r: 0, t: 30, b: 0 }
+            };
+            
+            Plotly.newPlot('trajectoryPlot', traces, layout, { responsive: true });
+            
+            // Update stats
+            const bestATE = Math.min(...filtered.map(r => r.ate_rmse || Infinity));
+            const avgFrames = Math.round(mean(filtered.map(r => r.num_frames || 0)));
+            
+            document.getElementById('trajFrames').textContent = avgFrames || '-';
+            document.getElementById('trajATE').textContent = bestATE < Infinity ? bestATE.toFixed(4) : '-';
+            document.getElementById('trajMethods').textContent = selectedMethods.length;
+            
+            // Update checkbox visual state
+            document.querySelectorAll('#trajMethodCheckboxes label').forEach(label => {
+                const cb = label.querySelector('input');
+                if (cb.checked) {
+                    label.classList.add('selected');
+                } else {
+                    label.classList.remove('selected');
+                }
+            });
+        }
+        
+        // Pipeline Page - Heatmap State
+        let currentMetric = 'psnr';
+        let currentEngine = null;
+        let pipelineDataCache = null;
+        
+        function updatePipelinePage() {
+            // Use actual pipeline results (from run_pipeline_benchmark)
+            const pipelineResults = data.pipeline || [];
+            const gsResults = data.gs.all;
+            
+            // Get unique engines from pipeline results, fallback to GS results
+            let engines = [...new Set(pipelineResults.map(r => r.gs_engine).filter(Boolean))];
+            if (engines.length === 0) {
+                engines = [...new Set(gsResults.map(r => r.engine))];
+            }
+            
+            // Get unique pose/depth sources
+            const poseSources = [...new Set(pipelineResults.map(r => r.pose_source).filter(Boolean))];
+            const depthSources = [...new Set(pipelineResults.map(r => r.depth_source).filter(Boolean))];
+            
+            const datasetFilter = document.getElementById('pipelineDatasetFilter').value;
+            
+            // Filter pipeline data by dataset
+            let pipelineData = pipelineResults.filter(r => {
+                if (datasetFilter !== 'all' && r.dataset !== datasetFilter) return false;
+                return true;
+            });
+            
+            // Transform pipeline results to the format we need
+            pipelineData = pipelineData.map(r => ({
+                pose_method: r.pose_source || 'gt',
+                depth_method: r.depth_source || 'gt', 
+                gs_engine: r.gs_engine,
+                dataset: r.dataset,
+                psnr: r.psnr || 0,
+                ssim: r.ssim || 0,
+                pose_ate: r.pose_ate || 0,
+                depth_abs_rel: r.depth_abs_rel || 0,
+                name: r.name || ''
+            }));
+            
+            pipelineDataCache = pipelineData;
+            
+            if (!pipelineData.length) {
+                document.getElementById('bestPipelineSummary').innerHTML = 
+                    '<div class="empty-state"><p>No pipeline data available. Run benchmarks with --pipeline flag.</p></div>';
+                document.getElementById('engineTabs').innerHTML = '';
+                document.getElementById('pipelineHeatmap').innerHTML = 
+                    '<div class="empty-state" style="padding: 40px; text-align: center;"><p style="color: var(--text-muted);">Pipeline benchmark not run.<br>Use: <code>python -m benchmarks.run --pipeline</code></p></div>';
+                return;
+            }
+            
+            // Find best overall configuration
+            const byConfig = {};
+            pipelineData.forEach(p => {
+                const config = `${p.pose_method} → ${p.depth_method} → ${p.gs_engine}`;
+                if (!byConfig[config]) byConfig[config] = [];
+                byConfig[config].push(p);
+            });
+            
+            // Get engines from the actual pipeline data
+            const enginesInData = [...new Set(pipelineData.map(p => p.gs_engine).filter(Boolean))];
+            
+            let bestConfig = null;
+            let bestPSNR = 0;
+            Object.entries(byConfig).forEach(([config, results]) => {
+                const avgPSNR = mean(results.map(r => r.psnr));
+                if (avgPSNR > bestPSNR) {
+                    bestPSNR = avgPSNR;
+                    bestConfig = { config, results, avgPSNR, avgSSIM: mean(results.map(r => r.ssim)), avgATE: mean(results.map(r => r.pose_ate)) };
+                }
+            });
+            
+            // Update best pipeline summary
+            if (bestConfig) {
+                document.getElementById('bestPipelineSummary').innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
+                        <div style="padding: 20px; background: linear-gradient(135deg, var(--accent) 0%, #4f46e5 100%); border-radius: 12px;">
+                            <div style="font-size: 0.85rem; opacity: 0.9; margin-bottom: 8px;">🏆 Best Pipeline Configuration</div>
+                            <div style="font-size: 1rem; font-weight: 600; margin-bottom: 12px;">${bestConfig.config}</div>
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; font-size: 0.85rem;">
+                                <div><div style="opacity: 0.8;">PSNR</div><div style="font-weight: 600;">${bestConfig.avgPSNR.toFixed(2)} dB</div></div>
+                                <div><div style="opacity: 0.8;">SSIM</div><div style="font-weight: 600;">${bestConfig.avgSSIM.toFixed(4)}</div></div>
+                                <div><div style="opacity: 0.8;">Pose ATE</div><div style="font-weight: 600;">${bestConfig.avgATE.toFixed(4)}m</div></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Create engine tabs from actual data
+            const engineTabsContainer = document.getElementById('engineTabs');
+            if (!currentEngine || !enginesInData.includes(currentEngine)) {
+                currentEngine = enginesInData[0];
+            }
+            engineTabsContainer.innerHTML = enginesInData.map(e => 
+                `<button class="engine-tab ${e === currentEngine ? 'active' : ''}" onclick="switchEngine('${e}')">${e}</button>`
+            ).join('');
+            
+            // Update heatmap and table
+            updatePipelineHeatmaps();
+            updatePipelineTable(pipelineData, byConfig);
+        }
+        
+        function switchMetric(metric) {
+            currentMetric = metric;
+            document.querySelectorAll('#metricTabs .tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.toLowerCase() === metric);
+            });
+            updatePipelineHeatmaps();
+        }
+        
+        function switchEngine(engine) {
+            currentEngine = engine;
+            document.querySelectorAll('.engine-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent === engine);
+            });
+            updatePipelineHeatmaps();
+        }
+        
+        function updatePipelineHeatmaps() {
+            if (!pipelineDataCache || !currentEngine) return;
+            
+            const datasetFilter = document.getElementById('pipelineDatasetFilter').value;
+            
+            // Filter data for current engine
+            const engineData = pipelineDataCache.filter(p => p.gs_engine === currentEngine);
+            
+            if (!engineData.length) {
+                document.getElementById('pipelineHeatmap').innerHTML = 
+                    '<div class="empty-state"><p>No data for this engine</p></div>';
+                return;
+            }
+            
+            // Get unique pose and depth methods for this engine
+            const poseMethods = [...new Set(engineData.map(p => p.pose_method))].sort();
+            const depthMethods = [...new Set(engineData.map(p => p.depth_method))].sort();
+            
+            // Build heatmap matrix (rows = pose, cols = depth)
+            const matrix = [];
+            const hoverText = [];
+            
+            poseMethods.forEach(pose => {
+                const row = [];
+                const hoverRow = [];
+                depthMethods.forEach(depth => {
+                    const matches = engineData.filter(p => p.pose_method === pose && p.depth_method === depth);
+                    if (matches.length > 0) {
+                        const value = currentMetric === 'psnr' 
+                            ? mean(matches.map(p => p.psnr))
+                            : mean(matches.map(p => p.ssim));
+                        row.push(value);
+                        const psnr = mean(matches.map(p => p.psnr));
+                        const ssim = mean(matches.map(p => p.ssim));
+                        hoverRow.push(`Pose: ${pose}<br>Depth: ${depth}<br>PSNR: ${psnr.toFixed(2)} dB<br>SSIM: ${ssim.toFixed(4)}`);
+                    } else {
+                        row.push(null);
+                        hoverRow.push('No data');
+                    }
+                });
+                matrix.push(row);
+                hoverText.push(hoverRow);
+            });
+            
+            // Create Plotly heatmap
+            const colorbarTitle = currentMetric === 'psnr' ? 'PSNR (dB)' : 'SSIM';
+            
+            // Calculate min/max for color scale
+            const flatValues = matrix.flat().filter(v => v !== null);
+            const minVal = currentMetric === 'psnr' ? Math.min(...flatValues) * 0.95 : 0;
+            const maxVal = currentMetric === 'psnr' ? Math.max(...flatValues) * 1.02 : 1;
+            
+            // Calculate dynamic height based on number of pose methods
+            const cellHeight = 35;
+            const baseHeight = 120; // margins + labels
+            const dynamicHeight = Math.max(350, poseMethods.length * cellHeight + baseHeight);
+            
+            const heatmapData = [{
+                z: matrix,
+                x: depthMethods,
+                y: poseMethods,
+                type: 'heatmap',
+                colorscale: currentMetric === 'psnr' 
+                    ? [[0, '#1e1b4b'], [0.5, '#4f46e5'], [1, '#22c55e']]
+                    : [[0, '#1e1b4b'], [0.5, '#6366f1'], [1, '#14b8a6']],
+                hoverinfo: 'text',
+                text: hoverText,
+                showscale: true,
+                colorbar: {
+                    title: { text: colorbarTitle, font: { color: '#94a3b8', size: 11 }, side: 'right' },
+                    tickfont: { color: '#64748b', size: 10 },
+                    tickformat: currentMetric === 'psnr' ? '.1f' : '.3f',
+                    len: 0.85,
+                    thickness: 15,
+                    x: 1.02,
+                    xpad: 8,
+                    outlinewidth: 0
+                },
+                zmin: minVal,
+                zmax: maxVal
+            }];
+            
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#94a3b8' },
+                autosize: true,
+                height: dynamicHeight,
+                xaxis: {
+                    title: { text: 'Depth Method', font: { size: 12 }, standoff: 10 },
+                    tickfont: { size: 10 },
+                    tickangle: -35,
+                    gridcolor: '#2d2d3a',
+                    side: 'bottom',
+                    fixedrange: true,
+                    automargin: true
+                },
+                yaxis: {
+                    title: { text: 'Pose Method', font: { size: 12 } },
+                    tickfont: { size: 10 },
+                    gridcolor: '#2d2d3a',
+                    autorange: 'reversed',
+                    fixedrange: true,
+                    automargin: true
+                },
+                margin: { l: 10, r: 10, t: 10, b: 10, pad: 0 },
+                annotations: matrix.flatMap((row, i) => 
+                    row.map((val, j) => ({
+                        x: depthMethods[j],
+                        y: poseMethods[i],
+                        text: val !== null ? (currentMetric === 'psnr' ? val.toFixed(1) : val.toFixed(3)) : '',
+                        font: { color: val !== null && val > (currentMetric === 'psnr' ? 12 : 0.4) ? '#fff' : '#94a3b8', size: 9 },
+                        showarrow: false
+                    }))
+                )
+            };
+            
+            const config = { 
+                displayModeBar: false,
+                responsive: true,
+                staticPlot: false
+            };
+            
+            // Update container height to match
+            document.getElementById('heatmapContainer').style.minHeight = (dynamicHeight + 40) + 'px';
+            document.getElementById('pipelineHeatmap').style.minHeight = dynamicHeight + 'px';
+            
+            // Use Plotly.react for smooth updates without full redraw
+            Plotly.react('pipelineHeatmap', heatmapData, layout, config);
+        }
+        
+        // Handle window resize for heatmap
+        let resizeTimeout;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(function() {
+                if (pipelineDataCache && currentEngine) {
+                    Plotly.relayout('pipelineHeatmap', {
+                        autosize: true
+                    });
+                }
+            }, 250);
+        });
+        
+        function updatePipelineTable(pipelineData, byConfig) {
+            const datasetFilter = document.getElementById('pipelineDatasetFilter').value;
+            const tbody = document.querySelector('#pipelineTable tbody');
+            
+            const configs = Object.keys(byConfig);
+            const avgPSNR = configs.map(c => mean(byConfig[c].map(p => p.psnr)));
+            const avgSSIM = configs.map(c => mean(byConfig[c].map(p => p.ssim)));
+            const bestPSNRVal = Math.max(...avgPSNR);
+            const bestSSIMVal = Math.max(...avgSSIM);
+            
+            // Sort by PSNR descending
+            const sortedIndices = avgPSNR.map((v, i) => i).sort((a, b) => avgPSNR[b] - avgPSNR[a]);
+            
+            document.getElementById('pipelineTableCount').textContent = configs.length + ' configurations';
+            
+            tbody.innerHTML = sortedIndices.map(i => {
+                const config = configs[i];
+                const results = byConfig[config];
+                const psnr = avgPSNR[i];
+                const ssim = avgSSIM[i];
+                const ate = mean(results.map(p => p.pose_ate));
+                return `
+                    <tr>
+                        <td>${results[0].pose_method}</td>
+                        <td>${results[0].depth_method}</td>
+                        <td>${results[0].gs_engine}</td>
+                        <td>${datasetFilter === 'all' ? `Avg (${results.length})` : results[0].dataset}</td>
+                        <td class="${psnr === bestPSNRVal ? 'best' : ''}">${psnr.toFixed(2)}</td>
+                        <td class="${ssim === bestSSIMVal ? 'best' : ''}">${ssim.toFixed(4)}</td>
+                        <td>${ate.toFixed(4)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initOverviewCharts();
+        });
+    </script>
+</body>
+</html>
