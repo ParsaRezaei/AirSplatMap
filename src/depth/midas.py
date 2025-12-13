@@ -85,15 +85,24 @@ class MiDaSEstimator(BaseDepthEstimator):
             return
         
         try:
+            import os
             model_name = self.MODEL_NAMES.get(self.model_type, 'MiDaS_small')
             
             logger.info(f"Loading MiDaS ({model_name})...")
-            self._model = _torch.hub.load('intel-isl/MiDaS', model_name)
+            
+            # Try local cache first to avoid network timeouts
+            cache_path = os.path.expanduser('~/.cache/torch/hub/intel-isl_MiDaS_master')
+            if os.path.exists(cache_path):
+                self._model = _torch.hub.load(cache_path, model_name, source='local', trust_repo=True)
+                midas_transforms = _torch.hub.load(cache_path, 'transforms', source='local', trust_repo=True)
+            else:
+                self._model = _torch.hub.load('intel-isl/MiDaS', model_name, trust_repo=True)
+                midas_transforms = _torch.hub.load('intel-isl/MiDaS', 'transforms', trust_repo=True)
+            
             self._model.to(self.device)
             self._model.eval()
             
             # Get appropriate transform
-            midas_transforms = _torch.hub.load('intel-isl/MiDaS', 'transforms')
             if 'small' in model_name.lower():
                 self._transform = midas_transforms.small_transform
             else:

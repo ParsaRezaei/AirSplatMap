@@ -928,6 +928,7 @@ def run_pipeline_benchmark(
                         scale = gt_median / pred_median
                         # Sanity check: scale shouldn't be extreme
                         if 0.01 < scale < 1000:
+                            original_pred = pred_depth.copy()  # Save for validity check
                             pred_depth = pred_depth * scale
                             
                             # CRITICAL: Clamp scaled depth to valid range to prevent
@@ -935,9 +936,9 @@ def run_pipeline_benchmark(
                             # MiDaS can have edge artifacts that become huge after scaling
                             pred_depth = np.clip(pred_depth, 0.0, 15.0)
                             
-                            # Also zero out values that were originally invalid
-                            # (MiDaS edge noise can have near-zero values that scale to nonsense)
-                            pred_depth[result.depth < 0.001] = 0.0
+                            # Zero out pixels that were near-zero BEFORE scaling
+                            # Use relative threshold based on median
+                            pred_depth[original_pred < pred_median * 0.001] = 0.0
                             
                             # Compute AbsRel on valid pixels
                             abs_rel = np.mean(np.abs(pred_depth[valid] - gt_depth[valid]) / gt_depth[valid])
