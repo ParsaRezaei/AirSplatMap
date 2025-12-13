@@ -305,3 +305,53 @@ echo ""
 echo "Available engines can be checked with:"
 echo "  python -c \"from src.engines import list_engines; print(list_engines())\""
 echo ""
+
+# ============================================
+# Install Depth Anything V3 (DA3)
+# ============================================
+echo ""
+echo "=============================================="
+echo "Installing Depth Anything V3 (DA3)..."
+echo "=============================================="
+
+DA3_PATH="$SCRIPT_DIR/submodules/Depth-Anything-3"
+
+if [ -f "$DA3_PATH/pyproject.toml" ]; then
+    echo "Found DA3 at: $DA3_PATH"
+    
+    # Install DA3 dependencies
+    echo "Installing DA3 dependencies..."
+    pip install einops huggingface_hub omegaconf evo e3nn moviepy plyfile safetensors trimesh open3d pillow_heif 2>/dev/null || \
+        echo "WARNING: Some DA3 dependencies failed to install"
+    
+    # Install xformers (required for DA3 attention)
+    echo "Installing xformers..."
+    pip install xformers 2>/dev/null || \
+        echo "WARNING: xformers installation failed. DA3 may fall back to slower attention."
+    
+    # Install DA3 in editable mode
+    echo "Installing DA3 package..."
+    pip install -e "$DA3_PATH" --no-deps 2>/dev/null || \
+        echo "WARNING: DA3 installation failed"
+    
+    # Verify DA3 installation
+    echo ""
+    echo "Verifying DA3 installation..."
+    python -c "from depth_anything_3.api import DepthAnything3; print('  DA3 import: OK')" 2>&1 || \
+        echo "  DA3 import: FAILED"
+else
+    echo "WARNING: DA3 submodule not found at $DA3_PATH"
+    echo "Run: git submodule update --init --recursive"
+fi
+
+echo ""
+echo "=============================================="
+echo "All installations complete!"
+echo "=============================================="
+echo ""
+echo "Available components:"
+echo "  - PyTorch with CUDA"
+echo "  - Gaussian Splatting (diff-gaussian-rasterization)"
+echo "  - gsplat (JIT compilation)"
+echo "  - Depth Anything V3 (DA3)"
+echo ""

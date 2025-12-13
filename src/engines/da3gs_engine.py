@@ -89,18 +89,17 @@ class DA3GSEngine(BaseGSEngine):
     
     # This engine processes all frames in batch, not incrementally
     is_batch_engine = True
-    """
     
     # HuggingFace model IDs for DA3 with GS support
+    # da3-giant has gs_head and gs_adapter for Gaussian output
     MODEL_IDS = {
-        'base': 'depth-anything/DA3-BASE',
-        'large': 'depth-anything/DA3-LARGE-1.1',
-        'giant': 'depth-anything/DA3-GIANT-1.1',
+        'giant': 'depth-anything/DA3-GIANT-1.1',  # Has GS support (gs_head, gs_adapter)
+        'default': 'depth-anything/DA3-GIANT-1.1',
     }
     
     def __init__(
         self,
-        model_size: str = "large",
+        model_size: str = "giant",
         device: str = "cuda",
         process_res: int = 504,
     ):
@@ -108,11 +107,12 @@ class DA3GSEngine(BaseGSEngine):
         Initialize DA3 GS Engine.
         
         Args:
-            model_size: 'base', 'large', or 'giant'
+            model_size: 'giant' (has GS support with gs_head)
             device: 'cuda' or 'cpu'
             process_res: Processing resolution for DA3
         """
-        self.model_size = model_size.lower()
+        # Force giant model since it has GS support
+        self.model_size = 'giant'
         self.device = device
         self.process_res = process_res
         
@@ -148,7 +148,7 @@ class DA3GSEngine(BaseGSEngine):
         
         from depth_anything_3.api import DepthAnything3
         
-        model_id = self.MODEL_IDS.get(self.model_size, self.MODEL_IDS['large'])
+        model_id = self.MODEL_IDS.get(self.model_size, self.MODEL_IDS['default'])
         logger.info(f"Loading DA3 GS model: {model_id}")
         
         self._model = DepthAnything3.from_pretrained(model_id)

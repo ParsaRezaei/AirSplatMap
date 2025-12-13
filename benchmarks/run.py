@@ -1765,7 +1765,7 @@ def main():
                         default=['midas', 'depth_anything_v3', 'depth_pro'],
                         help='Depth methods to test')
     parser.add_argument('--gs-engines', nargs='+', 
-                        default=['graphdeco', 'gsplat', 'da3gs'],
+                        default=['graphdeco'],
                         help='GS engines to test (graphdeco, gsplat, splatam, gslam, monogs, da3gs)')
     
     args = parser.parse_args()

@@ -304,3 +304,54 @@ Write-Host "  2. Run: conda activate airsplatmap" -ForegroundColor White
 Write-Host "  3. Run your commands normally" -ForegroundColor White
 Write-Host ""
 
+# ============================================
+# Install Depth Anything V3 (DA3)
+# ============================================
+Write-Host ""
+Write-Host "==============================================" -ForegroundColor Cyan
+Write-Host "Installing Depth Anything V3 (DA3)..." -ForegroundColor Cyan
+Write-Host "==============================================" -ForegroundColor Cyan
+
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$da3Path = "$scriptDir\submodules\Depth-Anything-3"
+
+if (Test-Path "$da3Path\pyproject.toml") {
+    Write-Host "Found DA3 at: $da3Path" -ForegroundColor Green
+    
+    # Install DA3 dependencies first (some may conflict, so install key ones)
+    Write-Host "Installing DA3 dependencies..." -ForegroundColor Cyan
+    $ErrorActionPreference = "Continue"
+    pip install einops huggingface_hub omegaconf evo e3nn moviepy plyfile safetensors trimesh open3d pillow_heif 2>&1 | Out-Host
+    
+    # Install xformers (required for DA3 attention)
+    Write-Host "Installing xformers..." -ForegroundColor Cyan
+    pip install xformers 2>&1 | Out-Host
+    
+    # Install DA3 in editable mode
+    Write-Host "Installing DA3 package..." -ForegroundColor Cyan
+    pip install -e "$da3Path" --no-deps 2>&1 | Out-Host
+    $ErrorActionPreference = "Stop"
+    
+    # Verify DA3 installation
+    Write-Host ""
+    Write-Host "Verifying DA3 installation..." -ForegroundColor Cyan
+    $ErrorActionPreference = "Continue"
+    python -c "from depth_anything_3.api import DepthAnything3; print('  DA3 import: OK')" 2>&1
+    $ErrorActionPreference = "Stop"
+} else {
+    Write-Host "WARNING: DA3 submodule not found at $da3Path" -ForegroundColor Yellow
+    Write-Host "Run: git submodule update --init --recursive" -ForegroundColor Yellow
+}
+
+Write-Host ""
+Write-Host "==============================================" -ForegroundColor Green
+Write-Host "All installations complete!" -ForegroundColor Green
+Write-Host "==============================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "Available components:" -ForegroundColor Cyan
+Write-Host "  - PyTorch with CUDA" -ForegroundColor White
+Write-Host "  - Gaussian Splatting (diff-gaussian-rasterization)" -ForegroundColor White
+Write-Host "  - gsplat (JIT compilation)" -ForegroundColor White  
+Write-Host "  - Depth Anything V3 (DA3)" -ForegroundColor White
+Write-Host ""
+
