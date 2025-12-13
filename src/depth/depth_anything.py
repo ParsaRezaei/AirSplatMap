@@ -250,32 +250,43 @@ class DepthAnythingV2Estimator(BaseDepthEstimator):
 
 class DepthAnythingV3Estimator(BaseDepthEstimator):
     """
-    Depth estimation using Depth Anything V2 Large model.
+    Depth estimation using Depth Anything V3 (ByteDance).
     
-    NOTE: Depth Anything V3 has not been officially released yet.
-    This class uses the largest V2 model (vitl) which provides the best quality.
-    When V3 is released, this will be updated to use it.
+    DA3 is a major upgrade over V2 with:
+    - Metric depth estimation (DA3METRIC-LARGE)
+    - Multi-view depth estimation
+    - Pose estimation capabilities
+    - Much better accuracy
     
-    For now, this is an alias for DepthAnythingV2Estimator with model_size='vitl'.
+    Models available:
+    - 'small': DA3-SMALL (80M params) - fastest
+    - 'base': DA3-BASE (120M params) - balanced  
+    - 'large': DA3-LARGE (350M params) - accurate
+    - 'giant': DA3-GIANT (1.15B params) - best quality
+    - 'metric': DA3METRIC-LARGE (350M) - metric depth in meters
+    - 'mono': DA3MONO-LARGE (350M) - high-quality relative depth
     
-    Model sizes mapped to V2:
-    - 'small': V2-Small (24M params)
-    - 'base': V2-Base (97M params) 
-    - 'large': V2-Large (335M params)
-    - 'giant': V2-Large (335M params) - same as large until V3 releases
+    Installation:
+        pip install xformers torch>=2 torchvision
+        pip install depth-anything-3
+        # Or from source:
+        git clone https://github.com/ByteDance-Seed/Depth-Anything-3
+        cd Depth-Anything-3 && pip install -e .
     
     Usage:
-        estimator = DepthAnythingV3Estimator(model_size='large')
+        estimator = DepthAnythingV3Estimator(model_size='base')
         result = estimator.estimate(rgb_image)
-        depth = result.depth  # Relative depth
+        depth = result.depth  # Depth map
     """
     
-    # Map V3 sizes to V2 equivalents
-    _SIZE_MAP = {
-        'small': 'vits',
-        'base': 'vitb',
-        'large': 'vitl',
-        'giant': 'vitl',  # No V2 giant, use large
+    # HuggingFace model IDs for DA3
+    MODEL_IDS = {
+        'small': 'depth-anything/DA3-SMALL',
+        'base': 'depth-anything/DA3-BASE',
+        'large': 'depth-anything/DA3-LARGE-1.1',
+        'giant': 'depth-anything/DA3-GIANT-1.1',
+        'metric': 'depth-anything/DA3METRIC-LARGE',
+        'mono': 'depth-anything/DA3MONO-LARGE',
     }
     
     def __init__(
@@ -285,10 +296,10 @@ class DepthAnythingV3Estimator(BaseDepthEstimator):
         max_resolution: int = 518,
     ):
         """
-        Initialize Depth Anything (V2 Large as V3 placeholder).
+        Initialize Depth Anything V3.
         
         Args:
-            model_size: 'small', 'base', 'large', or 'giant' (auto-detects for ARM)
+            model_size: 'small', 'base', 'large', 'giant', 'metric', or 'mono'
             device: 'cuda' or 'cpu'
             max_resolution: Maximum image dimension for processing
         """
@@ -305,39 +316,117 @@ class DepthAnythingV3Estimator(BaseDepthEstimator):
         
         self.model_size = model_size.lower()
         self.max_resolution = max_resolution
+        self._model = None
+        self._is_metric = (self.model_size == 'metric')
         
-        # Map to V2 model size
-        v2_size = self._SIZE_MAP.get(self.model_size, 'vitl')
-        
-        logger.info(f"DepthAnythingV3 not yet released, using V2 ({v2_size}) as fallback")
-        
-        # Create V2 estimator internally
-        self._v2_estimator = DepthAnythingV2Estimator(
-            model_size=v2_size,
-            device=device,
-            max_resolution=max_resolution,
-        )
+        # Check if DA3 is available, fall back to V2 if not
+        self._use_v3 = self._check_da3_available()
+        if not self._use_v3:
+            logger.warning("DA3 not installed, falling back to V2")
+            v2_size_map = {'small': 'vits', 'base': 'vitb', 'large': 'vitl', 
+                          'giant': 'vitl', 'metric': 'vitl', 'mono': 'vitl'}
+            v2_size = v2_size_map.get(self.model_size, 'vitl')
+            self._v2_estimator = DepthAnythingV2Estimator(
+                model_size=v2_size, device=device, max_resolution=max_resolution
+            )
+    
+    @staticmethod
+    def _check_da3_available() -> bool:
+        """Check if DA3 package is installed."""
+        try:
+            from depth_anything_3.api import DepthAnything3
+            return True
+        except ImportError:
+            return False
     
     @staticmethod
     def is_available() -> bool:
+        # Available if either DA3 or V2 (fallback) is available
+        if DepthAnythingV3Estimator._check_da3_available():
+            return True
         return DepthAnythingV2Estimator.is_available()
     
     def _lazy_init(self):
-        """Lazy initialization via V2 estimator."""
-        self._v2_estimator._lazy_init()
-        self._initialized = self._v2_estimator._initialized
+        """Lazy initialization - load model on first use."""
+        if self._initialized:
+            return
+            
+        if not self._use_v3:
+            self._v2_estimator._lazy_init()
+            self._initialized = True
+            return
+        
+        from depth_anything_3.api import DepthAnything3
+        
+        model_id = self.MODEL_IDS.get(self.model_size, self.MODEL_IDS['base'])
+        logger.info(f"Loading DA3 model: {model_id}")
+        
+        self._model = DepthAnything3.from_pretrained(model_id)
+        self._model = self._model.to(device=_torch.device(self.device))
+        
+        logger.info(f"DA3 ({self.model_size}) initialized on {self.device}")
+        self._initialized = True
     
     def estimate(self, rgb: np.ndarray) -> DepthResult:
-        """Estimate depth from RGB image using V2 backend."""
-        return self._v2_estimator.estimate(rgb)
+        """Estimate depth from RGB image."""
+        self._lazy_init()
+        
+        if not self._use_v3:
+            return self._v2_estimator.estimate(rgb)
+        
+        # DA3 expects list of image paths or numpy arrays
+        # Resize if needed
+        h, w = rgb.shape[:2]
+        if max(h, w) > self.max_resolution:
+            scale = self.max_resolution / max(h, w)
+            new_h, new_w = int(h * scale), int(w * scale)
+            import cv2
+            rgb_resized = cv2.resize(rgb, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        else:
+            rgb_resized = rgb
+            new_h, new_w = h, w
+        
+        # Run inference
+        with _torch.no_grad():
+            prediction = self._model.inference([rgb_resized])
+        
+        # Get depth (shape: [1, H, W])
+        depth = prediction.depth[0]  # float32 numpy array
+        
+        # Resize back to original
+        if depth.shape[0] != h or depth.shape[1] != w:
+            import cv2
+            depth = cv2.resize(depth, (w, h), interpolation=cv2.INTER_LINEAR)
+        
+        # Get confidence if available
+        confidence = None
+        if hasattr(prediction, 'conf') and prediction.conf is not None:
+            confidence = prediction.conf[0]
+            if confidence.shape[0] != h or confidence.shape[1] != w:
+                confidence = cv2.resize(confidence, (w, h), interpolation=cv2.INTER_LINEAR)
+        
+        return DepthResult(
+            depth=depth,
+            confidence=confidence,
+            is_metric=self._is_metric,
+            min_depth=float(depth.min()),
+            max_depth=float(depth.max()),
+        )
     
     def get_name(self) -> str:
         return f"depth_anything_v3_{self.model_size}"
     
     def is_metric(self) -> bool:
-        return False
+        """Return True if this model outputs metric depth."""
+        return self._is_metric
     
     def cleanup(self):
         """Release GPU memory."""
-        self._v2_estimator.cleanup()
+        if not self._use_v3:
+            self._v2_estimator.cleanup()
+        elif self._model is not None:
+            del self._model
+            self._model = None
+            if _torch is not None and _torch.cuda.is_available():
+                _torch.cuda.empty_cache()
         self._initialized = False
