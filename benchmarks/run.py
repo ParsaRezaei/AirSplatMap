@@ -571,6 +571,7 @@ def run_depth_benchmark(
                     
                     pred = estimator.estimate(frame.rgb)
                     pred_depth = pred.depth.copy() if hasattr(pred, 'depth') else pred.copy()
+                    original_pred = pred_depth.copy()  # Save original for validity check
                     
                     gt_depth = frame.depth
                     if gt_depth is not None:
@@ -586,7 +587,9 @@ def run_depth_benchmark(
                                 if 0.01 < scale < 1000:
                                     pred_depth = pred_depth * scale
                                     pred_depth = np.clip(pred_depth, 0.0, 15.0)
-                                    pred_depth[pred.depth < 0.001] = 0.0
+                                    # Zero out pixels that were near-zero BEFORE scaling
+                                    # Use relative threshold based on median
+                                    pred_depth[original_pred < pred_median * 0.001] = 0.0
                                     
                                     abs_rel = np.mean(np.abs(pred_depth[valid] - gt_depth[valid]) / gt_depth[valid])
                                     abs_rels.append(abs_rel)
