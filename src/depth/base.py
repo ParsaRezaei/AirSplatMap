@@ -2,11 +2,16 @@
 Base classes for depth estimation.
 """
 
+import os
 import numpy as np
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional, Tuple
 import logging
+
+# Enable MPS fallback for unsupported operators on macOS
+# This must be set before importing torch
+os.environ.setdefault('PYTORCH_ENABLE_MPS_FALLBACK', '1')
 
 logger = logging.getLogger(__name__)
 
@@ -15,27 +20,60 @@ def get_best_device(preferred: str = "cuda") -> str:
     """
     Get the best available device, preferring GPU.
     
+    Priority order:
+    1. If 'cuda' requested and available -> use CUDA
+    2. If 'mps' requested and available -> use MPS
+    3. If 'cuda' requested but not available -> try MPS (macOS)
+    4. Fall back to CPU
+    
     Args:
-        preferred: Preferred device ('cuda', 'mps', 'cpu')
+        preferred: Preferred device ('cuda', 'mps', 'cpu', or 'auto')
         
     Returns:
         Device string that's actually available
     """
     try:
         import torch
+        
+        # Auto-detect: prefer CUDA, then MPS, then CPU
+        if preferred == "auto":
+            if torch.cuda.is_available():
+                return "cuda:0"
+            if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                return "mps"
+            return "cpu"
+        
+        # CUDA requested
         if preferred == "cuda" or preferred.startswith("cuda:"):
             if torch.cuda.is_available():
                 return preferred if preferred.startswith("cuda:") else "cuda:0"
+            # CUDA not available, try MPS (for macOS with AMD GPU)
+            if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                logger.info("CUDA not available, using MPS (Apple Metal) instead")
+                return "mps"
             logger.warning("CUDA requested but not available, falling back to CPU")
-        elif preferred == "mps":
+            return "cpu"
+        
+        # MPS requested
+        if preferred == "mps":
             if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
                 return "mps"
             logger.warning("MPS requested but not available, trying CUDA")
             if torch.cuda.is_available():
                 return "cuda:0"
-        # Try CUDA anyway before falling back to CPU
+            logger.warning("Neither MPS nor CUDA available, falling back to CPU")
+            return "cpu"
+        
+        # CPU requested or unknown
+        if preferred == "cpu":
+            return "cpu"
+        
+        # Try to use any available GPU
         if torch.cuda.is_available():
             return "cuda:0"
+        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            return "mps"
+            
     except ImportError:
         pass
     return "cpu"

@@ -57,8 +57,8 @@ DATASETS_DIR = PROJECT_ROOT / "datasets"
 
 
 def get_hostname() -> str:
-    """Get the current hostname."""
-    return socket.gethostname()
+    """Get the current hostname (short name, not FQDN)."""
+    return socket.gethostname().split('.')[0]
 
 
 def get_host_results_dir(hostname: str = None) -> Path:

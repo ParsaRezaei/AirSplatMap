@@ -294,17 +294,14 @@ def save_depth_cache(
     cache_dir = output_dir / "cache" / dataset_name / "depth"
     cache_dir.mkdir(parents=True, exist_ok=True)
     
-    # Save ground truth depths (compressed, can be large) - skip None values
+    # Save ground truth depths (compressed, can be large)
     np.savez_compressed(cache_dir / "gt_depths.npz", 
                         **{f"frame_{i}": d for i, d in enumerate(gt_depths) if d is not None})
     
-    # Save each method's estimated depths - skip None values but track which frames are valid
+    # Save each method's estimated depths
     for method, depths in estimated_depths.items():
-        valid_depths = {f"frame_{i}": d for i, d in enumerate(depths) if d is not None}
-        np.savez_compressed(cache_dir / f"{method}_depths.npz", **valid_depths)
-        # Also save the indices of valid frames
-        valid_indices = [i for i, d in enumerate(depths) if d is not None]
-        np.save(cache_dir / f"{method}_valid_indices.npy", np.array(valid_indices))
+        np.savez_compressed(cache_dir / f"{method}_depths.npz",
+                           **{f"frame_{i}": d for i, d in enumerate(depths)})
     
     # Save depth errors for reference (convert numpy types to Python types)
     depth_errors_serializable = {k: float(v) for k, v in depth_errors.items()}
@@ -370,22 +367,17 @@ def load_depth_cache(output_dir: Path, dataset_name: str) -> Tuple[Optional[List
     gt_depths = None
     gt_file = cache_dir / "gt_depths.npz"
     if gt_file.exists():
-        data = np.load(gt_file, allow_pickle=True)
+        data = np.load(gt_file)
         gt_depths = [data[k] for k in sorted(data.files, key=lambda x: int(x.split('_')[1]))]
     
-    # Load estimated depths - handle potential None values stored as objects
+    # Load estimated depths
     estimated_depths = {}
     for depth_file in cache_dir.glob("*_depths.npz"):
         if depth_file.name == "gt_depths.npz":
             continue
         method = depth_file.stem.replace("_depths", "")
-        try:
-            data = np.load(depth_file, allow_pickle=True)
-            depths_list = [data[k] for k in sorted(data.files, key=lambda x: int(x.split('_')[1]))]
-            estimated_depths[method] = depths_list
-        except Exception as e:
-            logger.warning(f"Could not load depth cache for {method}: {e}")
-            continue
+        data = np.load(depth_file)
+        estimated_depths[method] = [data[k] for k in sorted(data.files, key=lambda x: int(x.split('_')[1]))]
     
     # Load depth errors
     depth_errors = {}
@@ -663,20 +655,6 @@ def run_depth_benchmark(
     if cache_dir is not None and estimated_depths:
         dataset_name = dataset_path.name
         save_depth_cache(estimated_depths, gt_depths, depth_errors, cache_dir, dataset_name)
-    
-    # CRITICAL: Clean up large data structures to free RAM
-    if 'all_frames' in dir():
-        del all_frames
-    if 'estimated_depths' in dir():
-        del estimated_depths
-    if 'gt_depths' in dir():
-        del gt_depths
-    if 'raw_depths' in dir():
-        del raw_depths
-    import gc
-    gc.collect()
-    safe_cuda_cleanup()
-    logger.info("  Depth benchmark cleanup complete")
     
     return results
 
@@ -1176,9 +1154,6 @@ def run_pipeline_benchmark(
                 except:
                     pass
             
-            # Check if engine is using fallback rendering (gsplat CUDA issue)
-            using_fallback = getattr(engine, '_using_fallback', False)
-            
             result = PipelineResult(
                 name=config_name,
                 pose_source=pose_source,
@@ -1194,14 +1169,7 @@ def run_pipeline_benchmark(
                 pose_ate=float(pose_errors.get(pose_source, 0)) if pose_source != 'gt' else 0.0,
                 depth_abs_rel=float(depth_errors.get(depth_source, 0)) if depth_source != 'gt' else 0.0,
             )
-            result_dict = asdict(result)
-            
-            # Mark fallback results so they're clearly identified
-            if using_fallback:
-                result_dict['note'] = 'FALLBACK: gsplat CUDA toolkit not found - results invalid'
-                logger.warning(f"    Results marked as invalid - gsplat using fallback rendering")
-            
-            results.append(result_dict)
+            results.append(asdict(result))
             
             logger.info(f"    PSNR={result.psnr:.2f}dB, SSIM={result.ssim:.4f}, LPIPS={result.lpips:.4f}, {result.num_gaussians:,} Gaussians")
             log_gpu_memory(f"    ")
@@ -1343,18 +1311,15 @@ def print_pipeline_results(results: List[Dict]):
     print("\n" + "=" * 80)
     print("COMBINED PIPELINE RESULTS")
     print("=" * 80)
-    print(f"{'Configuration':<35} {'PSNR':<10} {'SSIM':<10} {'LPIPS':<10} {'Pose ATE':<12} {'Depth Err':<10} {'Note'}")
-    print("-" * 100)
+    print(f"{'Configuration':<35} {'PSNR':<10} {'SSIM':<10} {'LPIPS':<10} {'Pose ATE':<12} {'Depth Err':<10}")
+    print("-" * 80)
     
     for r in sorted(results, key=lambda x: -x['psnr']):
         pose_ate = f"{r['pose_ate']:.4f}m" if r['pose_ate'] > 0 else "GT"
         depth_err = f"{r['depth_abs_rel']:.4f}" if r['depth_abs_rel'] > 0 else "GT"
         lpips_val = f"{r.get('lpips', 0):.4f}" if r.get('lpips', 0) > 0 else "-"
-        note = r.get('note', '')
-        if 'FALLBACK' in note:
-            note = '*FALLBACK*'
         print(f"{r['name']:<35} {r['psnr']:<10.2f} {r['ssim']:<10.4f} {lpips_val:<10} "
-              f"{pose_ate:<12} {depth_err:<10} {note}")
+              f"{pose_ate:<12} {depth_err:<10}")
 
 
 # =============================================================================
@@ -1806,8 +1771,8 @@ def main():
                         default=['orb', 'sift', 'robust_flow'],
                         help='Pose methods to test')
     parser.add_argument('--depth-methods', nargs='+', 
-                        default=['midas', 'depth_anything_v2'],
-                        help='Depth methods to test (depth_pro OOMs on Jetson)')
+                        default=['midas', 'depth_anything_v3', 'depth_pro'],
+                        help='Depth methods to test')
     parser.add_argument('--gs-engines', nargs='+', 
                         default=['graphdeco'],
                         help='GS engines to test (graphdeco, gsplat, splatam, gslam, monogs, da3gs)')
@@ -1820,11 +1785,14 @@ def main():
         if torch.cuda.is_available():
             gpu_name = torch.cuda.get_device_name(0)
             gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1e9
-            logger.info(f"GPU available: {gpu_name} ({gpu_mem:.1f} GB)")
-            print(f"\n[GPU] {gpu_name} ({gpu_mem:.1f} GB VRAM)")
+            logger.info(f"✓ GPU available: {gpu_name} ({gpu_mem:.1f} GB)")
+            print(f"\n🎮 GPU: {gpu_name} ({gpu_mem:.1f} GB VRAM)")
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            logger.info("✓ MPS (Apple Metal) available for GPU acceleration")
+            print("\n🎮 GPU: Apple Metal (MPS) - AMD Radeon or Apple Silicon")
         else:
-            logger.warning("No GPU available - benchmarks will be slow!")
-            print("\n[WARNING] No GPU detected - benchmarks will run on CPU (very slow)")
+            logger.warning("⚠️ No GPU available - benchmarks will be slow!")
+            print("\n⚠️  WARNING: No GPU detected - benchmarks will run on CPU (very slow)")
     except ImportError:
         logger.warning("PyTorch not available - cannot check GPU")
     
@@ -1851,12 +1819,6 @@ def main():
                           and v.get('available', True)]
         
         logger.info(f"Comprehensive mode: {len(args.pose_methods)} pose, {len(args.depth_methods)} depth, {len(args.gs_engines)} GS")
-        
-        # Comprehensive mode implies running ALL benchmark types
-        # unless user explicitly specifies which sections to run
-        if not (args.pose or args.depth or args.gs or args.pipeline):
-            # No specific section specified - run everything
-            args.all = True
     
     # Default to all if nothing specified
     run_all = args.all or not (args.pose or args.depth or args.gs or args.pipeline)
@@ -1931,7 +1893,7 @@ def main():
         logger.info(f"  - {d.name}")
     
     # Create timestamped output directory under hostname folder
-    hostname = socket.gethostname()
+    hostname = socket.gethostname().split('.')[0]  # Use short hostname, not FQDN
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     host_results_dir = PROJECT_ROOT / "benchmarks" / "results" / hostname
     output_dir = host_results_dir / f"benchmark_{timestamp}"
@@ -1996,15 +1958,6 @@ def main():
         print(f"\n{'='*80}")
         print(f"  DATASET {dataset_idx + 1}/{len(datasets)}: {dataset_name}")
         print(f"{'='*80}")
-        
-        # CRITICAL: Aggressive cleanup between datasets to prevent OOM
-        if dataset_idx > 0:
-            logger.info(f"Cleaning up memory before {dataset_name}...")
-            import gc
-            gc.collect()
-            safe_cuda_cleanup()
-            # Log memory state
-            log_gpu_memory(f"[Before {dataset_name}] ")
         
         # Check CUDA health before starting a new dataset
         if not global_cuda_healthy:
@@ -2139,13 +2092,6 @@ def main():
         
         # Store per-dataset results
         all_results['per_dataset'][dataset_name] = dataset_results
-        
-        # CRITICAL: Clean up after each dataset to prevent OOM on next dataset
-        logger.info(f"Cleaning up after {dataset_name}...")
-        import gc
-        gc.collect()
-        safe_cuda_cleanup()
-        log_gpu_memory(f"[After {dataset_name}] ")
     
     # Stop hardware monitoring and collect results
     if hardware_monitor:
@@ -2258,7 +2204,7 @@ def main():
         print(f"       ├── {ddir.name[:20]+'...' if len(ddir.name) > 20 else ddir.name}/  - {dcount} plots")
     if len(dataset_dirs) > 3:
         print(f"       └── ... and {len(dataset_dirs) - 3} more dataset folders")
-    print(f"\n=> Latest results: benchmarks/results/{hostname}/latest/")
+    print(f"\n🔗 Latest results: benchmarks/results/{hostname}/latest/")
 
 
 if __name__ == '__main__':

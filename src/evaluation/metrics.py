@@ -117,7 +117,7 @@ def compute_lpips(
         img1: First image (H, W, C) in [0, 1] range
         img2: Second image (same shape as img1)
         net: Network to use ('alex', 'vgg', 'squeeze')
-        device: Device to run on
+        device: Device to run on ('cuda', 'mps', 'cpu', or 'auto')
         
     Returns:
         LPIPS value (lower is better, typically 0.0-0.5 for good reconstructions)
@@ -128,11 +128,27 @@ def compute_lpips(
     
     global _lpips_model
     
+    # Determine actual device to use
+    actual_device = device
+    if device == 'cuda' and not torch.cuda.is_available():
+        # Try MPS if CUDA not available (macOS)
+        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            actual_device = 'mps'
+        else:
+            actual_device = 'cpu'
+    elif device == 'auto':
+        if torch.cuda.is_available():
+            actual_device = 'cuda'
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            actual_device = 'mps'
+        else:
+            actual_device = 'cpu'
+    
     # Lazy load model
     if _lpips_model is None:
         _lpips_model = lpips.LPIPS(net=net, verbose=False)
-        if torch.cuda.is_available() and 'cuda' in device:
-            _lpips_model = _lpips_model.to(device)
+        if actual_device != 'cpu':
+            _lpips_model = _lpips_model.to(actual_device)
     
     # Convert to tensor: (H, W, C) -> (1, C, H, W)
     if img1.max() > 1.0:
@@ -143,9 +159,9 @@ def compute_lpips(
     img1_t = torch.from_numpy(img1).permute(2, 0, 1).unsqueeze(0).float() * 2 - 1
     img2_t = torch.from_numpy(img2).permute(2, 0, 1).unsqueeze(0).float() * 2 - 1
     
-    if torch.cuda.is_available() and 'cuda' in device:
-        img1_t = img1_t.to(device)
-        img2_t = img2_t.to(device)
+    if actual_device != 'cpu':
+        img1_t = img1_t.to(actual_device)
+        img2_t = img2_t.to(actual_device)
     
     with torch.no_grad():
         score = _lpips_model(img1_t, img2_t)

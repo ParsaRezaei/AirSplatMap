@@ -29,6 +29,43 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _get_best_torch_device(preferred: str = "cuda") -> str:
+    """
+    Get the best available PyTorch device.
+    
+    Priority: CUDA > MPS (Apple Metal) > CPU
+    
+    Args:
+        preferred: Preferred device ('cuda', 'mps', 'cpu', 'auto')
+        
+    Returns:
+        Device string that's actually available
+    """
+    try:
+        import torch
+        
+        if preferred == "auto" or preferred == "cuda":
+            if torch.cuda.is_available():
+                return "cuda"
+            # Try MPS for macOS with AMD/Apple GPU
+            if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                return "mps"
+            if preferred == "cuda":
+                logger.info("CUDA not available, using CPU")
+            return "cpu"
+        
+        if preferred == "mps":
+            if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                return "mps"
+            if torch.cuda.is_available():
+                return "cuda"
+            return "cpu"
+        
+        return preferred
+    except ImportError:
+        return "cpu"
+
+
 @dataclass 
 class PoseResult:
     """Result from pose estimation."""
@@ -702,10 +739,8 @@ class LoFTRPoseEstimator(BasePoseEstimator):
             self._torch = torch
             self._kornia = kornia
             
-            # Check if GPU available
-            if device == 'cuda' and not torch.cuda.is_available():
-                logger.warning("CUDA not available for LoFTR, falling back to CPU")
-                self._device = 'cpu'
+            # Get best available device (CUDA > MPS > CPU)
+            self._device = _get_best_torch_device(device)
             
             self._matcher = LoFTR(pretrained=pretrained).to(self._device).eval()
             self._available = True
@@ -880,9 +915,8 @@ class SuperPointPoseEstimator(BasePoseEstimator):
             
             self._torch = torch
             
-            if device == 'cuda' and not torch.cuda.is_available():
-                logger.warning("CUDA not available for SuperPoint, falling back to CPU")
-                self._device = 'cpu'
+            # Get best available device (CUDA > MPS > CPU)
+            self._device = _get_best_torch_device(device)
             
             # Use KeyNet + AffNet + HardNet as SuperPoint alternative
             # (More widely available than actual SuperPoint)
@@ -1105,9 +1139,8 @@ class LightGluePoseEstimator(BasePoseEstimator):
             
             self._torch = torch
             
-            if device == 'cuda' and not torch.cuda.is_available():
-                logger.warning("CUDA not available for LightGlue, falling back to CPU")
-                self._device = 'cpu'
+            # Get best available device (CUDA > MPS > CPU)
+            self._device = _get_best_torch_device(device)
             
             # Try lightglue package first
             try:
@@ -1410,9 +1443,8 @@ class RAFTPoseEstimator(BasePoseEstimator):
             
             self._torch = torch
             
-            if device == 'cuda' and not torch.cuda.is_available():
-                logger.warning("CUDA not available for RAFT, falling back to CPU")
-                self._device = 'cpu'
+            # Get best available device (CUDA > MPS > CPU)
+            self._device = _get_best_torch_device(device)
             
             # Load RAFT model from torchvision
             if model == 'small':
@@ -1657,9 +1689,8 @@ class R2D2PoseEstimator(BasePoseEstimator):
             
             self._torch = torch
             
-            if device == 'cuda' and not torch.cuda.is_available():
-                logger.warning("CUDA not available for R2D2, falling back to CPU")
-                self._device = 'cpu'
+            # Get best available device (CUDA > MPS > CPU)
+            self._device = _get_best_torch_device(device)
             
             # Try kornia's R2D2 implementation first
             try:
@@ -1890,9 +1921,8 @@ class RoMaPoseEstimator(BasePoseEstimator):
             
             self._torch = torch
             
-            if device == 'cuda' and not torch.cuda.is_available():
-                logger.warning("CUDA not available for RoMa, falling back to CPU")
-                self._device = 'cpu'
+            # Get best available device (CUDA > MPS > CPU)
+            self._device = _get_best_torch_device(device)
             
             # Try to import RoMa
             try:
