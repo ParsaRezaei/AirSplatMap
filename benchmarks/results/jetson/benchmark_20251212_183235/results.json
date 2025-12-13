@@ -1,0 +1,229 @@
+{
+  "timestamp": "2025-12-12T18:32:35.429762",
+  "datasets": [
+    "rgbd_dataset_freiburg1_xyz"
+  ],
+  "system_info": {
+    "cpu": {
+      "cores_physical": 6,
+      "cores_logical": 6,
+      "freq_mhz": 1312.0,
+      "freq_max_mhz": 1510.4
+    },
+    "memory": {
+      "total_gb": 7.44
+    },
+    "gpu": {
+      "name": "Orin",
+      "memory_total_gb": 7.44,
+      "tegra_release": "# R36 (release), REVISION: 4.7, GCID: 42132812, BOARD: generic, EABI: aarch64, DATE: Thu Sep 18 22:54:44 UTC 2025",
+      "jetpack": "6.x",
+      "monitoring": "jtop"
+    },
+    "platform": "jetson"
+  },
+  "pose": [],
+  "depth": [
+    {
+      "method": "depth_anything_v3",
+      "dataset": "rgbd_dataset_freiburg1_xyz",
+      "num_frames": 50,
+      "total_time": 24.49,
+      "fps": 2.04,
+      "abs_rel": 0.4651,
+      "sq_rel": 0.5306,
+      "rmse": 0.9387,
+      "rmse_log": 0.9932,
+      "delta1": 0.2667,
+      "delta2": 0.5844,
+      "delta3": 0.7128,
+      "is_metric": false,
+      "silog": 0.961,
+      "edge_f1": 0.1308,
+      "raw_abs_rel": 0.0,
+      "raw_rmse": 0.0,
+      "raw_delta1": 0.0,
+      "scale": 0.2474,
+      "shift": 0.0,
+      "valid_pixels": 230192,
+      "avg_latency_ms": 443.73,
+      "min_latency_ms": 285.76,
+      "max_latency_ms": 8008.9,
+      "p95_latency_ms": 297.94,
+      "p99_latency_ms": 4239.87
+    },
+    {
+      "method": "midas",
+      "dataset": "rgbd_dataset_freiburg1_xyz",
+      "num_frames": 50,
+      "total_time": 2.75,
+      "fps": 18.2,
+      "abs_rel": 0.2761,
+      "sq_rel": 0.155,
+      "rmse": 0.4914,
+      "rmse_log": 0.3167,
+      "delta1": 0.4543,
+      "delta2": 0.8442,
+      "delta3": 0.9684,
+      "is_metric": false,
+      "silog": 0.3141,
+      "edge_f1": 0.0,
+      "raw_abs_rel": 0.0,
+      "raw_rmse": 0.0,
+      "raw_delta1": 0.0,
+      "scale": 0.5001,
+      "shift": 0.2501,
+      "valid_pixels": 230388,
+      "avg_latency_ms": 16.11,
+      "min_latency_ms": 0.26,
+      "max_latency_ms": 791.89,
+      "p95_latency_ms": 0.32,
+      "p99_latency_ms": 404.03
+    }
+  ],
+  "gs": [],
+  "pipeline": [],
+  "hardware": {
+    "overall": {
+      "duration_seconds": 71.93,
+      "num_samples": 70,
+      "cpu": {
+        "system_percent_mean": 22.2,
+        "system_percent_max": 46.3
+      },
+      "ram": {
+        "system_used_gb_mean": 3.92,
+        "system_used_gb_max": 6.41,
+        "system_percent_mean": 52.6
+      },
+      "process": {
+        "cpu_percent_mean": 83.6,
+        "cpu_percent_max": 108.8,
+        "ram_gb_mean": 1.39,
+        "ram_gb_max": 2.62,
+        "gpu_memory_gb_mean": 0.03,
+        "gpu_memory_gb_max": 0.2
+      },
+      "gpu": {
+        "utilization_mean": 23.7,
+        "utilization_max": 99.8,
+        "memory_used_gb_mean": 0.03,
+        "memory_used_gb_max": 0.2,
+        "memory_percent_mean": 0.4,
+        "memory_percent_max": 2.6,
+        "temperature_c_mean": 52.9,
+        "temperature_c_max": 55.6,
+        "power_w_mean": 7.0,
+        "power_w_max": 11.1
+      },
+      "energy_wh": 0.1399
+    },
+    "phases": {
+      "depth_rgbd_dataset_freiburg1_xyz": {
+        "duration_seconds": 71.93,
+        "num_samples": 70,
+        "cpu": {
+          "system_percent_mean": 22.2,
+          "system_percent_max": 46.3
+        },
+        "ram": {
+          "system_used_gb_mean": 3.92,
+          "system_used_gb_max": 6.41,
+          "system_percent_mean": 52.6
+        },
+        "process": {
+          "cpu_percent_mean": 83.6,
+          "cpu_percent_max": 108.8,
+          "ram_gb_mean": 1.39,
+          "ram_gb_max": 2.62,
+          "gpu_memory_gb_mean": 0.03,
+          "gpu_memory_gb_max": 0.2
+        },
+        "gpu": {
+          "utilization_mean": 23.7,
+          "utilization_max": 99.8,
+          "memory_used_gb_mean": 0.03,
+          "memory_used_gb_max": 0.2,
+          "memory_percent_mean": 0.4,
+          "memory_percent_max": 2.6,
+          "temperature_c_mean": 52.9,
+          "temperature_c_max": 55.6,
+          "power_w_mean": 7.0,
+          "power_w_max": 11.1
+        },
+        "energy_wh": 0.1399
+      }
+    },
+    "monitoring": {
+      "sample_interval_s": 0.5,
+      "total_samples": 70,
+      "psutil_available": true,
+      "nvml_available": false
+    }
+  },
+  "per_dataset": {
+    "rgbd_dataset_freiburg1_xyz": {
+      "pose": [],
+      "depth": [
+        {
+          "method": "depth_anything_v3",
+          "dataset": "rgbd_dataset_freiburg1_xyz",
+          "num_frames": 50,
+          "total_time": 24.49,
+          "fps": 2.04,
+          "abs_rel": 0.4651,
+          "sq_rel": 0.5306,
+          "rmse": 0.9387,
+          "rmse_log": 0.9932,
+          "delta1": 0.2667,
+          "delta2": 0.5844,
+          "delta3": 0.7128,
+          "is_metric": false,
+          "silog": 0.961,
+          "edge_f1": 0.1308,
+          "raw_abs_rel": 0.0,
+          "raw_rmse": 0.0,
+          "raw_delta1": 0.0,
+          "scale": 0.2474,
+          "shift": 0.0,
+          "valid_pixels": 230192,
+          "avg_latency_ms": 443.73,
+          "min_latency_ms": 285.76,
+          "max_latency_ms": 8008.9,
+          "p95_latency_ms": 297.94,
+          "p99_latency_ms": 4239.87
+        },
+        {
+          "method": "midas",
+          "dataset": "rgbd_dataset_freiburg1_xyz",
+          "num_frames": 50,
+          "total_time": 2.75,
+          "fps": 18.2,
+          "abs_rel": 0.2761,
+          "sq_rel": 0.155,
+          "rmse": 0.4914,
+          "rmse_log": 0.3167,
+          "delta1": 0.4543,
+          "delta2": 0.8442,
+          "delta3": 0.9684,
+          "is_metric": false,
+          "silog": 0.3141,
+          "edge_f1": 0.0,
+          "raw_abs_rel": 0.0,
+          "raw_rmse": 0.0,
+          "raw_delta1": 0.0,
+          "scale": 0.5001,
+          "shift": 0.2501,
+          "valid_pixels": 230388,
+          "avg_latency_ms": 16.11,
+          "min_latency_ms": 0.26,
+          "max_latency_ms": 791.89,
+          "p95_latency_ms": 0.32,
+          "p99_latency_ms": 404.03
+        }
+      ],
+      "gs": [],
+      "pipeline": []
+    }
+  }
+}

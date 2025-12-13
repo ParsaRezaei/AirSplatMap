@@ -172,3 +172,6 @@ coverage.xml
 docs/_build/
 site/
 nohup.out
+
+# Large depth cache files (use Git LFS for these)
+benchmarks/results/**/*depths.npz
