@@ -1091,6 +1091,9 @@ def run_pipeline_benchmark(
             
             t_start = time.time()
             
+            # Check if this is a batch-based engine (like DA3GS)
+            is_batch_engine = getattr(engine, 'is_batch_engine', False)
+            
             for i, frame in enumerate(frames):
                 # Get pose
                 if pose_source == 'gt':
@@ -1111,11 +1114,21 @@ def run_pipeline_benchmark(
                     pose_world_cam=pose
                 )
                 
-                for _ in range(iterations):
-                    try:
-                        engine.optimize_step(n_steps=1)
-                    except:
-                        pass
+                # For incremental engines, optimize after each frame
+                # For batch engines (DA3GS), defer optimization until all frames added
+                if not is_batch_engine:
+                    for _ in range(iterations):
+                        try:
+                            engine.optimize_step(n_steps=1)
+                        except:
+                            pass
+            
+            # For batch engines, run optimization once after all frames
+            if is_batch_engine:
+                try:
+                    engine.optimize_step(n_steps=1)
+                except Exception as e:
+                    logger.warning(f"Batch optimization failed: {e}")
             
             total_time = time.time() - t_start
             
@@ -1752,8 +1765,8 @@ def main():
                         default=['midas', 'depth_anything_v3', 'depth_pro'],
                         help='Depth methods to test')
     parser.add_argument('--gs-engines', nargs='+', 
-                        default=['graphdeco', 'gsplat'],
-                        help='GS engines to test')
+                        default=['graphdeco', 'gsplat', 'da3gs'],
+                        help='GS engines to test (graphdeco, gsplat, splatam, gslam, monogs, da3gs)')
     
     args = parser.parse_args()
     
@@ -2014,7 +2027,7 @@ def main():
             # Heavy GPU methods (loftr, superpoint, lightglue, raft, r2d2, roma) are tested in pose benchmark
             fast_pose_methods = ['orb', 'sift', 'robust_flow', 'keyframe']
             pipeline_pose_methods = [m for m in fast_pose_methods if m in args.pose_methods] or ['orb']
-            pipeline_depth_methods = args.depth_methods if dataset_results['depth'] else ['midas']
+            pipeline_depth_methods = args.depth_methods  # Always use user-specified depth methods
             
             # Load cached poses/depths from pose and depth benchmarks (ALL frames)
             _, cached_poses, cached_pose_errors, _ = load_pose_cache(output_dir, dataset_name)

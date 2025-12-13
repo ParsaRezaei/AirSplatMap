@@ -87,6 +87,10 @@ class DA3GSEngine(BaseGSEngine):
         img = engine.render_view(new_pose, (640, 480))
     """
     
+    # This engine processes all frames in batch, not incrementally
+    is_batch_engine = True
+    """
+    
     # HuggingFace model IDs for DA3 with GS support
     MODEL_IDS = {
         'base': 'depth-anything/DA3-BASE',
