@@ -603,8 +603,14 @@ def run_depth_benchmark(
                 abs_rels = []
                 
                 for i, (frame, raw_depth) in enumerate(zip(all_frames, raw_depths)):
-                    pred_depth = raw_depth * global_scale
-                    pred_depth = np.clip(pred_depth, 0.0, 15.0)
+                    # Check for degenerate MiDaS output (negative values or near-zero)
+                    # MiDaS can fail on some frames, producing garbage output
+                    if raw_depth.min() < -0.1 or raw_depth.mean() < 0.1:
+                        # Skip degenerate frames - pass None to let GS handle it
+                        pred_depth = None
+                    else:
+                        pred_depth = raw_depth * global_scale
+                        pred_depth = np.clip(pred_depth, 0.0, 15.0)
                     
                     # Compute AbsRel for frames with GT
                     gt_depth = frame.depth
@@ -955,8 +961,13 @@ def run_pipeline_benchmark(
             abs_rels = []
             
             for frame, raw_depth in zip(frames, raw_depths):
-                pred_depth = raw_depth * global_scale
-                pred_depth = np.clip(pred_depth, 0.0, 15.0)
+                # Check for degenerate MiDaS output (negative values or near-zero)
+                if raw_depth.min() < -0.1 or raw_depth.mean() < 0.1:
+                    # Skip degenerate frames - pass None to let GS handle it
+                    pred_depth = None
+                else:
+                    pred_depth = raw_depth * global_scale
+                    pred_depth = np.clip(pred_depth, 0.0, 15.0)
                 
                 gt_depth = frame.depth
                 if gt_depth is not None:
