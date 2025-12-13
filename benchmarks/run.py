@@ -456,7 +456,7 @@ def run_pose_benchmark(
             # Cache immediately after each method completes (incremental caching)
             if cache_dir is not None and method in cached_poses:
                 dataset_name = dataset_path.name
-                dataset_cache = cache_dir / dataset_name
+                dataset_cache = cache_dir / dataset_name / "pose"
                 dataset_cache.mkdir(parents=True, exist_ok=True)
                 
                 # Save GT poses and frame indices (only once, from first method)
@@ -488,7 +488,7 @@ def run_pose_benchmark(
     # Log final cache status
     if cache_dir is not None and cached_poses:
         dataset_name = dataset_path.name
-        dataset_cache = cache_dir / dataset_name
+        dataset_cache = cache_dir / dataset_name / "pose"
         logger.info(f"  Cached poses to {dataset_cache} ({len(cached_poses)} methods)")
     
     return results
@@ -1745,12 +1745,12 @@ def main():
     if args.quick:
         pose_frames = None  # None = ALL frames
         depth_frames = None  # None = ALL frames
-        pipeline_frames = 50  # Uniform sample for GS
+        pipeline_frames = 100  # Uniform sample for GS
         gs_iterations = 3
     else:
         pose_frames = None  # None = ALL frames for accurate ATE
         depth_frames = None  # None = ALL frames for complete cache
-        pipeline_frames = min(args.max_frames, 100)  # Uniform sample for GS
+        pipeline_frames = min(args.max_frames, 200)  # Uniform sample for GS
         gs_iterations = 5
     
     # Find datasets
