@@ -68,6 +68,51 @@ def log_gpu_memory(prefix: str = ""):
         logger.debug(f"Could not get GPU memory: {e}")
 
 
+def check_cuda_health() -> bool:
+    """
+    Check if CUDA is in a healthy state.
+    Returns True if CUDA is working, False if corrupted.
+    """
+    try:
+        import torch
+        if not torch.cuda.is_available():
+            return True  # No CUDA, but not an error
+        
+        # Try basic CUDA operations
+        torch.cuda.synchronize()
+        test_tensor = torch.zeros(1, device='cuda')
+        del test_tensor
+        torch.cuda.empty_cache()
+        return True
+    except RuntimeError as e:
+        if "CUDA error" in str(e) or "illegal memory" in str(e).lower():
+            logger.error(f"CUDA health check failed: {e}")
+            return False
+        raise
+    except Exception:
+        return True  # Non-CUDA errors are fine
+
+
+def safe_cuda_cleanup():
+    """Safely attempt CUDA cleanup, ignoring errors if context is corrupted."""
+    try:
+        import torch
+        import gc
+        gc.collect()
+        if torch.cuda.is_available():
+            try:
+                torch.cuda.synchronize()
+            except RuntimeError:
+                pass  # CUDA may already be corrupted
+            try:
+                torch.cuda.empty_cache()
+            except RuntimeError:
+                pass  # CUDA may already be corrupted
+        gc.collect()
+    except Exception:
+        pass
+
+
 def setup_file_logging(output_dir: Path):
     """Add file handler to log to output directory."""
     log_file = output_dir / "benchmark.log"
@@ -502,7 +547,7 @@ def run_depth_benchmark(
             )
             result_dict = asdict(result)
             results.append(result_dict)
-            logger.info(f"    AbsRel={result.abs_rel:.4f}, δ1={result.delta1:.2%}, FPS={result.fps:.1f}")
+            logger.info(f"    AbsRel={result.abs_rel:.4f}, d1={result.delta1:.2%}, FPS={result.fps:.1f}")
         except Exception as e:
             logger.error(f"    {method} failed: {e}")
     
@@ -603,7 +648,7 @@ def run_pipeline_benchmark(
     cached_frame_indices: np.ndarray = None,  # Which frames were used for pose benchmark
     # Output directory for saving cache
     output_dir: Path = None,
-) -> List[Dict]:
+) -> Tuple[List[Dict], bool]:
     """
     Run combined pipeline benchmark with different pose/depth sources.
     
@@ -613,6 +658,8 @@ def run_pipeline_benchmark(
     - Estimated pose + GT depth  
     - Estimated pose + estimated depth (real-world scenario)
     
+    Returns:
+        Tuple of (results list, cuda_healthy boolean)
     If cached_poses/cached_depths are provided, uses those instead of re-computing.
     Uses cached_frame_indices to ensure we use the SAME frames as pose benchmark.
     """
@@ -841,6 +888,15 @@ def run_pipeline_benchmark(
                         if 0.01 < scale < 1000:
                             pred_depth = pred_depth * scale
                             
+                            # CRITICAL: Clamp scaled depth to valid range to prevent
+                            # extreme outliers that crash CUDA rasterizer
+                            # MiDaS can have edge artifacts that become huge after scaling
+                            pred_depth = np.clip(pred_depth, 0.0, 15.0)
+                            
+                            # Also zero out values that were originally invalid
+                            # (MiDaS edge noise can have near-zero values that scale to nonsense)
+                            pred_depth[result.depth < 0.001] = 0.0
+                            
                             # Compute AbsRel on valid pixels
                             abs_rel = np.mean(np.abs(pred_depth[valid] - gt_depth[valid]) / gt_depth[valid])
                             abs_rels.append(abs_rel)
@@ -862,14 +918,7 @@ def run_pipeline_benchmark(
                 if hasattr(estimator, 'cleanup'):
                     estimator.cleanup()
                 del estimator
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                import gc
-                gc.collect()
-            except ImportError:
-                pass
+            safe_cuda_cleanup()
     
     # Save computed poses/depths to cache for reuse by subsequent GS engines
     if output_dir and (estimated_poses or estimated_depths):
@@ -881,8 +930,23 @@ def run_pipeline_benchmark(
         if estimated_depths:
             save_depth_cache(estimated_depths, gt_depths, depth_errors, output_dir, dataset_name)
     
-    # Track CUDA health across tests
-    cuda_healthy = True
+    # Track CUDA health across tests - check initial state
+    cuda_healthy = check_cuda_health()
+    if not cuda_healthy:
+        logger.error("CUDA already unhealthy before GS tests - skipping all configurations")
+        for config_name, pose_source, depth_source in configs:
+            results.append({
+                'name': config_name,
+                'pose_source': pose_source,
+                'depth_source': depth_source,
+                'gs_engine': gs_engine,
+                'dataset': dataset_name,
+                'psnr': 0, 'ssim': 0, 'lpips': 0,
+                'total_time': 0, 'fps': 0, 'num_gaussians': 0,
+                'pose_ate': 0, 'depth_abs_rel': 0,
+                'error': 'CUDA context corrupted before test'
+            })
+        return results, False
     
     # Run GS with each configuration
     for config_name, pose_source, depth_source in configs:
@@ -1078,7 +1142,7 @@ def run_pipeline_benchmark(
                     logger.warning(f"CUDA error during cleanup: {sync_err}")
                     cuda_healthy = False
     
-    return results
+    return results, cuda_healthy
 
 
 # =============================================================================
@@ -1876,7 +1940,7 @@ def main():
                 use_cached_depth_errors = cached_depth_errors if cached_depth_errors else first_engine_depth_errors
                 use_cached_frame_indices = cached_frame_indices if cached_frame_indices is not None else first_engine_frame_indices
                 
-                engine_results = run_pipeline_benchmark(
+                engine_results, cuda_ok = run_pipeline_benchmark(
                     dataset,
                     dataset_type=dataset_types.get(str(dataset), 'tum'),
                     gs_engine=engine,
@@ -1893,6 +1957,11 @@ def main():
                     output_dir=output_dir if i == 0 else None,  # Only save cache on first engine
                 )
                 pipeline_results.extend(engine_results)
+                
+                # If CUDA became unhealthy, skip remaining engines for this dataset
+                if not cuda_ok:
+                    logger.warning(f"CUDA unhealthy after {engine}, skipping remaining pipeline engines")
+                    break
                 
                 # After first engine, try to load cached data for subsequent engines
                 if i == 0 and not cached_poses:
