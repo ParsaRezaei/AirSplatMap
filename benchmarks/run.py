@@ -1193,9 +1193,9 @@ def run_pipeline_benchmark(
                 'error': str(e)
             })
             
-            # Check if it's a CUDA error - if so, mark CUDA as unhealthy
+            # Check if it's a CUDA error - if so, we may need to skip remaining tests
             if "CUDA error" in str(e) or "illegal memory access" in str(e).lower():
-                logger.warning("CUDA error detected - marking CUDA as unhealthy for remaining tests")
+                logger.warning("CUDA error detected - attempting aggressive cleanup...")
                 cuda_healthy = False
         finally:
             # Critical: Delete engine and free GPU memory aggressively
@@ -1223,20 +1223,29 @@ def run_pipeline_benchmark(
             import gc
             gc.collect()
             
-            if torch.cuda.is_available() and cuda_healthy:
+            if torch.cuda.is_available():
                 # Try to synchronize and clear CUDA state
                 try:
                     torch.cuda.synchronize()
-                    torch.cuda.empty_cache()
-                    gc.collect()
-                    torch.cuda.empty_cache()
-                    
-                    # Quick test to see if CUDA is still working
+                except RuntimeError as sync_err:
+                    logger.warning(f"CUDA sync error during cleanup: {sync_err}")
+                    cuda_healthy = False
+                    try:
+                        torch.cuda.reset_peak_memory_stats()
+                    except Exception:
+                        pass
+                
+                torch.cuda.empty_cache()
+                gc.collect()
+                torch.cuda.empty_cache()
+                
+                # Quick test to see if CUDA is still working
+                try:
                     test_tensor = torch.zeros(1, device='cuda')
                     del test_tensor
                     torch.cuda.empty_cache()
-                except RuntimeError as sync_err:
-                    logger.warning(f"CUDA error during cleanup: {sync_err}")
+                except RuntimeError as recovery_err:
+                    logger.error(f"CUDA not recovered: {recovery_err}")
                     cuda_healthy = False
     
     return results, cuda_healthy
