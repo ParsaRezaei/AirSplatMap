@@ -1938,7 +1938,7 @@ def main():
             if hardware_monitor:
                 hardware_monitor.mark(f"gs_{dataset_name}")
             gs_results = run_gs_benchmark(
-                dataset, args.gs_engines, gs_frames, gs_iterations, output_dir
+                dataset, args.gs_engines, pipeline_frames, gs_iterations, output_dir
             )
             for r in gs_results:
                 r['dataset'] = dataset_name
