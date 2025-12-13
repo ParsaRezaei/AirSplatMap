@@ -147,7 +147,7 @@ def generate_comprehensive_visualizations(
     pipeline_results = all_results.get('pipeline') or []
     
     # Early exit if no results at all
-    if not any([pose_results, depth_results, gs_results]):
+    if not any([pose_results, depth_results, gs_results, pipeline_results]):
         logger.warning("No results to visualize")
         return
     
@@ -156,9 +156,9 @@ def generate_comprehensive_visualizations(
     general_dir = plots_dir / "general"
     general_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get all datasets
+    # Get all datasets from all result types
     all_datasets = set()
-    for r in pose_results + depth_results + gs_results:
+    for r in pose_results + depth_results + gs_results + pipeline_results:
         dataset = r.get('dataset')
         if dataset:
             all_datasets.add(dataset)
@@ -206,12 +206,27 @@ def generate_comprehensive_visualizations(
     except Exception as e:
         logger.warning(f"    ✗ method_comparison_radar failed: {e}")
     
+    # Pipeline visualizations (combined pose+depth+GS results)
+    if pipeline_results:
+        try:
+            _generate_pipeline_summary(pipeline_results, general_dir / "pipeline_summary.png")
+            logger.info("    ✓ general/pipeline_summary.png")
+        except Exception as e:
+            logger.warning(f"    ✗ pipeline_summary failed: {e}")
+        
+        try:
+            _generate_pipeline_comparison(pipeline_results, general_dir / "pipeline_comparison.png")
+            logger.info("    ✓ general/pipeline_comparison.png")
+        except Exception as e:
+            logger.warning(f"    ✗ pipeline_comparison failed: {e}")
+    
     # =========================================================================
     # PER-DATASET VISUALIZATIONS
     # =========================================================================
     pose_by_dataset = group_by_dataset(pose_results)
     depth_by_dataset = group_by_dataset(depth_results)
     gs_by_dataset = group_by_dataset(gs_results)
+    pipeline_by_dataset = group_by_dataset(pipeline_results)
     
     for dataset in sorted(all_datasets):
         logger.info(f"[+] Generating plots for {dataset}...")
@@ -252,6 +267,18 @@ def generate_comprehensive_visualizations(
                 logger.info(f"    [OK] {dataset}/gs/")
             except Exception as e:
                 logger.warning(f"    [FAIL] {dataset}/gs failed: {e}")
+        
+        # Pipeline plots
+        dataset_pipeline = pipeline_by_dataset.get(dataset, [])
+        if dataset_pipeline:
+            pipeline_dir = dataset_dir / "pipeline"
+            pipeline_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                _generate_pipeline_quality_bar(dataset_pipeline, pipeline_dir / "quality.png", dataset)
+                _generate_pipeline_config_comparison(dataset_pipeline, pipeline_dir / "config_comparison.png", dataset)
+                logger.info(f"    [OK] {dataset}/pipeline/")
+            except Exception as e:
+                logger.warning(f"    [FAIL] {dataset}/pipeline failed: {e}")
     
     # 3D trajectory plots if data available
     if trajectory_data:
@@ -780,3 +807,221 @@ def _generate_trajectory_plots(trajectory_data: Dict, output_dir: Path):
         
         plt.savefig(traj_dir / f"{method}_trajectory.png")
         plt.close()
+
+
+# =============================================================================
+# PIPELINE PLOTS
+# =============================================================================
+
+def _generate_pipeline_summary(results: List[Dict], output_path: Path):
+    """Generate pipeline summary showing PSNR by configuration."""
+    if not results:
+        return
+    
+    fig, axes = plt.subplots(1, 3, figsize=(16, 5))
+    
+    # Group by configuration name
+    configs = [r['name'] for r in results]
+    unique_configs = sorted(set(configs))
+    
+    # Aggregate by config
+    config_data = {}
+    for config in unique_configs:
+        config_results = [r for r in results if r['name'] == config]
+        config_data[config] = {
+            'psnr_mean': np.mean([r.get('psnr', 0) for r in config_results]),
+            'psnr_std': np.std([r.get('psnr', 0) for r in config_results]),
+            'ssim_mean': np.mean([r.get('ssim', 0) for r in config_results]),
+            'ssim_std': np.std([r.get('ssim', 0) for r in config_results]),
+            'lpips_mean': np.mean([r.get('lpips', 0) for r in config_results]),
+            'lpips_std': np.std([r.get('lpips', 0) for r in config_results]),
+        }
+    
+    configs_sorted = sorted(config_data.keys())
+    colors = [COLOR_LIST[i % len(COLOR_LIST)] for i in range(len(configs_sorted))]
+    
+    # PSNR
+    psnr_means = [config_data[c]['psnr_mean'] for c in configs_sorted]
+    psnr_stds = [config_data[c]['psnr_std'] for c in configs_sorted]
+    bars = axes[0].bar(range(len(configs_sorted)), psnr_means, yerr=psnr_stds, 
+                       capsize=5, color=colors, edgecolor='white', linewidth=0.5)
+    axes[0].set_xticks(range(len(configs_sorted)))
+    axes[0].set_xticklabels(configs_sorted, rotation=45, ha='right', fontsize=8)
+    axes[0].set_ylabel('PSNR (dB)')
+    axes[0].set_title('Render Quality (higher is better)')
+    if psnr_means:
+        best_idx = np.argmax(psnr_means)
+        bars[best_idx].set_edgecolor(COLORS['secondary'])
+        bars[best_idx].set_linewidth(3)
+    
+    # SSIM
+    ssim_means = [config_data[c]['ssim_mean'] for c in configs_sorted]
+    ssim_stds = [config_data[c]['ssim_std'] for c in configs_sorted]
+    bars = axes[1].bar(range(len(configs_sorted)), ssim_means, yerr=ssim_stds,
+                       capsize=5, color=colors, edgecolor='white', linewidth=0.5)
+    axes[1].set_xticks(range(len(configs_sorted)))
+    axes[1].set_xticklabels(configs_sorted, rotation=45, ha='right', fontsize=8)
+    axes[1].set_ylabel('SSIM')
+    axes[1].set_title('Structural Similarity (higher is better)')
+    if ssim_means:
+        best_idx = np.argmax(ssim_means)
+        bars[best_idx].set_edgecolor(COLORS['secondary'])
+        bars[best_idx].set_linewidth(3)
+    
+    # LPIPS
+    lpips_means = [config_data[c]['lpips_mean'] for c in configs_sorted]
+    lpips_stds = [config_data[c]['lpips_std'] for c in configs_sorted]
+    bars = axes[2].bar(range(len(configs_sorted)), lpips_means, yerr=lpips_stds,
+                       capsize=5, color=colors, edgecolor='white', linewidth=0.5)
+    axes[2].set_xticks(range(len(configs_sorted)))
+    axes[2].set_xticklabels(configs_sorted, rotation=45, ha='right', fontsize=8)
+    axes[2].set_ylabel('LPIPS')
+    axes[2].set_title('Perceptual Distance (lower is better)')
+    if lpips_means:
+        best_idx = np.argmin(lpips_means)
+        bars[best_idx].set_edgecolor(COLORS['secondary'])
+        bars[best_idx].set_linewidth(3)
+    
+    plt.suptitle('Pipeline Results Summary', fontsize=16, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.close()
+
+
+def _generate_pipeline_comparison(results: List[Dict], output_path: Path):
+    """Generate pipeline comparison showing impact of pose vs depth."""
+    if not results:
+        return
+    
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    
+    # Group by pose source and depth source
+    by_pose = defaultdict(list)
+    by_depth = defaultdict(list)
+    
+    for r in results:
+        pose_src = r.get('pose_source', 'unknown')
+        depth_src = r.get('depth_source', 'unknown')
+        by_pose[pose_src].append(r)
+        by_depth[depth_src].append(r)
+    
+    # PSNR by pose source
+    pose_sources = sorted(by_pose.keys())
+    pose_psnr_means = [np.mean([r.get('psnr', 0) for r in by_pose[p]]) for p in pose_sources]
+    pose_psnr_stds = [np.std([r.get('psnr', 0) for r in by_pose[p]]) for p in pose_sources]
+    
+    colors_pose = [COLOR_LIST[i % len(COLOR_LIST)] for i in range(len(pose_sources))]
+    bars = axes[0].bar(pose_sources, pose_psnr_means, yerr=pose_psnr_stds, 
+                       capsize=5, color=colors_pose, edgecolor='white', linewidth=0.5)
+    axes[0].set_ylabel('PSNR (dB)')
+    axes[0].set_title('Impact of Pose Source')
+    axes[0].tick_params(axis='x', rotation=45)
+    if pose_psnr_means:
+        best_idx = np.argmax(pose_psnr_means)
+        bars[best_idx].set_edgecolor(COLORS['secondary'])
+        bars[best_idx].set_linewidth(3)
+    
+    # PSNR by depth source
+    depth_sources = sorted(by_depth.keys())
+    depth_psnr_means = [np.mean([r.get('psnr', 0) for r in by_depth[d]]) for d in depth_sources]
+    depth_psnr_stds = [np.std([r.get('psnr', 0) for r in by_depth[d]]) for d in depth_sources]
+    
+    colors_depth = [COLOR_LIST[i % len(COLOR_LIST)] for i in range(len(depth_sources))]
+    bars = axes[1].bar(depth_sources, depth_psnr_means, yerr=depth_psnr_stds,
+                       capsize=5, color=colors_depth, edgecolor='white', linewidth=0.5)
+    axes[1].set_ylabel('PSNR (dB)')
+    axes[1].set_title('Impact of Depth Source')
+    axes[1].tick_params(axis='x', rotation=45)
+    if depth_psnr_means:
+        best_idx = np.argmax(depth_psnr_means)
+        bars[best_idx].set_edgecolor(COLORS['secondary'])
+        bars[best_idx].set_linewidth(3)
+    
+    plt.suptitle('Pipeline Component Analysis', fontsize=16, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.close()
+
+
+def _generate_pipeline_quality_bar(results: List[Dict], output_path: Path, dataset: str):
+    """Generate pipeline quality bar chart for a single dataset."""
+    if not results:
+        return
+    
+    configs = [r['name'] for r in results]
+    psnr = [r.get('psnr', 0) for r in results]
+    
+    fig, ax = plt.subplots(figsize=(12, 6))
+    colors = [COLOR_LIST[i % len(COLOR_LIST)] for i in range(len(configs))]
+    
+    bars = ax.bar(range(len(configs)), psnr, color=colors, edgecolor='white', linewidth=0.5)
+    ax.set_xticks(range(len(configs)))
+    ax.set_xticklabels(configs, rotation=45, ha='right', fontsize=9)
+    ax.set_ylabel('PSNR (dB)')
+    ax.set_title(f'Pipeline Quality - {dataset}')
+    
+    # Highlight best
+    if psnr:
+        best_idx = np.argmax(psnr)
+        bars[best_idx].set_edgecolor(COLORS['secondary'])
+        bars[best_idx].set_linewidth(3)
+    
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.close()
+
+
+def _generate_pipeline_config_comparison(results: List[Dict], output_path: Path, dataset: str):
+    """Generate pipeline configuration comparison plot."""
+    if not results:
+        return
+    
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    
+    configs = [r['name'] for r in results]
+    colors = [COLOR_LIST[i % len(COLOR_LIST)] for i in range(len(configs))]
+    
+    # PSNR
+    psnr = [r.get('psnr', 0) for r in results]
+    bars = axes[0, 0].bar(range(len(configs)), psnr, color=colors, edgecolor='white', linewidth=0.5)
+    axes[0, 0].set_xticks(range(len(configs)))
+    axes[0, 0].set_xticklabels(configs, rotation=45, ha='right', fontsize=8)
+    axes[0, 0].set_ylabel('PSNR (dB)')
+    axes[0, 0].set_title('Render Quality')
+    if psnr:
+        best_idx = np.argmax(psnr)
+        bars[best_idx].set_edgecolor(COLORS['secondary'])
+        bars[best_idx].set_linewidth(3)
+    
+    # SSIM
+    ssim = [r.get('ssim', 0) for r in results]
+    bars = axes[0, 1].bar(range(len(configs)), ssim, color=colors, edgecolor='white', linewidth=0.5)
+    axes[0, 1].set_xticks(range(len(configs)))
+    axes[0, 1].set_xticklabels(configs, rotation=45, ha='right', fontsize=8)
+    axes[0, 1].set_ylabel('SSIM')
+    axes[0, 1].set_title('Structural Similarity')
+    if ssim:
+        best_idx = np.argmax(ssim)
+        bars[best_idx].set_edgecolor(COLORS['secondary'])
+        bars[best_idx].set_linewidth(3)
+    
+    # Pose ATE
+    ate = [r.get('pose_ate', 0) for r in results]
+    bars = axes[1, 0].bar(range(len(configs)), ate, color=colors, edgecolor='white', linewidth=0.5)
+    axes[1, 0].set_xticks(range(len(configs)))
+    axes[1, 0].set_xticklabels(configs, rotation=45, ha='right', fontsize=8)
+    axes[1, 0].set_ylabel('Pose ATE (m)')
+    axes[1, 0].set_title('Pose Accuracy (lower is better)')
+    
+    # Depth AbsRel
+    absrel = [r.get('depth_abs_rel', 0) for r in results]
+    bars = axes[1, 1].bar(range(len(configs)), absrel, color=colors, edgecolor='white', linewidth=0.5)
+    axes[1, 1].set_xticks(range(len(configs)))
+    axes[1, 1].set_xticklabels(configs, rotation=45, ha='right', fontsize=8)
+    axes[1, 1].set_ylabel('Depth AbsRel')
+    axes[1, 1].set_title('Depth Accuracy (lower is better)')
+    
+    plt.suptitle(f'Pipeline Configuration Comparison - {dataset}', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.close()
