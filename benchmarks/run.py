@@ -562,17 +562,20 @@ def run_depth_benchmark(
             if cache_dir is not None:
                 logger.info(f"    Caching all {total_frames} depth maps...")
                 estimator = get_depth_estimator(method)
-                depths = []
-                abs_rels = []
+                
+                # First pass: estimate all depths and compute global scale from frames with GT
+                raw_depths = []
+                scales = []
                 
                 for i, frame in enumerate(all_frames):
                     if i % 100 == 0 and i > 0:
-                        logger.info(f"      Frame {i}/{total_frames}")
+                        logger.info(f"      Estimating frame {i}/{total_frames}")
                     
                     pred = estimator.estimate(frame.rgb)
                     pred_depth = pred.depth.copy() if hasattr(pred, 'depth') else pred.copy()
-                    original_pred = pred_depth.copy()  # Save original for validity check
+                    raw_depths.append(pred_depth)
                     
+                    # Compute scale from frames that have GT depth
                     gt_depth = frame.depth
                     if gt_depth is not None:
                         valid_gt = (gt_depth > 0.1) & (gt_depth < 10)
@@ -584,20 +587,40 @@ def run_depth_benchmark(
                             pred_median = np.median(pred_depth[valid])
                             if pred_median > 0.01:
                                 scale = gt_median / pred_median
-                                if 0.01 < scale < 1000:
-                                    pred_depth = pred_depth * scale
-                                    pred_depth = np.clip(pred_depth, 0.0, 15.0)
-                                    # Zero out pixels that were near-zero BEFORE scaling
-                                    # Use relative threshold based on median
-                                    pred_depth[original_pred < pred_median * 0.001] = 0.0
-                                    
-                                    abs_rel = np.mean(np.abs(pred_depth[valid] - gt_depth[valid]) / gt_depth[valid])
-                                    abs_rels.append(abs_rel)
+                                if 0.1 < scale < 100:  # Reasonable scale range
+                                    scales.append(scale)
+                
+                # Compute global scale (median of per-frame scales)
+                if scales:
+                    global_scale = np.median(scales)
+                    logger.info(f"      Global depth scale: {global_scale:.4f} (from {len(scales)} frames with GT)")
+                else:
+                    global_scale = 1.0
+                    logger.warning(f"      No valid GT frames for scaling, using scale=1.0")
+                
+                # Second pass: apply global scale to all frames
+                depths = []
+                abs_rels = []
+                
+                for i, (frame, raw_depth) in enumerate(zip(all_frames, raw_depths)):
+                    pred_depth = raw_depth * global_scale
+                    pred_depth = np.clip(pred_depth, 0.0, 15.0)
+                    
+                    # Compute AbsRel for frames with GT
+                    gt_depth = frame.depth
+                    if gt_depth is not None:
+                        valid_gt = (gt_depth > 0.1) & (gt_depth < 10)
+                        valid_pred = pred_depth > 0.05
+                        valid = valid_gt & valid_pred
+                        if valid.sum() > 100:
+                            abs_rel = np.mean(np.abs(pred_depth[valid] - gt_depth[valid]) / gt_depth[valid])
+                            abs_rels.append(abs_rel)
                     
                     depths.append(pred_depth)
                 
                 estimated_depths[method] = depths
                 depth_errors[method] = np.mean(abs_rels) if abs_rels else float('inf')
+                logger.info(f"      Avg AbsRel: {depth_errors[method]:.4f}")
                 
                 # Store GT depths once
                 if not gt_depths:
@@ -891,58 +914,58 @@ def run_pipeline_benchmark(
         estimator = None
         try:
             # Clear GPU memory before loading each estimator
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                import gc
-                gc.collect()
-            except ImportError:
-                pass
+            safe_cuda_cleanup()
             
             estimator = get_depth_estimator(depth_method)
-            depths = []
-            abs_rels = []
+            
+            # First pass: estimate all depths and compute global scale
+            raw_depths = []
+            scales = []
             
             for frame in frames:
                 result = estimator.estimate(frame.rgb)
                 pred_depth = result.depth.copy()
+                raw_depths.append(pred_depth)
                 
-                # Scale to match GT using median
+                # Compute scale from frames with GT depth
                 gt_depth = frame.depth
-                
-                # Skip if no GT depth available
-                if gt_depth is None:
-                    depths.append(pred_depth)
-                    continue
+                if gt_depth is not None:
+                    valid_gt = (gt_depth > 0.1) & (gt_depth < 10)
+                    valid_pred = pred_depth > 0.01
+                    valid = valid_gt & valid_pred
                     
-                valid_gt = (gt_depth > 0.1) & (gt_depth < 10)
-                valid_pred = pred_depth > 0.01  # More strict threshold to avoid near-zero
-                valid = valid_gt & valid_pred
+                    if valid.sum() > 100:
+                        gt_median = np.median(gt_depth[valid])
+                        pred_median = np.median(pred_depth[valid])
+                        if pred_median > 0.01:
+                            scale = gt_median / pred_median
+                            if 0.1 < scale < 100:
+                                scales.append(scale)
+            
+            # Compute global scale
+            if scales:
+                global_scale = np.median(scales)
+                logger.info(f"    Global depth scale: {global_scale:.4f}")
+            else:
+                global_scale = 1.0
+                logger.warning(f"    No valid GT frames for scaling, using scale=1.0")
+            
+            # Second pass: apply global scale to all frames
+            depths = []
+            abs_rels = []
+            
+            for frame, raw_depth in zip(frames, raw_depths):
+                pred_depth = raw_depth * global_scale
+                pred_depth = np.clip(pred_depth, 0.0, 15.0)
                 
-                if valid.sum() > 100:
-                    gt_median = np.median(gt_depth[valid])
-                    pred_median = np.median(pred_depth[valid])
-                    # Skip frames where prediction median is too low (bad MiDaS output)
-                    if pred_median > 0.01:
-                        scale = gt_median / pred_median
-                        # Sanity check: scale shouldn't be extreme
-                        if 0.01 < scale < 1000:
-                            original_pred = pred_depth.copy()  # Save for validity check
-                            pred_depth = pred_depth * scale
-                            
-                            # CRITICAL: Clamp scaled depth to valid range to prevent
-                            # extreme outliers that crash CUDA rasterizer
-                            # MiDaS can have edge artifacts that become huge after scaling
-                            pred_depth = np.clip(pred_depth, 0.0, 15.0)
-                            
-                            # Zero out pixels that were near-zero BEFORE scaling
-                            # Use relative threshold based on median
-                            pred_depth[original_pred < pred_median * 0.001] = 0.0
-                            
-                            # Compute AbsRel on valid pixels
-                            abs_rel = np.mean(np.abs(pred_depth[valid] - gt_depth[valid]) / gt_depth[valid])
-                            abs_rels.append(abs_rel)
+                gt_depth = frame.depth
+                if gt_depth is not None:
+                    valid_gt = (gt_depth > 0.1) & (gt_depth < 10)
+                    valid_pred = pred_depth > 0.05
+                    valid = valid_gt & valid_pred
+                    if valid.sum() > 100:
+                        abs_rel = np.mean(np.abs(pred_depth[valid] - gt_depth[valid]) / gt_depth[valid])
+                        abs_rels.append(abs_rel)
                 
                 depths.append(pred_depth)
             
