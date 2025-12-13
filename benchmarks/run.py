@@ -1800,7 +1800,11 @@ def main():
         args.depth_methods = [k for k, v in list_depth_estimators().items() 
                              if k not in excluded_depth
                              and v.get('available', True)]
-        args.gs_engines = [k for k, v in list_engines().items() if v.get('available', True)]
+        # Exclude da3gs - experimental, GS rendering not fully working yet
+        excluded_engines = ('da3gs',)
+        args.gs_engines = [k for k, v in list_engines().items() 
+                          if k not in excluded_engines
+                          and v.get('available', True)]
         
         logger.info(f"Comprehensive mode: {len(args.pose_methods)} pose, {len(args.depth_methods)} depth, {len(args.gs_engines)} GS")
     
