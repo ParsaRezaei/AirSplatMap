@@ -453,6 +453,26 @@ class GraphdecoEngine(BaseGSEngine):
         if colors.ndim == 1:
             colors = colors.reshape(-1, 3)
         
+        # Validate points - remove NaN, Inf, and extreme outliers that can corrupt CUDA
+        valid_mask = (
+            np.isfinite(points).all(axis=1) & 
+            np.isfinite(colors).all(axis=1) &
+            (np.abs(points) < 1000).all(axis=1)  # Remove extreme outliers
+        )
+        
+        if not valid_mask.all():
+            n_invalid = (~valid_mask).sum()
+            logger.warning(f"Removing {n_invalid} invalid points (NaN/Inf/outliers) from point cloud")
+            points = points[valid_mask]
+            colors = colors[valid_mask]
+        
+        if len(points) == 0:
+            logger.error("No valid points remaining after filtering!")
+            return
+        
+        # Clamp colors to valid range
+        colors = np.clip(colors, 0.0, 1.0)
+        
         # Create BasicPointCloud
         normals = np.zeros_like(points)
         pcd = self._BasicPointCloud(
@@ -629,10 +649,19 @@ class GraphdecoEngine(BaseGSEngine):
         logger.debug(f"_init_gaussians_from_rgbd: depth shape={depth.shape}, range=[{depth.min():.3f}, {depth.max():.3f}]")
         
         # Auto-detect if depth is in millimeters and convert to meters
-        depth = depth.copy()
-        if depth.max() > 100:  # Likely in millimeters
-            logger.info(f"Depth appears to be in millimeters (max={depth.max():.1f}), converting to meters")
+        depth = depth.copy().astype(np.float64)  # Use float64 for better precision during conversion
+        
+        # Handle different depth scales (monocular depth may have arbitrary scale)
+        depth_min = np.nanmin(depth[depth > 0]) if np.any(depth > 0) else 0
+        depth_max = np.nanmax(depth[np.isfinite(depth)]) if np.any(np.isfinite(depth)) else 0
+        
+        if depth_max > 100:  # Likely in millimeters
+            logger.info(f"Depth appears to be in millimeters (max={depth_max:.1f}), converting to meters")
             depth = depth / 1000.0
+        elif depth_max < 0.1 and depth_max > 0:
+            # Depth might be normalized disparity from monocular estimator - scale it
+            logger.info(f"Depth appears normalized (max={depth_max:.4f}), scaling to reasonable range")
+            depth = depth * 5.0  # Scale to ~0-5m range
         
         height, width = depth.shape
         fx = self._intrinsics['fx']
@@ -643,8 +672,8 @@ class GraphdecoEngine(BaseGSEngine):
         # Create pixel grid
         u, v = np.meshgrid(np.arange(width), np.arange(height))
         
-        # Filter valid depth (now in meters)
-        valid_mask = (depth > 0.01) & (depth < 10.0) & np.isfinite(depth)  # 1cm to 10m
+        # Filter valid depth (now in meters) - be more conservative with estimated depth
+        valid_mask = (depth > 0.05) & (depth < 8.0) & np.isfinite(depth)  # 5cm to 8m
         
         # Subsample for efficiency (take every Nth pixel)
         subsample = self._config.get('depth_subsample', 4)
@@ -657,9 +686,12 @@ class GraphdecoEngine(BaseGSEngine):
             logger.warning(f"No valid depth points found in frame (depth range: {depth.min():.2f}-{depth.max():.2f})")
             return
         
+        if n_valid < 100:
+            logger.warning(f"Very few valid depth points ({n_valid}), may produce poor reconstruction")
+        
         u_valid = u[valid_mask]
         v_valid = v[valid_mask]
-        z_valid = depth[valid_mask]
+        z_valid = depth[valid_mask].astype(np.float32)  # Back to float32 for GPU
         
         # Back-project to camera coordinates
         x_cam = (u_valid - cx) * z_valid / fx
@@ -667,11 +699,11 @@ class GraphdecoEngine(BaseGSEngine):
         z_cam = z_valid
         
         # Stack as Nx3
-        points_cam = np.stack([x_cam, y_cam, z_cam], axis=1)
+        points_cam = np.stack([x_cam, y_cam, z_cam], axis=1).astype(np.float32)
         
         # Transform to world coordinates
-        R = pose_world_cam[:3, :3]
-        t = pose_world_cam[:3, 3]
+        R = pose_world_cam[:3, :3].astype(np.float32)
+        t = pose_world_cam[:3, 3].astype(np.float32)
         points_world = (R @ points_cam.T).T + t
         
         # Get colors
@@ -1149,6 +1181,47 @@ class GraphdecoEngine(BaseGSEngine):
     
     def reset(self) -> None:
         """Reset the engine to uninitialized state."""
+        # First, explicitly clear CUDA tensors to avoid memory corruption
+        if self._gaussians is not None:
+            try:
+                # Clear optimizer state which holds references to CUDA tensors
+                if hasattr(self._gaussians, 'optimizer') and self._gaussians.optimizer is not None:
+                    self._gaussians.optimizer.zero_grad(set_to_none=True)
+                    del self._gaussians.optimizer
+                    self._gaussians.optimizer = None
+                
+                # Clear any exposure vectors
+                if hasattr(self._gaussians, 'exposure_mapping'):
+                    self._gaussians.exposure_mapping.clear()
+                
+                # Clear all parameter tensors by setting to None
+                for attr in ['_xyz', '_features_dc', '_features_rest', '_scaling', 
+                            '_rotation', '_opacity', 'xyz_gradient_accum', 'denom',
+                            'max_radii2D', 'pre_act_opacity']:
+                    if hasattr(self._gaussians, attr):
+                        try:
+                            setattr(self._gaussians, attr, None)
+                        except:
+                            pass
+            except Exception as e:
+                logger.warning(f"Error during Gaussian cleanup: {e}")
+        
+        # Clear camera list (which may hold CUDA tensors)
+        if self._cameras:
+            for cam in self._cameras:
+                try:
+                    if hasattr(cam, 'original_image'):
+                        cam.original_image = None
+                    if hasattr(cam, 'depth'):
+                        cam.depth = None
+                except:
+                    pass
+            self._cameras.clear()
+        
+        # Clear background tensor
+        if self._background is not None:
+            self._background = None
+        
         self._initialized = False
         self._intrinsics = None
         self._config = {}
@@ -1158,10 +1231,25 @@ class GraphdecoEngine(BaseGSEngine):
         self._iteration = 0
         self._opt_params = None
         
-        # Clear CUDA cache
-        torch.cuda.empty_cache()
+        # Force garbage collection before clearing CUDA cache
+        import gc
+        gc.collect()
+        
+        # Synchronize and clear CUDA cache
+        if torch.cuda.is_available():
+            try:
+                torch.cuda.synchronize()
+            except RuntimeError as e:
+                logger.warning(f"CUDA sync warning during reset: {e}")
+            torch.cuda.empty_cache()
+            gc.collect()
+            torch.cuda.empty_cache()
         
         logger.info("Engine reset")
+    
+    def cleanup(self) -> None:
+        """Clean up all resources. Call before deleting the engine."""
+        self.reset()
     
     def get_num_gaussians(self) -> int:
         """Get the current number of Gaussians."""

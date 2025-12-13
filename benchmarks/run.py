@@ -990,22 +990,63 @@ def run_pipeline_benchmark(
             logger.error(f"    Failed: {e}")
             import traceback
             traceback.print_exc()
+            
+            # Check if it's a CUDA error - if so, we may need to skip remaining tests
+            if "CUDA error" in str(e) or "illegal memory access" in str(e).lower():
+                logger.warning("CUDA error detected - attempting aggressive cleanup...")
+                cuda_error_occurred = True
+            else:
+                cuda_error_occurred = False
         finally:
             # Critical: Delete engine and free GPU memory aggressively
             try:
-                if 'engine' in dir():
+                if 'engine' in dir() and engine is not None:
+                    # Call cleanup method if available
+                    if hasattr(engine, 'cleanup'):
+                        try:
+                            engine.cleanup()
+                        except Exception as cleanup_err:
+                            logger.warning(f"Engine cleanup error: {cleanup_err}")
+                    elif hasattr(engine, 'reset'):
+                        try:
+                            engine.reset()
+                        except Exception as reset_err:
+                            logger.warning(f"Engine reset error: {reset_err}")
                     del engine
-            except:
-                pass
+                    engine = None
+            except Exception as del_err:
+                logger.warning(f"Error deleting engine: {del_err}")
+            
             import gc
             gc.collect()
+            
             if torch.cuda.is_available():
-                # Synchronize to catch any async CUDA errors
-                torch.cuda.synchronize()
+                # Try to synchronize and clear CUDA state
+                try:
+                    torch.cuda.synchronize()
+                except RuntimeError as sync_err:
+                    logger.warning(f"CUDA sync error during cleanup: {sync_err}")
+                    # Try to reset the CUDA context
+                    try:
+                        torch.cuda.reset_peak_memory_stats()
+                    except:
+                        pass
+                
                 torch.cuda.empty_cache()
-                # Force garbage collection of CUDA tensors
                 gc.collect()
                 torch.cuda.empty_cache()
+                
+                # If CUDA error occurred, do extra verification
+                if 'cuda_error_occurred' in dir() and cuda_error_occurred:
+                    try:
+                        # Quick test to see if CUDA is still working
+                        test_tensor = torch.zeros(1, device='cuda')
+                        del test_tensor
+                        torch.cuda.empty_cache()
+                        logger.info("CUDA recovered successfully")
+                    except RuntimeError as recovery_err:
+                        logger.error(f"CUDA not recovered: {recovery_err}")
+                        logger.error("Remaining pipeline tests may fail")
     
     return results
 
