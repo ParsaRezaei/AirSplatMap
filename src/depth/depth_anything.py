@@ -333,9 +333,12 @@ class DepthAnythingV3Estimator(BaseDepthEstimator):
     @staticmethod
     def _check_da3_available() -> bool:
         """Check if DA3 package is installed or available via submodule."""
+        # Suppress verbose DA3 logging
+        import os
+        os.environ['DA3_LOG_LEVEL'] = 'ERROR'
+        
         # First, try to add submodule path
         import sys
-        import os
         submodule_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             'submodules', 'Depth-Anything-3', 'src'
@@ -366,6 +369,11 @@ class DepthAnythingV3Estimator(BaseDepthEstimator):
             self._v2_estimator._lazy_init()
             self._initialized = True
             return
+        
+        # Suppress verbose DA3 logging
+        import os
+        os.environ['DA3_LOG_LEVEL'] = 'ERROR'
+        logging.getLogger('depth_anything_3').setLevel(logging.WARNING)
         
         from depth_anything_3.api import DepthAnything3
         
