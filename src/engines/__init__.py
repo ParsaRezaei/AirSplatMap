@@ -52,6 +52,13 @@ except ImportError:
     MonoGSEngine = None
     _MONOGS_AVAILABLE = False
 
+try:
+    from .da3gs_engine import DA3GSEngine
+    _DA3GS_AVAILABLE = DA3GSEngine.is_available()
+except ImportError:
+    DA3GSEngine = None
+    _DA3GS_AVAILABLE = False
+
 
 def get_engine(name: str, **kwargs):
     """
@@ -104,6 +111,14 @@ def get_engine(name: str, **kwargs):
             )
         return MonoGSEngine(**kwargs)
     
+    elif name in ("da3gs", "da3", "depth-anything-3", "depthanything3"):
+        if not _DA3GS_AVAILABLE:
+            raise ImportError(
+                "DA3 GS not available. Install from: "
+                "git submodule update --init submodules/Depth-Anything-3"
+            )
+        return DA3GSEngine(**kwargs)
+    
     else:
         available = ["graphdeco"]
         if _GSPLAT_AVAILABLE:
@@ -114,6 +129,8 @@ def get_engine(name: str, **kwargs):
             available.append("gslam")
         if _MONOGS_AVAILABLE:
             available.append("monogs")
+        if _DA3GS_AVAILABLE:
+            available.append("da3gs")
         raise ValueError(
             f"Unknown engine: {name}. Available: {available}"
         )
@@ -177,6 +194,13 @@ def list_engines():
             "speed": "~10 FPS",
             "realtime": True,
         },
+        "da3gs": {
+            "available": _DA3GS_AVAILABLE,
+            "description": "Depth Anything V3 GS - End-to-end depth + Gaussian prediction",
+            "install": "git submodule update --init submodules/Depth-Anything-3",
+            "speed": "~1-2 FPS (batch)",
+            "realtime": False,
+        },
     }
     return engines
 
@@ -188,6 +212,7 @@ __all__ = [
     "SplaTAMEngine",
     "GSLAMEngine",
     "MonoGSEngine",
+    "DA3GSEngine",
     "get_engine",
     "list_engines",
 ]
