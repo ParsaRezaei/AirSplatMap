@@ -504,7 +504,10 @@ def run_depth_benchmark(
     
     # Initialize estimator
     estimator = get_depth_estimator(method)
-    logger.info(f"  Depth estimator '{method}' using device: {getattr(estimator, 'device', 'unknown')}")
+    
+    # Get the actual model name (handles fallbacks like V3->V2)
+    actual_method = estimator.get_name() if hasattr(estimator, 'get_name') else method
+    logger.info(f"  Depth estimator '{actual_method}' using device: {getattr(estimator, 'device', 'unknown')}")
     
     # Run estimation
     all_metrics = []
@@ -584,7 +587,7 @@ def run_depth_benchmark(
         pass
     
     return DepthBenchmarkResult(
-        method=method,
+        method=actual_method,  # Use actual model name (handles fallbacks)
         dataset=dataset_name,
         num_frames=len(frames),
         total_time=round(total_time, 2),

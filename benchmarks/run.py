@@ -294,14 +294,17 @@ def save_depth_cache(
     cache_dir = output_dir / "cache" / dataset_name / "depth"
     cache_dir.mkdir(parents=True, exist_ok=True)
     
-    # Save ground truth depths (compressed, can be large)
+    # Save ground truth depths (compressed, can be large) - skip None values
     np.savez_compressed(cache_dir / "gt_depths.npz", 
                         **{f"frame_{i}": d for i, d in enumerate(gt_depths) if d is not None})
     
-    # Save each method's estimated depths
+    # Save each method's estimated depths - skip None values but track which frames are valid
     for method, depths in estimated_depths.items():
-        np.savez_compressed(cache_dir / f"{method}_depths.npz",
-                           **{f"frame_{i}": d for i, d in enumerate(depths)})
+        valid_depths = {f"frame_{i}": d for i, d in enumerate(depths) if d is not None}
+        np.savez_compressed(cache_dir / f"{method}_depths.npz", **valid_depths)
+        # Also save the indices of valid frames
+        valid_indices = [i for i, d in enumerate(depths) if d is not None]
+        np.save(cache_dir / f"{method}_valid_indices.npy", np.array(valid_indices))
     
     # Save depth errors for reference (convert numpy types to Python types)
     depth_errors_serializable = {k: float(v) for k, v in depth_errors.items()}
@@ -367,17 +370,22 @@ def load_depth_cache(output_dir: Path, dataset_name: str) -> Tuple[Optional[List
     gt_depths = None
     gt_file = cache_dir / "gt_depths.npz"
     if gt_file.exists():
-        data = np.load(gt_file)
+        data = np.load(gt_file, allow_pickle=True)
         gt_depths = [data[k] for k in sorted(data.files, key=lambda x: int(x.split('_')[1]))]
     
-    # Load estimated depths
+    # Load estimated depths - handle potential None values stored as objects
     estimated_depths = {}
     for depth_file in cache_dir.glob("*_depths.npz"):
         if depth_file.name == "gt_depths.npz":
             continue
         method = depth_file.stem.replace("_depths", "")
-        data = np.load(depth_file)
-        estimated_depths[method] = [data[k] for k in sorted(data.files, key=lambda x: int(x.split('_')[1]))]
+        try:
+            data = np.load(depth_file, allow_pickle=True)
+            depths_list = [data[k] for k in sorted(data.files, key=lambda x: int(x.split('_')[1]))]
+            estimated_depths[method] = depths_list
+        except Exception as e:
+            logger.warning(f"Could not load depth cache for {method}: {e}")
+            continue
     
     # Load depth errors
     depth_errors = {}
@@ -1771,8 +1779,8 @@ def main():
                         default=['orb', 'sift', 'robust_flow'],
                         help='Pose methods to test')
     parser.add_argument('--depth-methods', nargs='+', 
-                        default=['midas', 'depth_anything_v3', 'depth_pro'],
-                        help='Depth methods to test')
+                        default=['midas', 'depth_anything_v2'],
+                        help='Depth methods to test (depth_pro OOMs on Jetson)')
     parser.add_argument('--gs-engines', nargs='+', 
                         default=['graphdeco'],
                         help='GS engines to test (graphdeco, gsplat, splatam, gslam, monogs, da3gs)')

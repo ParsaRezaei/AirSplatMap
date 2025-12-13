@@ -196,9 +196,10 @@ def _load_ground_truth_trajectories(datasets: List[str], datasets_dir: Path = No
 
 
 def _load_estimated_trajectories(output_dir: Path, datasets: List[str], max_points: int = 200) -> Dict[str, Dict[str, Dict]]:
-    """Load estimated trajectories from benchmark cache and align to GT.
+    """Load estimated trajectories from benchmark cache.
     
-    Applies Umeyama alignment so trajectories visually match GT.
+    NOTE: Poses in cache are ALREADY aligned via Umeyama during benchmarking.
+    We just need to load and format them for visualization.
     
     Returns:
         Dict mapping dataset -> method -> trajectory data
@@ -213,15 +214,17 @@ def _load_estimated_trajectories(output_dir: Path, datasets: List[str], max_poin
         return estimated
     
     for dataset in datasets:
-        dataset_cache = cache_dir / dataset
+        dataset_cache = cache_dir / dataset / 'pose'
         if not dataset_cache.exists():
-            continue
+            # Try without /pose suffix for backward compatibility
+            dataset_cache = cache_dir / dataset
+            if not dataset_cache.exists():
+                continue
         
         estimated[dataset] = {}
         
-        # Load ground truth poses for alignment
+        # Load ground truth poses for centering (NOT alignment - already done)
         gt_file = dataset_cache / 'gt_poses.npy'
-        gt_positions = None
         gt_center = np.zeros(3)
         if gt_file.exists():
             try:
@@ -229,9 +232,9 @@ def _load_estimated_trajectories(output_dir: Path, datasets: List[str], max_poin
                 gt_positions = gt_poses[:, :3, 3]  # Extract translation (N, 3)
                 gt_center = gt_positions.mean(axis=0)
             except Exception as e:
-                logger.warning(f"Failed to load GT poses for alignment: {e}")
+                logger.warning(f"Failed to load GT poses for centering: {e}")
         
-        # Load each estimated method's poses
+        # Load each estimated method's poses (already aligned in cache)
         for pose_file in dataset_cache.glob('*_poses.npy'):
             if pose_file.name == 'gt_poses.npy':
                 continue
@@ -239,14 +242,11 @@ def _load_estimated_trajectories(output_dir: Path, datasets: List[str], max_poin
             method = pose_file.stem.replace('_poses', '')
             
             try:
-                poses = np.load(pose_file)  # (N, 4, 4)
+                poses = np.load(pose_file)  # (N, 4, 4) - already aligned
                 positions = poses[:, :3, 3]  # Extract translations (N, 3)
                 
-                # Apply Umeyama alignment if GT available
-                if gt_positions is not None and len(gt_positions) > 0:
-                    positions = _align_trajectory_umeyama(positions, gt_positions)
-                
-                # Subsample if too many
+                # NO alignment here - poses are already aligned during benchmarking!
+                # Just subsample if too many points
                 if len(positions) > max_points:
                     indices = np.linspace(0, len(positions) - 1, max_points, dtype=int)
                     positions = positions[indices]
