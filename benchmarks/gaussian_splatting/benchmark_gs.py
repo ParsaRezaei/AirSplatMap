@@ -232,10 +232,15 @@ def run_gs_benchmark(
     
     # Auto-detect dataset type and load appropriate source
     source = _get_dataset_source(dataset_path)
-    frames = list(source)
+    all_frames = list(source)
     
-    if max_frames:
-        frames = frames[:max_frames]
+    # Sample frames UNIFORMLY across full sequence for better scene coverage
+    if max_frames and len(all_frames) > max_frames:
+        indices = np.linspace(0, len(all_frames) - 1, max_frames, dtype=int)
+        frames = [all_frames[i] for i in indices]
+        logger.info(f"  Uniformly sampled {max_frames} frames from {len(all_frames)} total")
+    else:
+        frames = all_frames
     
     if len(frames) == 0:
         raise ValueError(f"No frames found in {dataset_path}")

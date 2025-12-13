@@ -230,7 +230,7 @@ def compute_rpe(estimated_poses: List[np.ndarray], gt_poses: List[np.ndarray],
 
 
 def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = None,
-                  skip_frames: int = 1) -> BenchmarkResult:
+                  skip_frames: int = 1, return_poses: bool = False) -> BenchmarkResult:
     """
     Run benchmark for a single pose estimator on a dataset.
     
@@ -239,9 +239,10 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
         dataset_path: Path to dataset (TUM, 7-Scenes, Replica, or ICL-NUIM)
         max_frames: Maximum frames to process (None = all)
         skip_frames: Process every Nth frame
+        return_poses: If True, also return estimated/aligned/gt poses for caching
         
     Returns:
-        BenchmarkResult
+        BenchmarkResult, or (BenchmarkResult, poses_dict) if return_poses=True
     """
     dataset_name = Path(dataset_path).name
     logger.info(f"Benchmarking {method} on {dataset_name}...")
@@ -253,9 +254,12 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
     total_frames = len(source)
     intrinsics = source.get_intrinsics()
     
-    # Calculate which frame indices to process
+    # Calculate which frame indices to process - UNIFORM sampling across full sequence
     if max_frames and max_frames < total_frames:
-        frame_indices = set(range(0, max_frames, skip_frames))
+        # Sample uniformly across the full sequence for better trajectory coverage
+        uniform_indices = np.linspace(0, total_frames - 1, max_frames, dtype=int)
+        frame_indices = set(uniform_indices[::skip_frames])
+        logger.info(f"  Uniformly sampling {len(frame_indices)} frames from {total_frames} total")
     else:
         frame_indices = set(range(0, total_frames, skip_frames))
     
@@ -351,7 +355,7 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
     except ImportError:
         pass
     
-    return BenchmarkResult(
+    result = BenchmarkResult(
         method=method,
         dataset=dataset_name,
         num_frames=frames_processed,
@@ -378,6 +382,17 @@ def run_benchmark(method: str, dataset_path: str, max_frames: Optional[int] = No
         p95_latency_ms=round(p95_latency_ms, 2),
         p99_latency_ms=round(p99_latency_ms, 2),
     )
+    
+    # Return poses if requested (for caching)
+    if return_poses:
+        return result, {
+            'estimated': np.array(estimated_poses),  # Raw estimated poses
+            'aligned': np.array(aligned_poses),      # Aligned to GT
+            'gt': np.array(gt_poses),                # Ground truth
+            'frame_indices': sorted(frame_indices),  # Which frames were processed
+        }
+    
+    return result
 
 
 def find_tum_datasets(base_path: Path) -> List[Path]:

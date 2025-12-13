@@ -78,6 +78,74 @@ def _group_by_dataset(results: List[Dict]) -> Dict[str, List[Dict]]:
     return dict(by_dataset)
 
 
+def _align_trajectory_umeyama(estimated: np.ndarray, ground_truth: np.ndarray, force_scale_match: bool = True) -> np.ndarray:
+    """
+    Align estimated trajectory to ground truth using Umeyama alignment.
+    
+    This applies scale, rotation, and translation to best match GT.
+    Essential for monocular VO where scale is unknown.
+    
+    Args:
+        estimated: Nx3 estimated positions
+        ground_truth: Nx3 ground truth positions
+        force_scale_match: If True, force scale to match GT variance (better visualization)
+        
+    Returns:
+        Aligned estimated positions (Nx3)
+    """
+    if len(estimated) != len(ground_truth):
+        min_len = min(len(estimated), len(ground_truth))
+        estimated = estimated[:min_len]
+        ground_truth = ground_truth[:min_len]
+    
+    if len(estimated) < 3:
+        return estimated
+    
+    # Center both trajectories
+    est_mean = estimated.mean(axis=0)
+    gt_mean = ground_truth.mean(axis=0)
+    
+    est_centered = estimated - est_mean
+    gt_centered = ground_truth - gt_mean
+    
+    # Compute variance
+    est_var = np.sum(est_centered ** 2)
+    gt_var = np.sum(gt_centered ** 2)
+    
+    if est_var < 1e-10:
+        return np.tile(gt_mean, (len(estimated), 1))
+    
+    # Cross-covariance matrix
+    H = est_centered.T @ gt_centered
+    
+    # SVD
+    U, S, Vt = np.linalg.svd(H)
+    
+    # Rotation
+    R = Vt.T @ U.T
+    
+    # Ensure proper rotation (det = 1)
+    if np.linalg.det(R) < 0:
+        Vt[-1, :] *= -1
+        R = Vt.T @ U.T
+    
+    # Scale - force to match GT variance for better visualization
+    if force_scale_match:
+        # Scale to match GT's spread (variance-based)
+        scale = np.sqrt(gt_var / est_var)
+    else:
+        # Original Umeyama scale (minimizes RMSE)
+        scale = np.sum(S) / est_var
+    
+    # Translation
+    t = gt_mean - scale * R @ est_mean
+    
+    # Apply transformation
+    aligned = scale * (estimated @ R.T) + t
+    
+    return aligned
+
+
 def _load_ground_truth_trajectories(datasets: List[str], datasets_dir: Path = None, max_points: int = 200) -> Dict[str, Dict]:
     """Load ground truth trajectories from TUM datasets."""
     if datasets_dir is None:
@@ -127,6 +195,77 @@ def _load_ground_truth_trajectories(datasets: List[str], datasets_dir: Path = No
     return trajectories
 
 
+def _load_estimated_trajectories(output_dir: Path, datasets: List[str], max_points: int = 200) -> Dict[str, Dict[str, Dict]]:
+    """Load estimated trajectories from benchmark cache and align to GT.
+    
+    Applies Umeyama alignment so trajectories visually match GT.
+    
+    Returns:
+        Dict mapping dataset -> method -> trajectory data
+    """
+    estimated = {}
+    
+    if output_dir is None:
+        return estimated
+    
+    cache_dir = output_dir / 'cache'
+    if not cache_dir.exists():
+        return estimated
+    
+    for dataset in datasets:
+        dataset_cache = cache_dir / dataset
+        if not dataset_cache.exists():
+            continue
+        
+        estimated[dataset] = {}
+        
+        # Load ground truth poses for alignment
+        gt_file = dataset_cache / 'gt_poses.npy'
+        gt_positions = None
+        gt_center = np.zeros(3)
+        if gt_file.exists():
+            try:
+                gt_poses = np.load(gt_file)
+                gt_positions = gt_poses[:, :3, 3]  # Extract translation (N, 3)
+                gt_center = gt_positions.mean(axis=0)
+            except Exception as e:
+                logger.warning(f"Failed to load GT poses for alignment: {e}")
+        
+        # Load each estimated method's poses
+        for pose_file in dataset_cache.glob('*_poses.npy'):
+            if pose_file.name == 'gt_poses.npy':
+                continue
+            
+            method = pose_file.stem.replace('_poses', '')
+            
+            try:
+                poses = np.load(pose_file)  # (N, 4, 4)
+                positions = poses[:, :3, 3]  # Extract translations (N, 3)
+                
+                # Apply Umeyama alignment if GT available
+                if gt_positions is not None and len(gt_positions) > 0:
+                    positions = _align_trajectory_umeyama(positions, gt_positions)
+                
+                # Subsample if too many
+                if len(positions) > max_points:
+                    indices = np.linspace(0, len(positions) - 1, max_points, dtype=int)
+                    positions = positions[indices]
+                
+                # Center for visualization (same as GT centering)
+                positions = positions - gt_center
+                
+                estimated[dataset][method] = {
+                    'x': positions[:, 0].tolist(),
+                    'y': positions[:, 1].tolist(),
+                    'z': positions[:, 2].tolist(),
+                    'num_points': len(positions)
+                }
+            except Exception as e:
+                logger.warning(f"Failed to load {method} trajectory for {dataset}: {e}")
+    
+    return estimated
+
+
 def generate_html_report(
     pose_results: List[Dict],
     depth_results: List[Dict],
@@ -143,6 +282,9 @@ def generate_html_report(
     pipeline_results = pipeline_results or []
     hardware_stats = hardware_stats or {}
     
+    # Get output directory from output_path for loading cached trajectories
+    output_dir = output_path.parent if output_path else None
+    
     # Get all datasets
     all_datasets = sorted(set(
         r.get('dataset', 'unknown') 
@@ -158,6 +300,9 @@ def generate_html_report(
     # Load ground truth trajectories for visualization
     trajectories = _load_ground_truth_trajectories(all_datasets)
     
+    # Load estimated trajectories from cache
+    estimated_trajectories = _load_estimated_trajectories(output_dir, all_datasets)
+    
     # Get datasets that have trajectory data
     datasets_with_trajectories = [d for d in all_datasets if d in trajectories]
     
@@ -171,6 +316,7 @@ def generate_html_report(
         'pipeline': pipeline_results,
         'hardware': hardware_stats,
         'trajectories': trajectories,
+        'estimated_trajectories': estimated_trajectories,  # NEW: actual estimated poses
     }
     
     json_data = json.dumps(data, cls=NumpyEncoder)
@@ -719,6 +865,42 @@ def generate_html_report(
         .main {{
             overflow-x: hidden;
         }}
+        
+        /* Range Slider Styles */
+        #trajSliderMin, #trajSliderMax {{
+            -webkit-appearance: none;
+            appearance: none;
+            pointer-events: none;
+        }}
+        
+        #trajSliderMin::-webkit-slider-thumb, #trajSliderMax::-webkit-slider-thumb {{
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            pointer-events: auto;
+            border: 2px solid #1e3a5f;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+            transition: transform 0.15s, background 0.15s;
+        }}
+        
+        #trajSliderMin::-webkit-slider-thumb:hover, #trajSliderMax::-webkit-slider-thumb:hover {{
+            background: #60a5fa;
+            transform: scale(1.15);
+        }}
+        
+        #trajSliderMin::-moz-range-thumb, #trajSliderMax::-moz-range-thumb {{
+            width: 18px;
+            height: 18px;
+            background: #3b82f6;
+            border-radius: 50%;
+            cursor: pointer;
+            pointer-events: auto;
+            border: 2px solid #1e3a5f;
+        }}
     </style>
 </head>
 <body>
@@ -1161,6 +1343,24 @@ def generate_html_report(
             
             <div class="card">
                 <div id="trajectoryPlot" class="plot-3d"></div>
+                
+                <!-- Time Range Slider -->
+                <div style="padding: 16px; border-top: 1px solid #2d2d3a;">
+                    <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 8px;">
+                        <span style="color: #94a3b8; font-size: 13px; min-width: 80px;">Time Range:</span>
+                        <span id="trajRangeLabel" style="color: #60a5fa; font-size: 13px;">0% - 100%</span>
+                    </div>
+                    <div id="trajSliderContainer" style="position: relative; height: 40px; background: #1a1a24; border-radius: 8px; padding: 0 10px;">
+                        <div id="trajSliderTrack" style="position: absolute; top: 50%; left: 10px; right: 10px; height: 6px; background: #2d2d3a; border-radius: 3px; transform: translateY(-50%);"></div>
+                        <div id="trajSliderRange" style="position: absolute; top: 50%; height: 6px; background: linear-gradient(90deg, #3b82f6, #60a5fa); border-radius: 3px; transform: translateY(-50%);"></div>
+                        <input type="range" id="trajSliderMin" min="0" max="100" value="0" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; -webkit-appearance: none; background: transparent; pointer-events: none;">
+                        <input type="range" id="trajSliderMax" min="0" max="100" value="100" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; -webkit-appearance: none; background: transparent; pointer-events: none;">
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 4px;">
+                        <span style="color: #64748b; font-size: 11px;">Start</span>
+                        <span style="color: #64748b; font-size: 11px;">End</span>
+                    </div>
+                </div>
             </div>
             
             <div class="card">
@@ -1847,6 +2047,9 @@ def generate_html_report(
                 return;
             }}
             
+            // Initialize range slider
+            initTrajectorySlider();
+            
             // Populate method checkboxes with Ground Truth first
             const methodContainer = document.getElementById('trajMethodCheckboxes');
             const methods = [...new Set(poses.map(p => p.method))];
@@ -1873,6 +2076,60 @@ def generate_html_report(
             
             // Update the plot
             updateTrajectoryPlot();
+        }}
+        
+        function initTrajectorySlider() {{
+            const sliderMin = document.getElementById('trajSliderMin');
+            const sliderMax = document.getElementById('trajSliderMax');
+            const sliderRange = document.getElementById('trajSliderRange');
+            const rangeLabel = document.getElementById('trajRangeLabel');
+            
+            function updateSliderUI() {{
+                const minVal = parseInt(sliderMin.value);
+                const maxVal = parseInt(sliderMax.value);
+                
+                // Ensure min doesn't exceed max
+                if (minVal > maxVal - 5) {{
+                    sliderMin.value = maxVal - 5;
+                }}
+                
+                // Update the range highlight
+                const minPercent = sliderMin.value;
+                const maxPercent = sliderMax.value;
+                sliderRange.style.left = `calc(${{minPercent}}% + 10px)`;
+                sliderRange.style.width = `calc(${{maxPercent - minPercent}}% - 0px)`;
+                
+                // Update label
+                rangeLabel.textContent = `${{sliderMin.value}}% - ${{sliderMax.value}}%`;
+            }}
+            
+            sliderMin.addEventListener('input', () => {{
+                updateSliderUI();
+                updateTrajectoryPlot();
+            }});
+            
+            sliderMax.addEventListener('input', () => {{
+                const minVal = parseInt(sliderMin.value);
+                if (parseInt(sliderMax.value) < minVal + 5) {{
+                    sliderMax.value = minVal + 5;
+                }}
+                updateSliderUI();
+                updateTrajectoryPlot();
+            }});
+            
+            updateSliderUI();
+        }}
+        
+        function sliceTrajectory(traj, startPercent, endPercent) {{
+            const len = traj.x.length;
+            const startIdx = Math.floor(len * startPercent / 100);
+            const endIdx = Math.ceil(len * endPercent / 100);
+            return {{
+                x: traj.x.slice(startIdx, endIdx),
+                y: traj.y.slice(startIdx, endIdx),
+                z: traj.z.slice(startIdx, endIdx),
+                num_points: endIdx - startIdx
+            }};
         }}
         
         function updateTrajectoryPlot() {{
@@ -1904,13 +2161,20 @@ def generate_html_report(
             }}
             
             // Get ground truth trajectory for this dataset
-            const gtTraj = data.trajectories[datasetFilter];
+            const gtTrajFull = data.trajectories[datasetFilter];
             
-            if (!gtTraj) {{
+            if (!gtTrajFull) {{
                 document.getElementById('trajectoryPlot').innerHTML = 
                     '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available for this dataset</p></div>';
                 return;
             }}
+            
+            // Get time range from slider
+            const startPercent = parseInt(document.getElementById('trajSliderMin')?.value || 0);
+            const endPercent = parseInt(document.getElementById('trajSliderMax')?.value || 100);
+            
+            // Slice trajectory based on time range
+            const gtTraj = sliceTrajectory(gtTrajFull, startPercent, endPercent);
             
             const traces = [];
             const allMethods = [...new Set(poses.map(p => p.method))];
@@ -1929,25 +2193,36 @@ def generate_html_report(
             }}
             
             // Generate estimated trajectories for each selected method
-            // The estimated trajectory is the ground truth + noise proportional to ATE
+            // Use actual estimated trajectories from cache if available, otherwise simulate
+            const estimatedTrajs = data.estimated_trajectories || {{}};
+            const datasetEstimatedFull = estimatedTrajs[datasetFilter] || {{}};
+            
             selectedMethods.forEach((method) => {{
                 const methodIdx = allMethods.indexOf(method);
                 const methodResult = filtered.find(p => p.method === method);
                 if (!methodResult) return;
                 
                 const ate = methodResult.ate_rmse || 0;
-                const numPoints = gtTraj.x.length;
+                let x, y, z;
                 
-                // Use seeded random for consistent visualization
-                const seed = method.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-                const seededRandom = (i) => ((seed * (i + 1) * 9301 + 49297) % 233280) / 233280 - 0.5;
-                
-                // Add noise proportional to ATE (scaled for visualization)
-                const noiseScale = ate * 3;  // Scale factor for visualization
-                
-                const x = gtTraj.x.map((v, i) => v + seededRandom(i) * noiseScale);
-                const y = gtTraj.y.map((v, i) => v + seededRandom(i + numPoints) * noiseScale);
-                const z = gtTraj.z.map((v, i) => v + seededRandom(i + numPoints * 2) * noiseScale * 0.5);
+                // Try to use actual estimated trajectory from cache
+                if (datasetEstimatedFull[method]) {{
+                    const estTrajFull = datasetEstimatedFull[method];
+                    const estTraj = sliceTrajectory(estTrajFull, startPercent, endPercent);
+                    x = estTraj.x;
+                    y = estTraj.y;
+                    z = estTraj.z;
+                }} else {{
+                    // Fallback: simulate trajectory with noise proportional to ATE
+                    const numPoints = gtTraj.x.length;
+                    const seed = method.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+                    const seededRandom = (i) => ((seed * (i + 1) * 9301 + 49297) % 233280) / 233280 - 0.5;
+                    const noiseScale = ate * 3;
+                    
+                    x = gtTraj.x.map((v, i) => v + seededRandom(i) * noiseScale);
+                    y = gtTraj.y.map((v, i) => v + seededRandom(i + numPoints) * noiseScale);
+                    z = gtTraj.z.map((v, i) => v + seededRandom(i + numPoints * 2) * noiseScale * 0.5);
+                }}
                 
                 traces.push({{
                     type: 'scatter3d',
