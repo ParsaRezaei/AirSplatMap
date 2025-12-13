@@ -1564,14 +1564,14 @@ def main():
                         help='Run benchmark across ALL available datasets')
     parser.add_argument('--comprehensive', action='store_true', help='Test ALL available methods')
     parser.add_argument('--jetson', action='store_true', 
-                        help='Jetson mode: only freiburg1 datasets (smaller, avoids OOM)')
+                        help='Jetson mode: all TUM freiburg datasets with memory optimizations')
     
     # Methods - defaults are fast/reliable options
     parser.add_argument('--pose-methods', nargs='+', 
                         default=['orb', 'sift', 'robust_flow'],
                         help='Pose methods to test')
     parser.add_argument('--depth-methods', nargs='+', 
-                        default=['midas', 'depth_anything_v2'],
+                        default=['midas', 'depth_anything_v3'],
                         help='Depth methods to test')
     parser.add_argument('--gs-engines', nargs='+', 
                         default=['graphdeco', 'gsplat'],
@@ -1666,13 +1666,15 @@ def main():
             logger.warning("No curated datasets found, using all available")
             all_datasets_with_types = find_all_datasets(dataset_root)
     
-    # Jetson mode: filter to only small datasets (freiburg1) to avoid OOM
+    # Jetson mode: include all TUM datasets (optimizations allow this now)
+    # GPU peak was only 0.75GB with freiburg1, plenty of headroom for larger datasets
     if args.jetson:
+        # Include freiburg1, freiburg2, and freiburg3 datasets
         all_datasets_with_types = [
             (d, t) for d, t in all_datasets_with_types
-            if 'freiburg1' in d.name
+            if 'freiburg' in d.name  # All TUM RGB-D datasets
         ]
-        logger.info(f"Jetson mode: filtered to {len(all_datasets_with_types)} freiburg1 datasets")
+        logger.info(f"Jetson mode: {len(all_datasets_with_types)} TUM datasets")
     
     # Extract just the paths for backward compatibility
     datasets = [d for d, t in all_datasets_with_types]
