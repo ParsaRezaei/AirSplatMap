@@ -252,6 +252,10 @@ class DepthAnythingV3Estimator(BaseDepthEstimator):
     """
     Depth estimation using Depth Anything V3 (ByteDance).
     
+    NOTE: DA3 requires pycolmap which is NOT available on ARM/Jetson.
+    On ARM platforms, this will fall back to DepthAnythingV2Estimator
+    and report itself as 'depth_anything_v2' in get_name().
+    
     DA3 is a major upgrade over V2 with:
     - Metric depth estimation (DA3METRIC-LARGE)
     - Multi-view depth estimation
@@ -267,7 +271,7 @@ class DepthAnythingV3Estimator(BaseDepthEstimator):
     - 'mono': DA3MONO-LARGE (350M) - high-quality relative depth
     
     Installation:
-        pip install xformers torch>=2 torchvision
+        pip install xformers torch>=2 torchvision pycolmap
         pip install depth-anything-3
         # Or from source:
         git clone https://github.com/ByteDance-Seed/Depth-Anything-3
@@ -433,6 +437,9 @@ class DepthAnythingV3Estimator(BaseDepthEstimator):
         )
     
     def get_name(self) -> str:
+        # Report actual model being used (V2 if fallback)
+        if not self._use_v3:
+            return self._v2_estimator.get_name()
         return f"depth_anything_v3_{self.model_size}"
     
     def is_metric(self) -> bool:
