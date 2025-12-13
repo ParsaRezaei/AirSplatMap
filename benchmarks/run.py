@@ -563,6 +563,11 @@ def run_depth_benchmark(
                 logger.info(f"    Caching all {total_frames} depth maps...")
                 estimator = get_depth_estimator(method)
                 
+                # Check if this is a metric depth estimator (no scaling needed)
+                is_metric = estimator.is_metric() if callable(getattr(estimator, 'is_metric', None)) else False
+                if is_metric:
+                    logger.info(f"      {method} outputs metric depth - no scaling needed")
+                
                 # First pass: estimate all depths and compute global scale from frames with GT
                 raw_depths = []
                 scales = []
@@ -575,23 +580,26 @@ def run_depth_benchmark(
                     pred_depth = pred.depth.copy() if hasattr(pred, 'depth') else pred.copy()
                     raw_depths.append(pred_depth)
                     
-                    # Compute scale from frames that have GT depth
-                    gt_depth = frame.depth
-                    if gt_depth is not None:
-                        valid_gt = (gt_depth > 0.1) & (gt_depth < 10)
-                        valid_pred = pred_depth > 0.01
-                        valid = valid_gt & valid_pred
-                        
-                        if valid.sum() > 100:
-                            gt_median = np.median(gt_depth[valid])
-                            pred_median = np.median(pred_depth[valid])
-                            if pred_median > 0.01:
-                                scale = gt_median / pred_median
-                                if 0.1 < scale < 100:  # Reasonable scale range
-                                    scales.append(scale)
+                    # Compute scale from frames that have GT depth (only for non-metric methods)
+                    if not is_metric:
+                        gt_depth = frame.depth
+                        if gt_depth is not None:
+                            valid_gt = (gt_depth > 0.1) & (gt_depth < 10)
+                            valid_pred = pred_depth > 0.01
+                            valid = valid_gt & valid_pred
+                            
+                            if valid.sum() > 100:
+                                gt_median = np.median(gt_depth[valid])
+                                pred_median = np.median(pred_depth[valid])
+                                if pred_median > 0.01:
+                                    scale = gt_median / pred_median
+                                    if 0.1 < scale < 100:  # Reasonable scale range
+                                        scales.append(scale)
                 
-                # Compute global scale (median of per-frame scales)
-                if scales:
+                # Compute global scale (median of per-frame scales) - only for non-metric
+                if is_metric:
+                    global_scale = 1.0  # No scaling for metric depth
+                elif scales:
                     global_scale = np.median(scales)
                     logger.info(f"      Global depth scale: {global_scale:.4f} (from {len(scales)} frames with GT)")
                 else:
@@ -924,6 +932,11 @@ def run_pipeline_benchmark(
             
             estimator = get_depth_estimator(depth_method)
             
+            # Check if this is a metric depth estimator (no scaling needed)
+            is_metric = estimator.is_metric() if callable(getattr(estimator, 'is_metric', None)) else False
+            if is_metric:
+                logger.info(f"    {depth_method} outputs metric depth - no scaling needed")
+            
             # First pass: estimate all depths and compute global scale
             raw_depths = []
             scales = []
@@ -933,23 +946,26 @@ def run_pipeline_benchmark(
                 pred_depth = result.depth.copy()
                 raw_depths.append(pred_depth)
                 
-                # Compute scale from frames with GT depth
-                gt_depth = frame.depth
-                if gt_depth is not None:
-                    valid_gt = (gt_depth > 0.1) & (gt_depth < 10)
-                    valid_pred = pred_depth > 0.01
-                    valid = valid_gt & valid_pred
-                    
-                    if valid.sum() > 100:
-                        gt_median = np.median(gt_depth[valid])
-                        pred_median = np.median(pred_depth[valid])
-                        if pred_median > 0.01:
-                            scale = gt_median / pred_median
-                            if 0.1 < scale < 100:
-                                scales.append(scale)
+                # Compute scale from frames with GT depth (only for non-metric methods)
+                if not is_metric:
+                    gt_depth = frame.depth
+                    if gt_depth is not None:
+                        valid_gt = (gt_depth > 0.1) & (gt_depth < 10)
+                        valid_pred = pred_depth > 0.01
+                        valid = valid_gt & valid_pred
+                        
+                        if valid.sum() > 100:
+                            gt_median = np.median(gt_depth[valid])
+                            pred_median = np.median(pred_depth[valid])
+                            if pred_median > 0.01:
+                                scale = gt_median / pred_median
+                                if 0.1 < scale < 100:
+                                    scales.append(scale)
             
-            # Compute global scale
-            if scales:
+            # Compute global scale - only for non-metric methods
+            if is_metric:
+                global_scale = 1.0  # No scaling for metric depth
+            elif scales:
                 global_scale = np.median(scales)
                 logger.info(f"    Global depth scale: {global_scale:.4f}")
             else:
@@ -1733,7 +1749,7 @@ def main():
                         default=['orb', 'sift', 'robust_flow'],
                         help='Pose methods to test')
     parser.add_argument('--depth-methods', nargs='+', 
-                        default=['midas', 'depth_anything_v3'],
+                        default=['midas', 'depth_anything_v3', 'depth_pro'],
                         help='Depth methods to test')
     parser.add_argument('--gs-engines', nargs='+', 
                         default=['graphdeco', 'gsplat'],
