@@ -612,9 +612,9 @@ def run_depth_benchmark(
                         pred_depth = raw_depth * global_scale
                         pred_depth = np.clip(pred_depth, 0.0, 15.0)
                     
-                    # Compute AbsRel for frames with GT
+                    # Compute AbsRel only for valid frames with GT
                     gt_depth = frame.depth
-                    if gt_depth is not None:
+                    if gt_depth is not None and pred_depth is not None:
                         valid_gt = (gt_depth > 0.1) & (gt_depth < 10)
                         valid_pred = pred_depth > 0.05
                         valid = valid_gt & valid_pred
@@ -969,8 +969,9 @@ def run_pipeline_benchmark(
                     pred_depth = raw_depth * global_scale
                     pred_depth = np.clip(pred_depth, 0.0, 15.0)
                 
+                # Compute AbsRel only for valid frames
                 gt_depth = frame.depth
-                if gt_depth is not None:
+                if gt_depth is not None and pred_depth is not None:
                     valid_gt = (gt_depth > 0.1) & (gt_depth < 10)
                     valid_pred = pred_depth > 0.05
                     valid = valid_gt & valid_pred
