@@ -517,26 +517,30 @@ def run_depth_benchmark(
     methods: List[str] = None,
     max_frames: int = 50,
     skip_frames: int = 5,
+    cache_dir: Path = None,
 ) -> List[Dict]:
-    """Run depth estimation benchmark on a single dataset."""
+    """Run depth estimation benchmark on a single dataset.
+    
+    If cache_dir is provided, also saves the estimated depth maps for pipeline reuse.
+    """
     from benchmarks.depth.benchmark_depth import run_depth_benchmark as _run_depth
+    from src.depth import get_depth_estimator
     from dataclasses import asdict
     
     if methods is None:
         methods = ['midas', 'midas_small']
     
     results = []
+    estimated_depths = {}
+    gt_depths = []
+    depth_errors = {}
+    frames_loaded = False
+    frames = None
+    
     for method in methods:
         try:
             # Clear GPU memory before each method
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                import gc
-                gc.collect()
-            except ImportError:
-                pass
+            safe_cuda_cleanup()
             
             logger.info(f"  Testing {method}...")
             result = _run_depth(
@@ -548,8 +552,82 @@ def run_depth_benchmark(
             result_dict = asdict(result)
             results.append(result_dict)
             logger.info(f"    AbsRel={result.abs_rel:.4f}, d1={result.delta1:.2%}, FPS={result.fps:.1f}")
+            
+            # If caching requested, also estimate and save depths
+            if cache_dir is not None:
+                # Load frames once (lazy)
+                if not frames_loaded:
+                    from src.pipeline.frames import TumRGBDSource, SevenScenesSource, ReplicaSource
+                    dataset_type = 'tum'
+                    if (dataset_path / "traj.txt").exists():
+                        dataset_type = 'replica'
+                    elif list(dataset_path.glob("seq-*")):
+                        dataset_type = '7scenes'
+                    
+                    if dataset_type == 'tum':
+                        source = TumRGBDSource(str(dataset_path))
+                    elif dataset_type == '7scenes':
+                        source = SevenScenesSource(str(dataset_path))
+                    else:
+                        source = ReplicaSource(str(dataset_path))
+                    
+                    all_frames = list(source)
+                    if max_frames and len(all_frames) > max_frames:
+                        all_frames = all_frames[:max_frames]
+                    if skip_frames > 1:
+                        all_frames = all_frames[::skip_frames]
+                    frames = all_frames
+                    gt_depths = [f.depth for f in frames]
+                    frames_loaded = True
+                
+                # Re-estimate depths for caching (with proper scaling)
+                estimator = get_depth_estimator(method)
+                depths = []
+                abs_rels = []
+                
+                for frame in frames:
+                    pred = estimator.estimate(frame.rgb)
+                    pred_depth = pred.depth.copy() if hasattr(pred, 'depth') else pred.copy()
+                    
+                    gt_depth = frame.depth
+                    if gt_depth is not None:
+                        valid_gt = (gt_depth > 0.1) & (gt_depth < 10)
+                        valid_pred = pred_depth > 0.01
+                        valid = valid_gt & valid_pred
+                        
+                        if valid.sum() > 100:
+                            gt_median = np.median(gt_depth[valid])
+                            pred_median = np.median(pred_depth[valid])
+                            if pred_median > 0.01:
+                                scale = gt_median / pred_median
+                                if 0.01 < scale < 1000:
+                                    pred_depth = pred_depth * scale
+                                    pred_depth = np.clip(pred_depth, 0.0, 15.0)
+                                    pred_depth[pred.depth < 0.001] = 0.0
+                                    
+                                    abs_rel = np.mean(np.abs(pred_depth[valid] - gt_depth[valid]) / gt_depth[valid])
+                                    abs_rels.append(abs_rel)
+                    
+                    depths.append(pred_depth)
+                
+                estimated_depths[method] = depths
+                depth_errors[method] = np.mean(abs_rels) if abs_rels else float('inf')
+                
+                # Cleanup estimator
+                if hasattr(estimator, 'cleanup'):
+                    estimator.cleanup()
+                del estimator
+                safe_cuda_cleanup()
+                
         except Exception as e:
             logger.error(f"    {method} failed: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # Save cached depths if requested
+    if cache_dir is not None and estimated_depths:
+        dataset_name = dataset_path.name
+        save_depth_cache(estimated_depths, gt_depths, depth_errors, cache_dir, dataset_name)
     
     return results
 
@@ -1877,8 +1955,12 @@ def main():
             print("-" * 40)
             if hardware_monitor:
                 hardware_monitor.mark(f"depth_{dataset_name}")
+            
+            # Cache depths for later use by pipeline
+            depth_cache_dir = output_dir if output_dir else None
             depth_results = run_depth_benchmark(
-                dataset, args.depth_methods, depth_frames, skip_frames=depth_skip
+                dataset, args.depth_methods, depth_frames, skip_frames=depth_skip,
+                cache_dir=depth_cache_dir
             )
             for r in depth_results:
                 r['dataset'] = dataset_name
