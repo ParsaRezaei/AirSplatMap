@@ -263,7 +263,7 @@ def save_pose_cache(
     dataset_name: str
 ):
     """Save estimated poses and ground truth for pipeline reuse and trajectory visualization."""
-    cache_dir = output_dir / "cache" / dataset_name
+    cache_dir = output_dir / "cache" / dataset_name / "pose"
     cache_dir.mkdir(parents=True, exist_ok=True)
     
     # Save ground truth poses (N, 4, 4)
@@ -291,7 +291,7 @@ def save_depth_cache(
     dataset_name: str
 ):
     """Save estimated depths and ground truth for pipeline reuse."""
-    cache_dir = output_dir / "cache" / dataset_name
+    cache_dir = output_dir / "cache" / dataset_name / "depth"
     cache_dir.mkdir(parents=True, exist_ok=True)
     
     # Save ground truth depths (compressed, can be large)
@@ -317,7 +317,7 @@ def load_pose_cache(output_dir: Path, dataset_name: str) -> Tuple[Optional[np.nd
     Returns:
         (gt_poses, estimated_poses, pose_errors, frame_indices)
     """
-    cache_dir = output_dir / "cache" / dataset_name
+    cache_dir = output_dir / "cache" / dataset_name / "pose"
     
     if not cache_dir.exists():
         return None, {}, {}, None
@@ -358,7 +358,7 @@ def load_pose_cache(output_dir: Path, dataset_name: str) -> Tuple[Optional[np.nd
 
 def load_depth_cache(output_dir: Path, dataset_name: str) -> Tuple[Optional[List[np.ndarray]], Dict[str, List[np.ndarray]], Dict[str, float]]:
     """Load cached depth estimates if available."""
-    cache_dir = output_dir / "cache" / dataset_name
+    cache_dir = output_dir / "cache" / dataset_name / "depth"
     
     if not cache_dir.exists():
         return None, {}, {}
@@ -426,15 +426,8 @@ def run_pose_benchmark(
     
     for method in methods:
         try:
-            # Clear GPU memory before each method
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                import gc
-                gc.collect()
-            except ImportError:
-                pass
+            # Clear GPU memory before each method (safely)
+            safe_cuda_cleanup()
             
             logger.info(f"  Testing {method}...")
             
@@ -489,15 +482,8 @@ def run_pose_benchmark(
             import traceback
             traceback.print_exc()
         finally:
-            # Force cleanup after each method
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                import gc
-                gc.collect()
-            except ImportError:
-                pass
+            # Force cleanup after each method (safely)
+            safe_cuda_cleanup()
     
     # Log final cache status
     if cache_dir is not None and cached_poses:
@@ -515,16 +501,16 @@ def run_pose_benchmark(
 def run_depth_benchmark(
     dataset_path: Path,
     methods: List[str] = None,
-    max_frames: int = 50,
-    skip_frames: int = 5,
     cache_dir: Path = None,
 ) -> List[Dict]:
     """Run depth estimation benchmark on a single dataset.
     
-    If cache_dir is provided, also saves the estimated depth maps for pipeline reuse.
+    Processes ALL frames and saves to cache for pipeline reuse.
+    Benchmark metrics are computed on a subset for speed.
     """
     from benchmarks.depth.benchmark_depth import run_depth_benchmark as _run_depth
     from src.depth import get_depth_estimator
+    from src.pipeline.frames import TumRGBDSource, SevenScenesSource, ReplicaSource
     from dataclasses import asdict
     
     if methods is None:
@@ -534,58 +520,55 @@ def run_depth_benchmark(
     estimated_depths = {}
     gt_depths = []
     depth_errors = {}
-    frames_loaded = False
-    frames = None
+    
+    # Load ALL frames for caching
+    dataset_type = 'tum'
+    if (dataset_path / "traj.txt").exists():
+        dataset_type = 'replica'
+    elif list(dataset_path.glob("seq-*")):
+        dataset_type = '7scenes'
+    
+    if dataset_type == 'tum':
+        source = TumRGBDSource(str(dataset_path))
+    elif dataset_type == '7scenes':
+        source = SevenScenesSource(str(dataset_path))
+    else:
+        source = ReplicaSource(str(dataset_path))
+    
+    all_frames = list(source)
+    total_frames = len(all_frames)
+    logger.info(f"  Loaded {total_frames} frames for depth estimation")
+    
+    # For benchmark metrics, use a subset (every Nth frame, max 100)
+    metric_skip = max(1, total_frames // 100)
     
     for method in methods:
         try:
-            # Clear GPU memory before each method
             safe_cuda_cleanup()
-            
             logger.info(f"  Testing {method}...")
+            
+            # Run benchmark on subset for metrics
             result = _run_depth(
                 method=method,
                 dataset_path=str(dataset_path),
-                max_frames=max_frames,
-                skip_frames=skip_frames,
+                max_frames=100,
+                skip_frames=metric_skip,
             )
             result_dict = asdict(result)
             results.append(result_dict)
             logger.info(f"    AbsRel={result.abs_rel:.4f}, d1={result.delta1:.2%}, FPS={result.fps:.1f}")
             
-            # If caching requested, also estimate and save depths
+            # Now estimate ALL frames for caching
             if cache_dir is not None:
-                # Load frames once (lazy)
-                if not frames_loaded:
-                    from src.pipeline.frames import TumRGBDSource, SevenScenesSource, ReplicaSource
-                    dataset_type = 'tum'
-                    if (dataset_path / "traj.txt").exists():
-                        dataset_type = 'replica'
-                    elif list(dataset_path.glob("seq-*")):
-                        dataset_type = '7scenes'
-                    
-                    if dataset_type == 'tum':
-                        source = TumRGBDSource(str(dataset_path))
-                    elif dataset_type == '7scenes':
-                        source = SevenScenesSource(str(dataset_path))
-                    else:
-                        source = ReplicaSource(str(dataset_path))
-                    
-                    all_frames = list(source)
-                    if max_frames and len(all_frames) > max_frames:
-                        all_frames = all_frames[:max_frames]
-                    if skip_frames > 1:
-                        all_frames = all_frames[::skip_frames]
-                    frames = all_frames
-                    gt_depths = [f.depth for f in frames]
-                    frames_loaded = True
-                
-                # Re-estimate depths for caching (with proper scaling)
+                logger.info(f"    Caching all {total_frames} depth maps...")
                 estimator = get_depth_estimator(method)
                 depths = []
                 abs_rels = []
                 
-                for frame in frames:
+                for i, frame in enumerate(all_frames):
+                    if i % 100 == 0 and i > 0:
+                        logger.info(f"      Frame {i}/{total_frames}")
+                    
                     pred = estimator.estimate(frame.rgb)
                     pred_depth = pred.depth.copy() if hasattr(pred, 'depth') else pred.copy()
                     
@@ -613,24 +596,27 @@ def run_depth_benchmark(
                 estimated_depths[method] = depths
                 depth_errors[method] = np.mean(abs_rels) if abs_rels else float('inf')
                 
-                # Cleanup estimator
+                # Store GT depths once
+                if not gt_depths:
+                    gt_depths = [f.depth for f in all_frames]
+                
                 if hasattr(estimator, 'cleanup'):
                     estimator.cleanup()
                 del estimator
                 safe_cuda_cleanup()
+                logger.info(f"    Cached {len(depths)} depth maps")
                 
         except Exception as e:
             logger.error(f"    {method} failed: {e}")
             import traceback
             traceback.print_exc()
     
-    # Save cached depths if requested
+    # Save cached depths
     if cache_dir is not None and estimated_depths:
         dataset_name = dataset_path.name
         save_depth_cache(estimated_depths, gt_depths, depth_errors, cache_dir, dataset_name)
     
     return results
-
 
 # =============================================================================
 # Gaussian Splatting Benchmark  
@@ -715,17 +701,13 @@ def run_pipeline_benchmark(
     gs_engine: str = 'gsplat',
     pose_methods: List[str] = None,
     depth_methods: List[str] = None,
-    max_frames: int = 50,
+    max_frames: int = 100,
     iterations: int = 5,
-    # Cached data to avoid re-computation
-    cached_gt_poses: np.ndarray = None,
+    # Cached data from pose/depth benchmarks (ALL frames)
     cached_poses: Dict[str, np.ndarray] = None,
     cached_depths: Dict[str, List[np.ndarray]] = None,
     cached_pose_errors: Dict[str, float] = None,
     cached_depth_errors: Dict[str, float] = None,
-    cached_frame_indices: np.ndarray = None,  # Which frames were used for pose benchmark
-    # Output directory for saving cache
-    output_dir: Path = None,
 ) -> Tuple[List[Dict], bool]:
     """
     Run combined pipeline benchmark with different pose/depth sources.
@@ -738,8 +720,9 @@ def run_pipeline_benchmark(
     
     Returns:
         Tuple of (results list, cuda_healthy boolean)
-    If cached_poses/cached_depths are provided, uses those instead of re-computing.
-    Uses cached_frame_indices to ensure we use the SAME frames as pose benchmark.
+    
+    Uses cached poses/depths from pose and depth benchmarks.
+    Uniformly samples frames for GS testing.
     """
     from src.engines import get_engine
     from src.pose import get_pose_estimator
@@ -761,29 +744,19 @@ def run_pipeline_benchmark(
     all_frames = list(source)
     total_frames = len(all_frames)
     
-    # Use cached frame indices if available (same frames as pose benchmark)
-    # Otherwise sample uniformly
-    if cached_frame_indices is not None and len(cached_frame_indices) > 0:
-        # Use exact same frames as pose benchmark
-        indices = cached_frame_indices
-        if max_frames < len(indices):
-            # Subsample from cached frames if needed (for GS memory constraints)
-            subsample_idx = np.linspace(0, len(indices) - 1, max_frames, dtype=int)
-            indices = indices[subsample_idx]
-        frames = [all_frames[i] for i in indices]
-        logger.info(f"  Using {len(frames)} frames from pose benchmark cache (total: {total_frames})")
-    elif total_frames <= max_frames:
-        frames = all_frames
+    # Uniform sampling: pick frames evenly distributed across sequence
+    if total_frames <= max_frames:
         indices = np.arange(total_frames)
+        frames = all_frames
+        logger.info(f"  Using all {total_frames} frames")
     else:
-        # Uniform sampling: pick frames evenly distributed across sequence
         indices = np.linspace(0, total_frames - 1, max_frames, dtype=int)
         frames = [all_frames[i] for i in indices]
         logger.info(f"  Uniformly sampled {max_frames} frames from {total_frames} total")
     
     if not frames:
         logger.error(f"No frames found in {dataset_path}")
-        return []
+        return [], True
     
     intrinsics = frames[0].intrinsics
     image_size = (frames[0].rgb.shape[1], frames[0].rgb.shape[0])
@@ -820,40 +793,28 @@ def run_pipeline_benchmark(
         for method in pose_methods:
             if method in cached_poses:
                 cached = cached_poses[method]
-                # If we subsampled from cache, we need matching poses
-                if len(cached) >= len(frames):
-                    if cached_frame_indices is not None and len(cached) == len(cached_frame_indices):
-                        # Full cache available, subsample to match our frames
-                        if len(indices) < len(cached):
-                            # Find which cached poses match our subsampled indices
-                            cache_idx_set = set(cached_frame_indices.tolist())
-                            pose_list = []
-                            for i, idx in enumerate(indices):
-                                if idx in cache_idx_set:
-                                    cache_pos = list(cached_frame_indices).index(idx)
-                                    pose_list.append(cached[cache_pos])
-                                else:
-                                    # Fallback to nearest cached pose
-                                    nearest = min(range(len(cached_frame_indices)), 
-                                                  key=lambda x: abs(cached_frame_indices[x] - idx))
-                                    pose_list.append(cached[nearest])
-                            estimated_poses[method] = pose_list
-                        else:
-                            estimated_poses[method] = [cached[i] for i in range(len(frames))]
-                    else:
-                        estimated_poses[method] = [cached[i] for i in range(len(frames))]
+                # Cache has ALL frames, extract the ones we need by index
+                if len(cached) >= total_frames:
+                    estimated_poses[method] = [cached[i] for i in indices]
+                    logger.info(f"  Using cached poses for {method} ({len(estimated_poses[method])} poses from {len(cached)} cached)")
+                elif len(cached) >= len(frames):
+                    estimated_poses[method] = cached[:len(frames)]
                     logger.info(f"  Using cached poses for {method} ({len(estimated_poses[method])} poses)")
                 else:
                     logger.warning(f"  Cached poses for {method} have {len(cached)} frames, need {len(frames)}")
             else:
                 logger.warning(f"  No cached poses for {method}, will compute")
     
-    # Use cached depths if available
+    # Use cached depths if available (cache has ALL frames)
     if cached_depths:
         for method in depth_methods:
             if method in cached_depths:
                 cached = cached_depths[method]
-                if len(cached) >= len(frames):
+                # Cache has ALL frames, extract the ones we need by index
+                if len(cached) >= total_frames:
+                    estimated_depths[method] = [cached[i] for i in indices]
+                    logger.info(f"  Using cached depths for {method} ({len(estimated_depths[method])} depths from {len(cached)} cached)")
+                elif len(cached) >= len(frames):
                     estimated_depths[method] = cached[:len(frames)]
                     logger.info(f"  Using cached depths for {method}")
                 else:
@@ -997,16 +958,6 @@ def run_pipeline_benchmark(
                     estimator.cleanup()
                 del estimator
             safe_cuda_cleanup()
-    
-    # Save computed poses/depths to cache for reuse by subsequent GS engines
-    if output_dir and (estimated_poses or estimated_depths):
-        gt_poses = [f.pose for f in frames]
-        gt_depths = [f.depth for f in frames]
-        
-        if estimated_poses:
-            save_pose_cache(estimated_poses, gt_poses, pose_errors, output_dir, dataset_name)
-        if estimated_depths:
-            save_depth_cache(estimated_depths, gt_depths, depth_errors, output_dir, dataset_name)
     
     # Track CUDA health across tests - check initial state
     cuda_healthy = check_cuda_health()
@@ -1789,21 +1740,18 @@ def main():
     run_all = args.all or not (args.pose or args.depth or args.gs or args.pipeline)
     
     # Quick mode settings
-    # Pose ALWAYS runs on ALL frames for accurate trajectory and good visualization
-    # GS/depth subsample from cached pose frames
+    # Pose and Depth benchmarks run on ALL frames to build complete cache
+    # Pipeline uniformly samples from cache for GS testing
     if args.quick:
         pose_frames = None  # None = ALL frames
-        depth_frames, gs_frames = 50, 50
+        depth_frames = None  # None = ALL frames
+        pipeline_frames = 50  # Uniform sample for GS
         gs_iterations = 3
-        depth_skip = 3  # Skip more in quick mode
-        pose_skip = 2   # Skip every other frame for speed in quick mode
     else:
         pose_frames = None  # None = ALL frames for accurate ATE
-        depth_frames = min(args.max_frames, 150)  # Subsample for depth
-        gs_frames = min(args.max_frames, 150)     # Subsample for GS
+        depth_frames = None  # None = ALL frames for complete cache
+        pipeline_frames = min(args.max_frames, 100)  # Uniform sample for GS
         gs_iterations = 5
-        depth_skip = 2  # Denser sampling
-        pose_skip = 1   # Process every frame
     
     # Find datasets
     dataset_root = PROJECT_ROOT / "datasets"
@@ -1915,12 +1863,27 @@ def main():
         'per_dataset': {},  # Results grouped by dataset
     }
     
+    # Track global CUDA health across datasets
+    global_cuda_healthy = True
+    
     # Run benchmarks on each dataset
     for dataset_idx, dataset in enumerate(datasets):
         dataset_name = dataset.name
         print(f"\n{'='*80}")
         print(f"  DATASET {dataset_idx + 1}/{len(datasets)}: {dataset_name}")
         print(f"{'='*80}")
+        
+        # Check CUDA health before starting a new dataset
+        if not global_cuda_healthy:
+            logger.error(f"Skipping {dataset_name} - CUDA context corrupted from previous dataset")
+            print(f"  SKIPPED - CUDA context corrupted")
+            continue
+        
+        if not check_cuda_health():
+            logger.error(f"CUDA unhealthy before {dataset_name} - skipping remaining datasets")
+            global_cuda_healthy = False
+            print(f"  SKIPPED - CUDA context corrupted")
+            continue
         
         dataset_results = {
             'pose': [],
@@ -1956,10 +1919,10 @@ def main():
             if hardware_monitor:
                 hardware_monitor.mark(f"depth_{dataset_name}")
             
-            # Cache depths for later use by pipeline
+            # Cache depths for later use by pipeline (processes ALL frames)
             depth_cache_dir = output_dir if output_dir else None
             depth_results = run_depth_benchmark(
-                dataset, args.depth_methods, depth_frames, skip_frames=depth_skip,
+                dataset, args.depth_methods,
                 cache_dir=depth_cache_dir
             )
             for r in depth_results:
@@ -1996,17 +1959,14 @@ def main():
             pipeline_pose_methods = [m for m in fast_pose_methods if m in args.pose_methods] or ['orb']
             pipeline_depth_methods = args.depth_methods if dataset_results['depth'] else ['midas']
             
-            # Try to load cached poses/depths from this benchmark run
-            cached_gt_poses, cached_poses, cached_pose_errors, cached_frame_indices = load_pose_cache(output_dir, dataset_name)
-            cached_gt_depths, cached_depths, cached_depth_errors = load_depth_cache(output_dir, dataset_name)
+            # Load cached poses/depths from pose and depth benchmarks (ALL frames)
+            _, cached_poses, cached_pose_errors, _ = load_pose_cache(output_dir, dataset_name)
+            _, cached_depths, cached_depth_errors = load_depth_cache(output_dir, dataset_name)
             
-            # If no cache, we need to compute for pipeline (first engine will compute, others reuse)
-            # We'll cache after first engine runs
-            first_engine_poses = None
-            first_engine_depths = None
-            first_engine_pose_errors = None
-            first_engine_depth_errors = None
-            first_engine_frame_indices = None
+            if cached_poses:
+                logger.info(f"  Loaded cached poses: {list(cached_poses.keys())}")
+            if cached_depths:
+                logger.info(f"  Loaded cached depths: {list(cached_depths.keys())}")
             
             # Run pipeline benchmark for EACH GS engine
             pipeline_engines = args.gs_engines if args.gs_engines else ['graphdeco']
@@ -2014,45 +1974,35 @@ def main():
             for i, engine in enumerate(pipeline_engines):
                 logger.info(f"  Running pipeline with {engine}...")
                 
-                # Use cached data if available (either from pose/depth benchmarks or previous engine)
-                use_cached_gt_poses = cached_gt_poses
-                use_cached_poses = cached_poses if cached_poses else first_engine_poses
-                use_cached_depths = cached_depths if cached_depths else first_engine_depths
-                use_cached_pose_errors = cached_pose_errors if cached_pose_errors else first_engine_pose_errors
-                use_cached_depth_errors = cached_depth_errors if cached_depth_errors else first_engine_depth_errors
-                use_cached_frame_indices = cached_frame_indices if cached_frame_indices is not None else first_engine_frame_indices
-                
                 engine_results, cuda_ok = run_pipeline_benchmark(
                     dataset,
                     dataset_type=dataset_types.get(str(dataset), 'tum'),
                     gs_engine=engine,
                     pose_methods=pipeline_pose_methods,
                     depth_methods=pipeline_depth_methods,
-                    max_frames=gs_frames,
+                    max_frames=pipeline_frames,
                     iterations=gs_iterations,
-                    cached_gt_poses=use_cached_gt_poses,
-                    cached_poses=use_cached_poses,
-                    cached_depths=use_cached_depths,
-                    cached_pose_errors=use_cached_pose_errors,
-                    cached_depth_errors=use_cached_depth_errors,
-                    cached_frame_indices=use_cached_frame_indices,
-                    output_dir=output_dir if i == 0 else None,  # Only save cache on first engine
+                    cached_poses=cached_poses,
+                    cached_depths=cached_depths,
+                    cached_pose_errors=cached_pose_errors,
+                    cached_depth_errors=cached_depth_errors,
                 )
                 pipeline_results.extend(engine_results)
                 
-                # If CUDA became unhealthy, skip remaining engines for this dataset
+                # If CUDA became unhealthy, skip remaining engines AND mark globally unhealthy
                 if not cuda_ok:
                     logger.warning(f"CUDA unhealthy after {engine}, skipping remaining pipeline engines")
+                    global_cuda_healthy = False
                     break
-                
-                # After first engine, try to load cached data for subsequent engines
-                if i == 0 and not cached_poses:
-                    _, first_engine_poses, first_engine_pose_errors, first_engine_frame_indices = load_pose_cache(output_dir, dataset_name)
-                    _, first_engine_depths, first_engine_depth_errors = load_depth_cache(output_dir, dataset_name)
             
             dataset_results['pipeline'] = pipeline_results
             all_results['pipeline'].extend(pipeline_results)
             print_pipeline_results(pipeline_results)
+        
+        # Check CUDA health after each dataset
+        if not check_cuda_health():
+            logger.warning(f"CUDA became unhealthy after {dataset_name}")
+            global_cuda_healthy = False
         
         # Store per-dataset results
         all_results['per_dataset'][dataset_name] = dataset_results
