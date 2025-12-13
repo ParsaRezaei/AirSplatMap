@@ -414,6 +414,31 @@ def run_pose_benchmark(
             result_dict = asdict(result)
             results.append(result_dict)
             logger.info(f"    ATE={result.ate_rmse:.4f}m, FPS={result.fps:.1f}")
+            
+            # Cache immediately after each method completes (incremental caching)
+            if cache_dir is not None and method in cached_poses:
+                dataset_name = dataset_path.name
+                dataset_cache = cache_dir / dataset_name
+                dataset_cache.mkdir(parents=True, exist_ok=True)
+                
+                # Save GT poses and frame indices (only once, from first method)
+                gt_file = dataset_cache / 'gt_poses.npy'
+                if not gt_file.exists():
+                    gt_poses = cached_poses[method]['gt']
+                    np.save(gt_file, gt_poses)
+                    frame_indices = cached_poses[method]['frame_indices']
+                    np.save(dataset_cache / 'frame_indices.npy', np.array(frame_indices))
+                
+                # Save this method's aligned poses
+                np.save(dataset_cache / f'{method}_poses.npy', cached_poses[method]['aligned'])
+                
+                # Update pose errors JSON with all completed methods
+                pose_errors = {r['method']: r['ate_rmse'] for r in results}
+                with open(dataset_cache / 'pose_errors.json', 'w') as f:
+                    json.dump(pose_errors, f)
+                
+                logger.info(f"    Cached {method} poses to {dataset_cache}")
+                
         except Exception as e:
             logger.error(f"    {method} failed: {e}")
             import traceback
@@ -429,32 +454,11 @@ def run_pose_benchmark(
             except ImportError:
                 pass
     
-    # Save cached poses
+    # Log final cache status
     if cache_dir is not None and cached_poses:
         dataset_name = dataset_path.name
         dataset_cache = cache_dir / dataset_name
-        dataset_cache.mkdir(parents=True, exist_ok=True)
-        
-        # Save GT poses (same for all methods)
-        if cached_poses:
-            first_method = list(cached_poses.keys())[0]
-            gt_poses = cached_poses[first_method]['gt']
-            np.save(dataset_cache / 'gt_poses.npy', gt_poses)
-            
-            # Save frame indices
-            frame_indices = cached_poses[first_method]['frame_indices']
-            np.save(dataset_cache / 'frame_indices.npy', np.array(frame_indices))
-        
-        # Save each method's aligned poses
-        for method, poses in cached_poses.items():
-            np.save(dataset_cache / f'{method}_poses.npy', poses['aligned'])
-        
-        # Save pose errors for quick lookup
-        pose_errors = {r['method']: r['ate_rmse'] for r in results}
-        with open(dataset_cache / 'pose_errors.json', 'w') as f:
-            json.dump(pose_errors, f)
-        
-        logger.info(f"  Cached poses to {dataset_cache} ({len(cached_poses)} methods, {len(gt_poses)} frames)")
+        logger.info(f"  Cached poses to {dataset_cache} ({len(cached_poses)} methods)")
     
     return results
 
