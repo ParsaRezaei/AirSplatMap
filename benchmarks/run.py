@@ -881,14 +881,36 @@ def run_pipeline_benchmark(
         if estimated_depths:
             save_depth_cache(estimated_depths, gt_depths, depth_errors, output_dir, dataset_name)
     
+    # Track CUDA health across tests
+    cuda_healthy = True
+    
     # Run GS with each configuration
     for config_name, pose_source, depth_source in configs:
         logger.info(f"  Testing {config_name} with {gs_engine}...")
+        
+        # Skip if CUDA is in a bad state
+        if not cuda_healthy:
+            logger.warning(f"  Skipping {config_name} due to previous CUDA error")
+            results.append({
+                'name': config_name,
+                'pose_source': pose_source,
+                'depth_source': depth_source,
+                'gs_engine': gs_engine,
+                'dataset': dataset_name,
+                'psnr': 0, 'ssim': 0, 'lpips': 0,
+                'total_time': 0, 'fps': 0, 'num_gaussians': 0,
+                'pose_ate': 0, 'depth_abs_rel': 0,
+                'error': 'Skipped due to CUDA error'
+            })
+            continue
         
         # Check GPU health before each test
         if torch.cuda.is_available():
             try:
                 torch.cuda.synchronize()
+                # Quick test to verify CUDA is working
+                test_tensor = torch.zeros(1, device='cuda')
+                del test_tensor
                 # Quick memory check
                 free_mem = torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_allocated(0)
                 if free_mem < 1e9:  # Less than 1GB free
@@ -897,15 +919,20 @@ def run_pipeline_benchmark(
                     gc.collect()
                     torch.cuda.empty_cache()
             except RuntimeError as e:
-                logger.error(f"CUDA error before test, attempting recovery: {e}")
-                import gc
-                gc.collect()
-                torch.cuda.empty_cache()
-                try:
-                    torch.cuda.synchronize()
-                except:
-                    logger.error("CUDA recovery failed, skipping remaining tests")
-                    break
+                logger.error(f"CUDA error before test: {e}")
+                cuda_healthy = False
+                results.append({
+                    'name': config_name,
+                    'pose_source': pose_source,
+                    'depth_source': depth_source,
+                    'gs_engine': gs_engine,
+                    'dataset': dataset_name,
+                    'psnr': 0, 'ssim': 0, 'lpips': 0,
+                    'total_time': 0, 'fps': 0, 'num_gaussians': 0,
+                    'pose_ate': 0, 'depth_abs_rel': 0,
+                    'error': f'CUDA error: {str(e)}'
+                })
+                continue
         
         try:
             torch.cuda.empty_cache()
@@ -990,22 +1017,66 @@ def run_pipeline_benchmark(
             logger.error(f"    Failed: {e}")
             import traceback
             traceback.print_exc()
+            
+            # Add failed result
+            results.append({
+                'name': config_name,
+                'pose_source': pose_source,
+                'depth_source': depth_source,
+                'gs_engine': gs_engine,
+                'dataset': dataset_name,
+                'psnr': 0, 'ssim': 0, 'lpips': 0,
+                'total_time': 0, 'fps': 0, 'num_gaussians': 0,
+                'pose_ate': float(pose_errors.get(pose_source, 0)) if pose_source != 'gt' else 0.0,
+                'depth_abs_rel': float(depth_errors.get(depth_source, 0)) if depth_source != 'gt' else 0.0,
+                'error': str(e)
+            })
+            
+            # Check if it's a CUDA error - if so, mark CUDA as unhealthy
+            if "CUDA error" in str(e) or "illegal memory access" in str(e).lower():
+                logger.warning("CUDA error detected - marking CUDA as unhealthy for remaining tests")
+                cuda_healthy = False
         finally:
             # Critical: Delete engine and free GPU memory aggressively
+            engine_instance = locals().get('engine', None)
             try:
-                if 'engine' in dir():
-                    del engine
-            except:
-                pass
+                if engine_instance is not None:
+                    # Call cleanup method if available
+                    if hasattr(engine_instance, 'cleanup'):
+                        try:
+                            engine_instance.cleanup()
+                        except Exception as cleanup_err:
+                            logger.warning(f"Engine cleanup error: {cleanup_err}")
+                    elif hasattr(engine_instance, 'reset'):
+                        try:
+                            engine_instance.reset()
+                        except Exception as reset_err:
+                            logger.warning(f"Engine reset error: {reset_err}")
+                    del engine_instance
+            except Exception as del_err:
+                logger.warning(f"Error deleting engine: {del_err}")
+            
+            # Ensure engine variable is cleared
+            engine = None
+            
             import gc
             gc.collect()
-            if torch.cuda.is_available():
-                # Synchronize to catch any async CUDA errors
-                torch.cuda.synchronize()
-                torch.cuda.empty_cache()
-                # Force garbage collection of CUDA tensors
-                gc.collect()
-                torch.cuda.empty_cache()
+            
+            if torch.cuda.is_available() and cuda_healthy:
+                # Try to synchronize and clear CUDA state
+                try:
+                    torch.cuda.synchronize()
+                    torch.cuda.empty_cache()
+                    gc.collect()
+                    torch.cuda.empty_cache()
+                    
+                    # Quick test to see if CUDA is still working
+                    test_tensor = torch.zeros(1, device='cuda')
+                    del test_tensor
+                    torch.cuda.empty_cache()
+                except RuntimeError as sync_err:
+                    logger.warning(f"CUDA error during cleanup: {sync_err}")
+                    cuda_healthy = False
     
     return results
 
