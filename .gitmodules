@@ -16,3 +16,6 @@
 [submodule "submodules/ml-depth-pro"]
 	path = submodules/ml-depth-pro
 	url = https://github.com/apple/ml-depth-pro.git
+[submodule "submodules/Depth-Anything-3"]
+	path = submodules/Depth-Anything-3
+	url = https://github.com/ByteDance-Seed/Depth-Anything-3.git
