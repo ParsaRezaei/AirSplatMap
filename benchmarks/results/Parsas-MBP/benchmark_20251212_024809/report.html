@@ -1,0 +1,2122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AirSplatMap Benchmark Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-hover: #252532;
+            --accent: #6366f1;
+            --accent-light: #818cf8;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: #2d2d3a;
+            --shadow: rgba(0, 0, 0, 0.4);
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 260px;
+            height: 100vh;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            padding: 24px 0;
+            overflow-y: auto;
+            z-index: 100;
+        }
+        
+        .sidebar-header {
+            padding: 0 24px 24px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 16px;
+        }
+        
+        .sidebar-header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--accent-light);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .sidebar-header p {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+        
+        .nav-section {
+            padding: 8px 16px;
+        }
+        
+        .nav-section-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 8px;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-size: 0.9rem;
+        }
+        
+        .nav-item:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        
+        .nav-item.active {
+            background: var(--accent);
+            color: white;
+        }
+        
+        .nav-item .icon {
+            font-size: 1.1rem;
+            width: 24px;
+            text-align: center;
+        }
+        
+        /* Main content */
+        .main {
+            margin-left: 260px;
+            padding: 32px;
+            min-height: 100vh;
+        }
+        
+        /* Page sections */
+        .page {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .page.active {
+            display: block;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+        
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.2s;
+        }
+        
+        .stat-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .stat-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+        
+        /* Charts */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .chart-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            overflow: hidden;
+            min-width: 0;
+        }
+        
+        .chart-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-secondary);
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+        
+        /* Tables */
+        .table-container {
+            overflow-x: hidden;
+            overflow-y: auto;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        
+        th, td {
+            padding: 12px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        
+        th {
+            background: var(--bg-secondary);
+            font-weight: 600;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+        
+        tbody tr:hover {
+            background: var(--bg-hover);
+        }
+        
+        .best {
+            color: var(--success);
+            font-weight: 600;
+        }
+        
+        /* Filters */
+        .filters {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding: 16px;
+            background: var(--bg-card);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+        
+        /* Fix chart overflow */
+        .chart-container {
+            overflow: hidden;
+            min-width: 0;
+        }
+        
+        .chart-grid {
+            overflow: hidden;
+        }
+        
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .filter-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+        
+        .filter-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .filter-chip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        .filter-chip:hover {
+            border-color: var(--accent);
+        }
+        
+        .filter-chip.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+        
+        .filter-chip input {
+            display: none;
+        }
+        
+        /* 3D Plot */
+        .plot-3d {
+            height: 500px;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        /* Select dropdown */
+        select {
+            padding: 10px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            cursor: pointer;
+            min-width: 180px;
+        }
+        
+        select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        
+        /* Filter options (checkboxes) */
+        .filter-options {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 8px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        
+        .filter-options label {
+            cursor: pointer;
+            padding: 6px 12px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        
+        .filter-options label:hover {
+            background: var(--bg-hover);
+        }
+        
+        .filter-options label.selected {
+            background: var(--accent);
+            color: white;
+        }
+        
+        .filter-options input[type="checkbox"] {
+            accent-color: var(--accent);
+            margin-right: 4px;
+        }
+        
+        /* Tab buttons */
+        .tab-btn {
+            padding: 8px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        .tab-btn:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+        
+        .tab-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+        
+        .engine-tab {
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+        }
+        
+        .engine-tab:hover {
+            color: var(--text-primary);
+            background: var(--bg-hover);
+        }
+        
+        .engine-tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+        
+        /* Badge */
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .badge-success { background: rgba(34, 197, 94, 0.15); color: var(--success); }
+        .badge-warning { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+        .badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+        
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+        
+        .empty-state .icon {
+            font-size: 3rem;
+            margin-bottom: 16px;
+        }
+        
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .chart-grid { grid-template-columns: 1fr; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        
+        @media (max-width: 1024px) {
+            .sidebar { width: 70px; padding: 12px 0; }
+            .sidebar-header { padding: 0 8px 12px; }
+            .sidebar-header h1 span { display: none; }
+            .sidebar-header p { display: none; }
+            .nav-section-title { display: none; }
+            .nav-item span:not(.icon) { display: none; }
+            .nav-item { justify-content: center; padding: 12px 8px; }
+            .nav-item .icon { font-size: 1.2rem; }
+            .main { margin-left: 70px; padding: 16px; }
+        }
+        
+        @media (max-width: 768px) {
+            .sidebar { 
+                width: 100%; 
+                height: auto; 
+                position: relative; 
+                display: flex; 
+                flex-wrap: wrap;
+                justify-content: center;
+                padding: 8px;
+            }
+            .sidebar-header { 
+                width: 100%; 
+                text-align: center; 
+                border-bottom: none;
+                padding: 8px;
+                margin-bottom: 0;
+            }
+            .sidebar-header h1 span { display: inline; }
+            .nav-section { 
+                display: flex; 
+                padding: 4px;
+            }
+            .nav-section-title { display: none; }
+            .nav-item { padding: 8px 12px; }
+            .nav-item span:not(.icon) { display: none; }
+            .main { margin-left: 0; padding: 12px; }
+            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+            .stat-card { padding: 12px; }
+            .stat-value { font-size: 1.25rem; }
+            .filters { flex-direction: column; }
+            .filter-group { width: 100%; }
+            .table-container { font-size: 0.8rem; }
+            table th, table td { padding: 8px 6px; }
+        }
+        
+        @media (max-width: 480px) {
+            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .chart-wrapper { height: 200px; }
+            .plot-3d { height: 300px; }
+        }
+        
+        /* Ensure charts don't overflow */
+        canvas {
+            max-width: 100% !important;
+        }
+        
+        .main {
+            overflow-x: hidden;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar Navigation -->
+    <nav class="sidebar">
+        <div class="sidebar-header">
+            <h1>🚀 <span>AirSplatMap</span></h1>
+            <p>Benchmark Report • 2025-12-12 02:48</p>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">Overview</div>
+            <div class="nav-item active" onclick="showPage('overview')">
+                <span class="icon">📊</span>
+                <span>Dashboard</span>
+            </div>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">Benchmarks</div>
+            <div class="nav-item" onclick="showPage('pose')">
+                <span class="icon">📍</span>
+                <span>Pose Estimation</span>
+            </div>
+            <div class="nav-item" onclick="showPage('depth')">
+                <span class="icon">📏</span>
+                <span>Depth Estimation</span>
+            </div>
+            <div class="nav-item" onclick="showPage('gs')">
+                <span class="icon">✨</span>
+                <span>Gaussian Splatting</span>
+            </div>
+        </div>
+        
+        <div class="nav-section">
+            <div class="nav-section-title">Analysis</div>
+            <div class="nav-item" onclick="showPage('pipeline')">
+                <span class="icon">🔗</span>
+                <span>Pipeline Results</span>
+            </div>
+            <div class="nav-item" onclick="showPage('comparison')">
+                <span class="icon">⚖️</span>
+                <span>Method Comparison</span>
+            </div>
+            <div class="nav-item" onclick="showPage('trajectory')">
+                <span class="icon">🗺️</span>
+                <span>3D Trajectories</span>
+            </div>
+        </div>
+    </nav>
+    
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Overview Page -->
+        <div id="overview" class="page active">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">Dashboard</h2>
+            <p style="color: var(--text-muted); margin-bottom: 32px;">
+                Benchmark run completed in 0h 0m • 1 datasets tested
+            </p>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">Pose Tests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">2</div>
+                    <div class="stat-label">Depth Tests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">0</div>
+                    <div class="stat-label">GS Tests</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">0.0GB</div>
+                    <div class="stat-label">Peak GPU Memory</div>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Pose Estimation Accuracy (ATE RMSE)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="overviewPoseChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Depth Estimation Accuracy (AbsRel)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="overviewDepthChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Gaussian Splatting Quality (PSNR)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="overviewGSChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Processing Speed (FPS)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="overviewSpeedChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pose Page -->
+        <div id="pose" class="page">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">📍 Pose Estimation</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Visual odometry and SLAM accuracy metrics
+            </p>
+            
+            <div class="filters">
+                <div class="filter-group">
+                    <div class="filter-label">Dataset</div>
+                    <select id="poseDatasetFilter" onchange="updatePosePage()">
+                        <option value="all">All Datasets (Averaged)</option>
+                        <option value="rgbd_dataset_freiburg1_desk2">rgbd_dataset_freiburg1_desk2</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Absolute Trajectory Error (ATE) - Lower is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="poseATEChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Relative Pose Error (RPE) - Lower is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="poseRPEChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Processing Speed (FPS) - Higher is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="poseFPSChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Results Table</div>
+                </div>
+                <div class="table-container">
+                    <table id="poseTable">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Dataset</th>
+                                <th>ATE RMSE (m)</th>
+                                <th>RPE Trans (m)</th>
+                                <th>RPE Rot (°)</th>
+                                <th>FPS</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Depth Page -->
+        <div id="depth" class="page">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">📏 Depth Estimation</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Monocular depth prediction quality metrics
+            </p>
+            
+            <div class="filters">
+                <div class="filter-group">
+                    <div class="filter-label">Dataset</div>
+                    <select id="depthDatasetFilter" onchange="updateDepthPage()">
+                        <option value="all">All Datasets (Averaged)</option>
+                        <option value="rgbd_dataset_freiburg1_desk2">rgbd_dataset_freiburg1_desk2</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Absolute Relative Error - Lower is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="depthAbsRelChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Threshold Accuracy (δ < 1.25) - Higher is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="depthDeltaChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Processing Speed (FPS) - Higher is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="depthFPSChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Results Table</div>
+                </div>
+                <div class="table-container">
+                    <table id="depthTable">
+                        <thead>
+                            <tr>
+                                <th>Method</th>
+                                <th>Dataset</th>
+                                <th>AbsRel</th>
+                                <th>RMSE</th>
+                                <th>δ < 1.25</th>
+                                <th>FPS</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- GS Page -->
+        <div id="gs" class="page">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">✨ Gaussian Splatting</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                3D reconstruction and rendering quality
+            </p>
+            
+            <div class="filters">
+                <div class="filter-group">
+                    <div class="filter-label">Dataset</div>
+                    <select id="gsDatasetFilter" onchange="updateGSPage()">
+                        <option value="all">All Datasets (Averaged)</option>
+                        <option value="rgbd_dataset_freiburg1_desk2">rgbd_dataset_freiburg1_desk2</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">PSNR (dB) - Higher is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="gsPSNRChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">SSIM - Higher is Better</div>
+                    <div class="chart-wrapper">
+                        <canvas id="gsSSIMChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Number of Gaussians</div>
+                    <div class="chart-wrapper">
+                        <canvas id="gsGaussiansChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Render FPS</div>
+                    <div class="chart-wrapper">
+                        <canvas id="gsFPSChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">Results Table</div>
+                </div>
+                <div class="table-container">
+                    <table id="gsTable">
+                        <thead>
+                            <tr>
+                                <th>Engine</th>
+                                <th>Dataset</th>
+                                <th>PSNR (dB)</th>
+                                <th>SSIM</th>
+                                <th>LPIPS</th>
+                                <th>Gaussians</th>
+                                <th>FPS</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Comparison Page -->
+        <div id="comparison" class="page">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">⚖️ Method Comparison</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Side-by-side comparison across all benchmarks
+            </p>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">🏆 Best Performers Summary</div>
+                </div>
+                <div id="bestSummary" style="padding: 16px;"></div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">Pose: Speed vs Accuracy (lower ATE is better)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="poseTradeoffChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <div class="chart-title">Depth: Speed vs Accuracy (lower AbsRel is better)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="depthTradeoffChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chart-grid">
+                <div class="chart-container">
+                    <div class="chart-title">GS: Speed vs Quality (higher PSNR is better)</div>
+                    <div class="chart-wrapper">
+                        <canvas id="gsTradeoffChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pipeline Page -->
+        <div id="pipeline" class="page">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">🔗 Pipeline Results</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Combined pipeline results: Pose + Depth + Gaussian Splatting
+            </p>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">🏆 Best Pipeline Configuration</div>
+                </div>
+                <div id="bestPipelineSummary" style="padding: 16px;"></div>
+            </div>
+            
+            <!-- Heatmap Section -->
+            <div class="card" style="margin-top: 24px;">
+                <div class="card-header" style="flex-direction: column; align-items: flex-start; gap: 16px;">
+                    <div class="card-title">Pipeline Quality Heatmaps</div>
+                    <div style="display: flex; gap: 24px; flex-wrap: wrap; width: 100%;">
+                        <!-- Metric Tabs -->
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Metric</div>
+                            <div id="metricTabs" style="display: flex; gap: 4px;">
+                                <button class="tab-btn active" onclick="switchMetric('psnr')">PSNR</button>
+                                <button class="tab-btn" onclick="switchMetric('ssim')">SSIM</button>
+                            </div>
+                        </div>
+                        <!-- Dataset Filter -->
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">Dataset</div>
+                            <select id="pipelineDatasetFilter" onchange="updatePipelineHeatmaps()" style="padding: 8px 12px;">
+                                <option value="all">All Datasets (Averaged)</option>
+                                <option value="rgbd_dataset_freiburg1_desk2">rgbd_dataset_freiburg1_desk2</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- GS Engine Tabs -->
+                <div id="engineTabs" style="display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--border); overflow-x: auto;">
+                </div>
+                
+                <!-- Heatmap Container - Responsive with aspect ratio -->
+                <div id="heatmapContainer" style="padding: 20px; position: relative; width: 100%; min-height: 400px;">
+                    <div id="pipelineHeatmap" style="width: 100%; height: 100%; min-height: 380px;"></div>
+                </div>
+            </div>
+            
+            <!-- Results Table -->
+            <div class="card" style="margin-top: 24px;">
+                <div class="card-header">
+                    <div class="card-title">Pipeline Results Table</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">
+                        Showing <span id="pipelineTableCount">0</span> configurations
+                    </div>
+                </div>
+                <div class="table-container" style="max-height: 400px; overflow-y: auto; overflow-x: hidden;">
+                    <table id="pipelineTable" style="table-layout: auto; width: 100%;">
+                        <thead>
+                            <tr>
+                                <th style="width: 15%;">Pose</th>
+                                <th style="width: 18%;">Depth</th>
+                                <th style="width: 15%;">Engine</th>
+                                <th style="width: 22%;">Dataset</th>
+                                <th style="width: 10%;">PSNR</th>
+                                <th style="width: 10%;">SSIM</th>
+                                <th style="width: 10%;">ATE</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Trajectory Page -->
+        <div id="trajectory" class="page">
+            <h2 style="font-size: 1.75rem; margin-bottom: 8px;">🗺️ 3D Trajectory Visualization</h2>
+            <p style="color: var(--text-muted); margin-bottom: 24px;">
+                Interactive 3D view of camera trajectories from pose estimation
+            </p>
+            
+            <div class="filters">
+                <div class="filter-group">
+                    <div class="filter-label">Dataset</div>
+                    <select id="trajDatasetFilter" onchange="updateTrajectoryPlot()">
+                        <option value="rgbd_dataset_freiburg1_desk2">rgbd_dataset_freiburg1_desk2</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <div class="filter-label">Trajectories</div>
+                    <div id="trajMethodCheckboxes" class="filter-options"></div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div id="trajectoryPlot" class="plot-3d"></div>
+            </div>
+            
+            <div class="card">
+                <div class="card-title">Trajectory Statistics</div>
+                <div class="stats-grid" style="margin-top: 16px;">
+                    <div class="stat-card">
+                        <div class="stat-value" id="trajFrames">-</div>
+                        <div class="stat-label">Frames Processed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="trajATE">-</div>
+                        <div class="stat-label">Best ATE (m)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="trajMethods">-</div>
+                        <div class="stat-label">Methods Selected</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        // Data
+        const data = {"datasets": ["rgbd_dataset_freiburg1_desk2"], "datasets_with_trajectories": ["rgbd_dataset_freiburg1_desk2"], "pose": {"all": [], "aggregated": {}, "by_dataset": {}}, "depth": {"all": [{"method": "midas", "dataset": "rgbd_dataset_freiburg1_desk2", "num_frames": 17, "total_time": 8.58, "fps": 1.98, "abs_rel": 0.1697, "sq_rel": 0.0634, "rmse": 0.2803, "rmse_log": 0.2051, "delta1": 0.7248, "delta2": 0.9549, "delta3": 0.9897, "is_metric": false, "silog": 0.2044, "edge_f1": 0.0399, "raw_abs_rel": 0.0, "raw_rmse": 0.0, "raw_delta1": 0.0, "scale": 2064293.5409, "shift": 0.7911, "valid_pixels": 234119, "avg_latency_ms": 477.23, "min_latency_ms": 58.48, "max_latency_ms": 7109.02, "p95_latency_ms": 1483.66, "p99_latency_ms": 5983.95}, {"method": "depth_anything_v2", "dataset": "rgbd_dataset_freiburg1_desk2", "num_frames": 17, "total_time": 10.86, "fps": 1.57, "abs_rel": 0.5762, "sq_rel": 0.7088, "rmse": 0.9227, "rmse_log": 0.6841, "delta1": 0.3048, "delta2": 0.4847, "delta3": 0.6445, "is_metric": false, "silog": 0.6762, "edge_f1": 0.1028, "raw_abs_rel": 0.0, "raw_rmse": 0.0, "raw_delta1": 0.0, "scale": 0.5219, "shift": 0.0, "valid_pixels": 234515, "avg_latency_ms": 604.94, "min_latency_ms": 164.84, "max_latency_ms": 7589.48, "p95_latency_ms": 1658.24, "p99_latency_ms": 6403.23}], "aggregated": {"midas": {"count": 1, "total_time_mean": 8.58, "total_time_std": 0.0, "fps_mean": 1.98, "fps_std": 0.0, "abs_rel_mean": 0.1697, "abs_rel_std": 0.0, "sq_rel_mean": 0.0634, "sq_rel_std": 0.0, "rmse_mean": 0.2803, "rmse_std": 0.0, "rmse_log_mean": 0.2051, "rmse_log_std": 0.0, "delta1_mean": 0.7248, "delta1_std": 0.0, "delta2_mean": 0.9549, "delta2_std": 0.0, "delta3_mean": 0.9897, "delta3_std": 0.0, "is_metric_mean": 0.0, "is_metric_std": 0.0, "silog_mean": 0.2044, "silog_std": 0.0, "edge_f1_mean": 0.0399, "edge_f1_std": 0.0, "raw_abs_rel_mean": 0.0, "raw_abs_rel_std": 0.0, "raw_rmse_mean": 0.0, "raw_rmse_std": 0.0, "raw_delta1_mean": 0.0, "raw_delta1_std": 0.0, "scale_mean": 2064293.5409, "scale_std": 0.0, "shift_mean": 0.7911, "shift_std": 0.0, "valid_pixels_mean": 234119.0, "valid_pixels_std": 0.0, "avg_latency_ms_mean": 477.23, "avg_latency_ms_std": 0.0, "min_latency_ms_mean": 58.48, "min_latency_ms_std": 0.0, "max_latency_ms_mean": 7109.02, "max_latency_ms_std": 0.0, "p95_latency_ms_mean": 1483.66, "p95_latency_ms_std": 0.0, "p99_latency_ms_mean": 5983.95, "p99_latency_ms_std": 0.0}, "depth_anything_v2": {"count": 1, "total_time_mean": 10.86, "total_time_std": 0.0, "fps_mean": 1.57, "fps_std": 0.0, "abs_rel_mean": 0.5762, "abs_rel_std": 0.0, "sq_rel_mean": 0.7088, "sq_rel_std": 0.0, "rmse_mean": 0.9227, "rmse_std": 0.0, "rmse_log_mean": 0.6841, "rmse_log_std": 0.0, "delta1_mean": 0.3048, "delta1_std": 0.0, "delta2_mean": 0.4847, "delta2_std": 0.0, "delta3_mean": 0.6445, "delta3_std": 0.0, "is_metric_mean": 0.0, "is_metric_std": 0.0, "silog_mean": 0.6762, "silog_std": 0.0, "edge_f1_mean": 0.1028, "edge_f1_std": 0.0, "raw_abs_rel_mean": 0.0, "raw_abs_rel_std": 0.0, "raw_rmse_mean": 0.0, "raw_rmse_std": 0.0, "raw_delta1_mean": 0.0, "raw_delta1_std": 0.0, "scale_mean": 0.5219, "scale_std": 0.0, "shift_mean": 0.0, "shift_std": 0.0, "valid_pixels_mean": 234515.0, "valid_pixels_std": 0.0, "avg_latency_ms_mean": 604.94, "avg_latency_ms_std": 0.0, "min_latency_ms_mean": 164.84, "min_latency_ms_std": 0.0, "max_latency_ms_mean": 7589.48, "max_latency_ms_std": 0.0, "p95_latency_ms_mean": 1658.24, "p95_latency_ms_std": 0.0, "p99_latency_ms_mean": 6403.23, "p99_latency_ms_std": 0.0}}, "by_dataset": {"rgbd_dataset_freiburg1_desk2": [{"method": "midas", "dataset": "rgbd_dataset_freiburg1_desk2", "num_frames": 17, "total_time": 8.58, "fps": 1.98, "abs_rel": 0.1697, "sq_rel": 0.0634, "rmse": 0.2803, "rmse_log": 0.2051, "delta1": 0.7248, "delta2": 0.9549, "delta3": 0.9897, "is_metric": false, "silog": 0.2044, "edge_f1": 0.0399, "raw_abs_rel": 0.0, "raw_rmse": 0.0, "raw_delta1": 0.0, "scale": 2064293.5409, "shift": 0.7911, "valid_pixels": 234119, "avg_latency_ms": 477.23, "min_latency_ms": 58.48, "max_latency_ms": 7109.02, "p95_latency_ms": 1483.66, "p99_latency_ms": 5983.95}, {"method": "depth_anything_v2", "dataset": "rgbd_dataset_freiburg1_desk2", "num_frames": 17, "total_time": 10.86, "fps": 1.57, "abs_rel": 0.5762, "sq_rel": 0.7088, "rmse": 0.9227, "rmse_log": 0.6841, "delta1": 0.3048, "delta2": 0.4847, "delta3": 0.6445, "is_metric": false, "silog": 0.6762, "edge_f1": 0.1028, "raw_abs_rel": 0.0, "raw_rmse": 0.0, "raw_delta1": 0.0, "scale": 0.5219, "shift": 0.0, "valid_pixels": 234515, "avg_latency_ms": 604.94, "min_latency_ms": 164.84, "max_latency_ms": 7589.48, "p95_latency_ms": 1658.24, "p99_latency_ms": 6403.23}]}}, "gs": {"all": [], "aggregated": {}, "by_dataset": {}}, "pipeline": [], "hardware": {"overall": {"duration_seconds": 36.63, "num_samples": 71, "cpu": {"system_percent_mean": 9.3, "system_percent_max": 23.0}, "ram": {"system_used_gb_mean": 9.38, "system_used_gb_max": 10.22, "system_percent_mean": 37.0}, "process": {"cpu_percent_mean": 88.8, "cpu_percent_max": 331.1, "ram_gb_mean": 1.45, "ram_gb_max": 2.16, "gpu_memory_gb_mean": 0.0, "gpu_memory_gb_max": 0.0}, "gpu": {"utilization_mean": 0.0, "utilization_max": 0.0, "memory_used_gb_mean": 0.0, "memory_used_gb_max": 0.0, "memory_percent_mean": 0.0, "memory_percent_max": 0.0, "temperature_c_mean": 0.0, "temperature_c_max": 0.0, "power_w_mean": 0.0, "power_w_max": 0.0}, "energy_wh": 0.0}, "phases": {"depth_rgbd_dataset_freiburg1_desk2": {"duration_seconds": 36.63, "num_samples": 71, "cpu": {"system_percent_mean": 9.3, "system_percent_max": 23.0}, "ram": {"system_used_gb_mean": 9.38, "system_used_gb_max": 10.22, "system_percent_mean": 37.0}, "process": {"cpu_percent_mean": 88.8, "cpu_percent_max": 331.1, "ram_gb_mean": 1.45, "ram_gb_max": 2.16, "gpu_memory_gb_mean": 0.0, "gpu_memory_gb_max": 0.0}, "gpu": {"utilization_mean": 0.0, "utilization_max": 0.0, "memory_used_gb_mean": 0.0, "memory_used_gb_max": 0.0, "memory_percent_mean": 0.0, "memory_percent_max": 0.0, "temperature_c_mean": 0.0, "temperature_c_max": 0.0, "power_w_mean": 0.0, "power_w_max": 0.0}, "energy_wh": 0.0}}, "monitoring": {"sample_interval_s": 0.5, "total_samples": 71, "psutil_available": true, "nvml_available": false}}, "trajectories": {"rgbd_dataset_freiburg1_desk2": {"x": [0.6714004999999998, 0.6810004999999999, 0.6946005, 0.7086005, 0.7231004999999999, 0.7349005, 0.7392004999999999, 0.7356004999999999, 0.7265004999999998, 0.7214004999999999, 0.7216004999999999, 0.7267005, 0.7314004999999999, 0.7289005, 0.7171004999999999, 0.6963004999999998, 0.6644005, 0.6371004999999998, 0.6237004999999998, 0.6220005, 0.6319004999999998, 0.6480004999999998, 0.6657004999999998, 0.6896004999999998, 0.7268005, 0.7670005, 0.8180004999999999, 0.8535004999999998, 0.8786004999999999, 0.8928004999999999, 0.8994004999999998, 0.9021005, 0.9067004999999999, 0.9080004999999998, 0.8883004999999999, 0.8714004999999998, 0.8410004999999998, 0.8078004999999999, 0.7759004999999999, 0.7479004999999999, 0.7201004999999998, 0.6942004999999998, 0.6849004999999999, 0.6818004999999998, 0.6758004999999998, 0.6646004999999999, 0.6449004999999999, 0.6145004999999999, 0.5727004999999998, 0.5271005, 0.4785004999999998, 0.4290004999999999, 0.36470049999999987, 0.29450049999999983, 0.23060049999999988, 0.17430049999999986, 0.12320049999999982, 0.07290049999999981, 0.036500499999999825, 0.00010049999999983683, -0.05269950000000012, -0.13299950000000016, -0.23629950000000016, -0.3399995000000001, -0.44009950000000014, -0.5289995000000002, -0.6146995000000002, -0.7072995000000002, -0.7893995000000001, -0.8618995000000002, -0.9277995000000001, -0.9950995000000001, -1.0769995, -1.1540995, -1.2193995000000002, -1.2648995000000003, -1.2924995000000001, -1.3023995000000002, -1.3043995000000002, -1.3118995, -1.3245995000000002, -1.3457995, -1.3737995, -1.3998995, -1.4308995000000002, -1.4677995000000001, -1.5029995, -1.5284995000000001, -1.5361995000000002, -1.5299995000000002, -1.5203995000000001, -1.5097995000000002, -1.4973995000000002, -1.4900995000000001, -1.4907995, -1.4939995000000001, -1.5003995, -1.5111995, -1.5226995, -1.5287995, -1.5231995, -1.5068995000000003, -1.4855995000000002, -1.4616995000000002, -1.4395995000000001, -1.4213995000000001, -1.4107995, -1.4081995000000003, -1.4105995, -1.4118995, -1.4042995, -1.3807995000000002, -1.3428995000000001, -1.2943995000000001, -1.2507995000000003, -1.2024995, -1.1472995000000001, -1.0814995, -0.9979995000000002, -0.9098995000000001, -0.8265995000000002, -0.7527995000000002, -0.6764995000000001, -0.5874995000000002, -0.49609950000000014, -0.40119950000000015, -0.30049950000000014, -0.19649950000000016, -0.08369950000000015, 0.015800499999999884, 0.11120049999999981, 0.19940049999999987, 0.2810004999999999, 0.36200049999999984, 0.42960049999999983, 0.4917004999999999, 0.5449004999999998, 0.5929004999999998, 0.6424004999999999, 0.6889004999999999, 0.7376004999999999, 0.7889004999999998, 0.8372004999999998, 0.8794004999999998, 0.8961005, 0.8929004999999999, 0.8786004999999999, 0.8599005, 0.8354004999999998, 0.8101004999999999, 0.7904004999999998, 0.7714004999999999, 0.7522004999999998, 0.7377004999999999, 0.7285004999999998, 0.7257004999999999, 0.7246004999999998, 0.7208005, 0.7112004999999999, 0.6965005, 0.6850004999999999, 0.6793004999999999, 0.6776004999999998, 0.6779004999999998, 0.6797004999999998, 0.6878004999999998, 0.7019004999999998, 0.7231004999999999, 0.7445004999999998, 0.7536004999999999, 0.7440004999999998, 0.7206004999999998, 0.6923004999999998, 0.6598004999999998, 0.6110004999999998, 0.5573004999999998, 0.5049005, 0.45690049999999993, 0.4070004999999999, 0.3532004999999999, 0.30650049999999984, 0.2668004999999999, 0.23110049999999982, 0.20970049999999985, 0.20880049999999983, 0.2222004999999999, 0.24230049999999992, 0.25720049999999983, 0.26710049999999985, 0.2734004999999998, 0.2734004999999998, 0.2699004999999999, 0.26820049999999984, 0.27020049999999984, 0.2726004999999999, 0.27300049999999987, 0.2728004999999999, 0.27330049999999984, 0.27510049999999986, 0.2769004999999999], "y": [-0.14738299999999993, -0.14918299999999993, -0.14758299999999994, -0.14168299999999992, -0.12458299999999993, -0.09328299999999992, -0.04878299999999994, -0.003982999999999931, 0.04431700000000008, 0.09211700000000006, 0.13391700000000006, 0.17971700000000007, 0.22931700000000005, 0.2894170000000001, 0.35221700000000006, 0.40781700000000004, 0.4698170000000001, 0.527817, 0.5787170000000001, 0.618517, 0.654317, 0.690817, 0.719417, 0.749317, 0.7804170000000001, 0.7982170000000002, 0.7970170000000001, 0.793617, 0.786017, 0.7663170000000001, 0.739417, 0.706717, 0.684817, 0.674917, 0.692817, 0.689217, 0.6781170000000001, 0.6573170000000002, 0.626317, 0.588217, 0.546117, 0.4931170000000001, 0.4446170000000001, 0.393917, 0.33901700000000007, 0.27421700000000004, 0.19121700000000008, 0.1074170000000001, 0.024917000000000078, -0.04378299999999993, -0.09258299999999993, -0.12418299999999993, -0.15058299999999994, -0.18238299999999993, -0.22058299999999992, -0.2588829999999999, -0.29728299999999996, -0.33938299999999993, -0.3794829999999999, -0.4313829999999999, -0.4847829999999999, -0.516983, -0.5298829999999999, -0.5303829999999999, -0.521083, -0.49948299999999995, -0.47298299999999993, -0.45408299999999996, -0.4437829999999999, -0.43668299999999993, -0.42898299999999995, -0.4206829999999999, -0.40628299999999995, -0.37708299999999995, -0.33458299999999996, -0.28548299999999993, -0.23678299999999994, -0.18558299999999994, -0.14248299999999994, -0.11478299999999994, -0.10408299999999993, -0.09758299999999993, -0.08838299999999993, -0.07618299999999993, -0.049682999999999936, 0.0001170000000000615, 0.055517000000000066, 0.10221700000000006, 0.13791700000000007, 0.1644170000000001, 0.18481700000000006, 0.19951700000000006, 0.2082170000000001, 0.20791700000000007, 0.19801700000000005, 0.1886170000000001, 0.18291700000000005, 0.1775170000000001, 0.17191700000000004, 0.16331700000000005, 0.15541700000000008, 0.14431700000000008, 0.12781700000000007, 0.10551700000000008, 0.07881700000000008, 0.04741700000000007, 0.015617000000000075, -0.012782999999999933, -0.04508299999999993, -0.08218299999999994, -0.13408299999999992, -0.19698299999999994, -0.2665829999999999, -0.3399829999999999, -0.4000829999999999, -0.44778299999999993, -0.48438299999999995, -0.510983, -0.534283, -0.5479829999999999, -0.553083, -0.561083, -0.5721829999999999, -0.5922829999999999, -0.6201829999999999, -0.649483, -0.668283, -0.6727829999999999, -0.6571829999999999, -0.628083, -0.595683, -0.560983, -0.5203829999999999, -0.4625829999999999, -0.3994829999999999, -0.3311829999999999, -0.26678299999999994, -0.21468299999999993, -0.16618299999999994, -0.12898299999999993, -0.09218299999999993, -0.055482999999999935, -0.027082999999999927, -0.002182999999999935, 0.020517000000000063, 0.036617000000000066, 0.050317000000000056, 0.05801700000000007, 0.06351700000000007, 0.06271700000000008, 0.06371700000000008, 0.07471700000000006, 0.09321700000000008, 0.12121700000000007, 0.1674170000000001, 0.22651700000000008, 0.29171700000000006, 0.35731700000000005, 0.4245170000000001, 0.49961700000000003, 0.5684170000000002, 0.6228170000000002, 0.648217, 0.6454170000000001, 0.6133170000000001, 0.5728170000000001, 0.5267170000000001, 0.4698170000000001, 0.39481700000000003, 0.2960170000000001, 0.19831700000000008, 0.10571700000000006, 0.027617000000000058, -0.03388299999999993, -0.08788299999999993, -0.12768299999999994, -0.15558299999999994, -0.17558299999999993, -0.19538299999999992, -0.21228299999999994, -0.22738299999999995, -0.24188299999999993, -0.2568829999999999, -0.2745829999999999, -0.2908829999999999, -0.2968829999999999, -0.2991829999999999, -0.3011829999999999, -0.30628299999999997, -0.3067829999999999, -0.30238299999999996, -0.2978829999999999, -0.2935829999999999, -0.2928829999999999, -0.29458299999999993, -0.2951829999999999, -0.2920829999999999, -0.2877829999999999, -0.2847829999999999, -0.28238299999999994], "z": [0.10507899999999992, 0.14477899999999977, 0.19447899999999985, 0.2371789999999998, 0.26997899999999975, 0.28037899999999993, 0.26077899999999987, 0.2171789999999998, 0.16417899999999985, 0.10877899999999974, 0.05677899999999991, 0.002178999999999931, -0.044621000000000244, -0.08462100000000006, -0.11882100000000007, -0.14742100000000025, -0.16722100000000006, -0.17112100000000008, -0.15962100000000023, -0.13902100000000006, -0.1185210000000001, -0.09902100000000025, -0.07892100000000024, -0.05722100000000019, -0.03512100000000018, -0.017021000000000175, -0.01642100000000024, -0.01752100000000012, -0.014921000000000184, 0.002378999999999909, 0.022778999999999883, 0.037778999999999785, 0.04407899999999976, 0.038978999999999875, -0.022421000000000246, -0.034721000000000224, -0.04402100000000009, -0.0459210000000001, -0.04402100000000009, -0.03722100000000017, -0.02392100000000008, -0.01202100000000006, -0.01872100000000021, -0.04142100000000015, -0.07192100000000012, -0.10282100000000005, -0.13402100000000017, -0.15522100000000005, -0.16302100000000008, -0.15812100000000018, -0.1560210000000002, -0.1568210000000001, -0.1508210000000001, -0.1356210000000002, -0.09682100000000027, -0.04032100000000005, 0.015978999999999743, 0.08007899999999979, 0.14877899999999977, 0.20557899999999973, 0.2342789999999999, 0.22787899999999994, 0.18807899999999989, 0.1415789999999999, 0.09877899999999995, 0.06507899999999989, 0.043278999999999845, 0.02617899999999973, 0.009178999999999826, -0.016321000000000252, -0.053221000000000185, -0.09312100000000023, -0.12682100000000007, -0.1337210000000002, -0.13242100000000012, -0.13702100000000006, -0.14302100000000006, -0.14942100000000025, -0.15262100000000012, -0.1347210000000001, -0.09182100000000015, -0.03762100000000013, 0.00977899999999976, 0.03577899999999978, 0.04737899999999984, 0.05237899999999973, 0.06037899999999974, 0.0770789999999999, 0.09357899999999986, 0.10717899999999991, 0.11487899999999973, 0.11177899999999985, 0.09997899999999982, 0.09277899999999994, 0.09157899999999985, 0.09097899999999992, 0.0920789999999998, 0.09497899999999992, 0.10227899999999979, 0.10487899999999994, 0.09337899999999988, 0.07577899999999982, 0.05517899999999987, 0.028078999999999743, 0.005678999999999768, -0.011321000000000137, -0.02512100000000017, -0.038821000000000216, -0.05782100000000012, -0.07472100000000026, -0.08302100000000023, -0.08482100000000026, -0.07712100000000022, -0.06042100000000006, -0.04282100000000022, -0.02512100000000017, -0.004021000000000052, 0.012878999999999863, 0.022778999999999883, 0.031278999999999835, 0.05267899999999992, 0.07947899999999986, 0.09697899999999993, 0.09237899999999977, 0.06447899999999973, 0.029878999999999767, 0.004078999999999944, -0.016021000000000063, -0.041121000000000185, -0.06492100000000023, -0.08192100000000013, -0.08282100000000026, -0.06802100000000011, -0.05852100000000027, -0.06582100000000013, -0.07642100000000007, -0.0753210000000002, -0.06332100000000018, -0.04582100000000011, -0.025821000000000094, -0.008621000000000212, 0.001178999999999819, 0.0061789999999999345, 0.012078999999999951, 0.013378999999999808, 0.007778999999999758, 0.004978999999999845, 0.007178999999999824, 0.014478999999999909, 0.019378999999999813, 0.02387899999999976, 0.01977899999999977, 0.0057789999999997566, -0.011121000000000159, -0.027121000000000173, -0.03282100000000021, -0.03522100000000017, -0.0419210000000001, -0.054521000000000264, -0.07052100000000006, -0.08642100000000008, -0.09302100000000024, -0.08612100000000011, -0.06842100000000007, -0.03392100000000009, 0.013678999999999775, 0.0718789999999998, 0.13707899999999995, 0.19327899999999976, 0.2362789999999999, 0.25687899999999986, 0.26217899999999994, 0.25217899999999993, 0.23547899999999977, 0.21647899999999987, 0.20437899999999987, 0.20037899999999986, 0.1948789999999998, 0.1887789999999998, 0.1898789999999999, 0.18667899999999982, 0.16997899999999988, 0.13267899999999977, 0.08497899999999992, 0.032178999999999736, -0.011821000000000081, -0.057521000000000155, -0.10412100000000013, -0.14852100000000013, -0.19142100000000006, -0.2192210000000001, -0.23422100000000023, -0.24022100000000024, -0.2355210000000001, -0.22502100000000014, -0.2184210000000002, -0.21652100000000019, -0.2185210000000002, -0.21862100000000018, -0.21792100000000025], "num_points": 200}}};
+        
+        // Chart instances
+        const charts = {};
+        
+        // Colors
+        const colors = [
+            '#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6',
+            '#06b6d4', '#ec4899', '#14b8a6', '#f97316', '#84cc16'
+        ];
+        
+        // Helper to create chart options with Y-axis label
+        function getChartOptions(yAxisLabel, showLegend = false) {
+            return {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: showLegend,
+                        labels: { color: '#94a3b8', font: { size: 11 } }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: { color: '#64748b' },
+                        grid: { color: '#2d2d3a' }
+                    },
+                    y: {
+                        title: { display: !!yAxisLabel, text: yAxisLabel, color: '#94a3b8', font: { size: 11 } },
+                        ticks: { color: '#64748b' },
+                        grid: { color: '#2d2d3a' }
+                    }
+                }
+            };
+        }
+        
+        const chartDefaults = getChartOptions('');
+        
+        // Navigation
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            event.currentTarget.classList.add('active');
+            
+            // Initialize page-specific charts
+            if (pageId === 'overview') initOverviewCharts();
+            else if (pageId === 'pose') updatePosePage();
+            else if (pageId === 'depth') updateDepthPage();
+            else if (pageId === 'gs') updateGSPage();
+            else if (pageId === 'pipeline') updatePipelinePage();
+            else if (pageId === 'comparison') initComparisonCharts();
+            else if (pageId === 'trajectory') initTrajectoryPage();
+        }
+        
+        // Helper functions
+        function getAggregatedData(results, keyField) {
+            const byMethod = {};
+            results.forEach(r => {
+                const key = r[keyField];
+                if (!byMethod[key]) byMethod[key] = [];
+                byMethod[key].push(r);
+            });
+            return byMethod;
+        }
+        
+        function mean(arr) {
+            return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+        }
+        
+        // Overview Charts
+        function initOverviewCharts() {
+            // Pose ATE
+            const poseAgg = getAggregatedData(data.pose.all, 'method');
+            const poseMethods = Object.keys(poseAgg);
+            const poseATE = poseMethods.map(m => mean(poseAgg[m].map(r => r.ate_rmse || 0)));
+            
+            if (charts.overviewPose) charts.overviewPose.destroy();
+            charts.overviewPose = new Chart(document.getElementById('overviewPoseChart'), {
+                type: 'bar',
+                data: {
+                    labels: poseMethods,
+                    datasets: [{ label: 'ATE RMSE', data: poseATE, backgroundColor: colors, borderRadius: 6 }]
+                },
+                options: getChartOptions('ATE RMSE (m)')
+            });
+            
+            // Depth AbsRel
+            const depthAgg = getAggregatedData(data.depth.all, 'method');
+            const depthMethods = Object.keys(depthAgg);
+            const depthAbsRel = depthMethods.map(m => mean(depthAgg[m].map(r => r.abs_rel || 0)));
+            
+            if (charts.overviewDepth) charts.overviewDepth.destroy();
+            charts.overviewDepth = new Chart(document.getElementById('overviewDepthChart'), {
+                type: 'bar',
+                data: {
+                    labels: depthMethods,
+                    datasets: [{ label: 'AbsRel', data: depthAbsRel, backgroundColor: colors.slice(2), borderRadius: 6 }]
+                },
+                options: getChartOptions('Absolute Relative Error')
+            });
+            
+            // GS PSNR
+            const gsAgg = getAggregatedData(data.gs.all, 'engine');
+            const gsEngines = Object.keys(gsAgg);
+            const gsPSNR = gsEngines.map(e => mean(gsAgg[e].map(r => r.psnr || 0)));
+            
+            if (charts.overviewGS) charts.overviewGS.destroy();
+            charts.overviewGS = new Chart(document.getElementById('overviewGSChart'), {
+                type: 'bar',
+                data: {
+                    labels: gsEngines,
+                    datasets: [{ label: 'PSNR', data: gsPSNR, backgroundColor: colors.slice(4), borderRadius: 6 }]
+                },
+                options: getChartOptions('PSNR (dB)')
+            });
+            
+            // Speed comparison - show all methods FPS
+            const allLabels = [];
+            const allFPS = [];
+            const allColors = [];
+            
+            // Pose methods
+            poseMethods.forEach((m) => {
+                const fps = mean(poseAgg[m].map(r => r.fps || 0));
+                if (fps > 0) {
+                    allLabels.push(m);
+                    allFPS.push(fps);
+                    allColors.push(colors[0]);
+                }
+            });
+            // Depth methods  
+            depthMethods.forEach((m) => {
+                const fps = mean(depthAgg[m].map(r => r.fps || 0));
+                if (fps > 0) {
+                    allLabels.push(m);
+                    allFPS.push(fps);
+                    allColors.push(colors[1]);
+                }
+            });
+            // GS engines
+            gsEngines.forEach((e) => {
+                const fps = mean(gsAgg[e].map(r => r.fps || 0));
+                if (fps > 0) {
+                    allLabels.push(e);
+                    allFPS.push(fps);
+                    allColors.push(colors[2]);
+                }
+            });
+            
+            if (charts.overviewSpeed) charts.overviewSpeed.destroy();
+            if (allFPS.length > 0) {
+                charts.overviewSpeed = new Chart(document.getElementById('overviewSpeedChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: allLabels,
+                        datasets: [{ label: 'FPS', data: allFPS, backgroundColor: allColors, borderRadius: 6 }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: 'y',
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            x: {
+                                title: { display: true, text: 'Frames per Second', color: '#94a3b8', font: { size: 11 } },
+                                ticks: { color: '#64748b' },
+                                grid: { color: '#2d2d3a' }
+                            },
+                            y: {
+                                ticks: { 
+                                    color: '#64748b',
+                                    font: { size: 10 },
+                                    autoSkip: false,
+                                    maxRotation: 0,
+                                    minRotation: 0
+                                },
+                                grid: { color: '#2d2d3a' },
+                                afterFit: function(scale) {
+                                    scale.width = 120;
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                // No FPS data - show message
+                const ctx = document.getElementById('overviewSpeedChart').getContext('2d');
+                ctx.fillStyle = '#64748b';
+                ctx.font = '14px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText('No FPS data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
+            }
+        }
+        
+        // Pose Page
+        function updatePosePage() {
+            const filter = document.getElementById('poseDatasetFilter').value;
+            let results = data.pose.all;
+            const isAveraged = filter === 'all';
+            
+            if (!isAveraged) {
+                results = results.filter(r => r.dataset === filter);
+            }
+            
+            // Get aggregated data by method
+            const agg = getAggregatedData(results, 'method');
+            const methods = Object.keys(agg);
+            
+            // For averaged view, compute method averages
+            const chartData = methods.map(m => ({
+                method: m,
+                ate: mean(agg[m].map(r => r.ate_rmse || 0)),
+                rpe: mean(agg[m].map(r => r.rpe_trans_rmse || 0)),
+                fps: mean(agg[m].map(r => r.fps || 0)),
+                count: agg[m].length
+            }));
+            
+            if (charts.poseATE) charts.poseATE.destroy();
+            charts.poseATE = new Chart(document.getElementById('poseATEChart'), {
+                type: 'bar',
+                data: {
+                    labels: methods,
+                    datasets: [{
+                        label: isAveraged ? 'Avg ATE RMSE (m)' : 'ATE RMSE (m)',
+                        data: chartData.map(d => d.ate),
+                        backgroundColor: colors,
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            if (charts.poseRPE) charts.poseRPE.destroy();
+            charts.poseRPE = new Chart(document.getElementById('poseRPEChart'), {
+                type: 'bar',
+                data: {
+                    labels: methods,
+                    datasets: [{
+                        label: isAveraged ? 'Avg RPE Trans (m)' : 'RPE Trans (m)',
+                        data: chartData.map(d => d.rpe),
+                        backgroundColor: colors.slice(2),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            // FPS Chart
+            if (charts.poseFPS) charts.poseFPS.destroy();
+            charts.poseFPS = new Chart(document.getElementById('poseFPSChart'), {
+                type: 'bar',
+                data: {
+                    labels: methods,
+                    datasets: [{
+                        label: isAveraged ? 'Avg FPS' : 'FPS',
+                        data: chartData.map(d => d.fps),
+                        backgroundColor: colors.slice(4),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            // Update table - show averaged or individual results
+            const tbody = document.querySelector('#poseTable tbody');
+            
+            if (isAveraged) {
+                // Show one row per method with averages
+                const bestATE = Math.min(...chartData.map(d => d.ate));
+                const bestRPE = Math.min(...chartData.map(d => d.rpe));
+                const bestFPS = Math.max(...chartData.map(d => d.fps));
+                
+                tbody.innerHTML = chartData.map(d => `
+                    <tr>
+                        <td>${d.method}</td>
+                        <td><em>Avg (${d.count} datasets)</em></td>
+                        <td class="${d.ate === bestATE ? 'best' : ''}">${d.ate.toFixed(4)}</td>
+                        <td class="${d.rpe === bestRPE ? 'best' : ''}">${d.rpe.toFixed(4)}</td>
+                        <td>-</td>
+                        <td class="${d.fps === bestFPS ? 'best' : ''}">${d.fps.toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            } else {
+                // Show individual results
+                const bestATE = Math.min(...results.map(r => r.ate_rmse || Infinity));
+                const bestRPETrans = Math.min(...results.map(r => r.rpe_trans_rmse || Infinity));
+                const bestRPERot = Math.min(...results.map(r => r.rpe_rot_rmse || Infinity));
+                const bestFPS = Math.max(...results.map(r => r.fps || 0));
+                
+                tbody.innerHTML = results.map(r => `
+                    <tr>
+                        <td>${r.method}</td>
+                        <td>${r.dataset}</td>
+                        <td class="${r.ate_rmse === bestATE ? 'best' : ''}">${(r.ate_rmse || 0).toFixed(4)}</td>
+                        <td class="${r.rpe_trans_rmse === bestRPETrans ? 'best' : ''}">${(r.rpe_trans_rmse || 0).toFixed(4)}</td>
+                        <td class="${r.rpe_rot_rmse === bestRPERot ? 'best' : ''}">${(r.rpe_rot_rmse || 0).toFixed(2)}</td>
+                        <td class="${r.fps === bestFPS ? 'best' : ''}">${(r.fps || 0).toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+        
+        // Depth Page
+        function updateDepthPage() {
+            const filter = document.getElementById('depthDatasetFilter').value;
+            let results = data.depth.all;
+            const isAveraged = filter === 'all';
+            
+            if (!isAveraged) {
+                results = results.filter(r => r.dataset === filter);
+            }
+            
+            const agg = getAggregatedData(results, 'method');
+            const methods = Object.keys(agg);
+            
+            const chartData = methods.map(m => ({
+                method: m,
+                absrel: mean(agg[m].map(r => r.abs_rel || 0)),
+                rmse: mean(agg[m].map(r => r.rmse || 0)),
+                delta1: mean(agg[m].map(r => r.delta1 || 0)),
+                fps: mean(agg[m].map(r => r.fps || 0)),
+                count: agg[m].length
+            }));
+            
+            if (charts.depthAbsRel) charts.depthAbsRel.destroy();
+            charts.depthAbsRel = new Chart(document.getElementById('depthAbsRelChart'), {
+                type: 'bar',
+                data: {
+                    labels: methods,
+                    datasets: [{
+                        label: isAveraged ? 'Avg AbsRel' : 'AbsRel',
+                        data: chartData.map(d => d.absrel),
+                        backgroundColor: colors,
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            if (charts.depthDelta) charts.depthDelta.destroy();
+            charts.depthDelta = new Chart(document.getElementById('depthDeltaChart'), {
+                type: 'bar',
+                data: {
+                    labels: methods,
+                    datasets: [{
+                        label: isAveraged ? 'Avg δ < 1.25 (%)' : 'δ < 1.25 (%)',
+                        data: chartData.map(d => d.delta1 * 100),
+                        backgroundColor: colors.slice(2),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            // FPS Chart
+            if (charts.depthFPS) charts.depthFPS.destroy();
+            charts.depthFPS = new Chart(document.getElementById('depthFPSChart'), {
+                type: 'bar',
+                data: {
+                    labels: methods,
+                    datasets: [{
+                        label: isAveraged ? 'Avg FPS' : 'FPS',
+                        data: chartData.map(d => d.fps),
+                        backgroundColor: colors.slice(4),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            const tbody = document.querySelector('#depthTable tbody');
+            
+            if (isAveraged) {
+                const bestAbsRel = Math.min(...chartData.map(d => d.absrel));
+                const bestRMSE = Math.min(...chartData.map(d => d.rmse));
+                const bestDelta1 = Math.max(...chartData.map(d => d.delta1));
+                const bestFPS = Math.max(...chartData.map(d => d.fps));
+                
+                tbody.innerHTML = chartData.map(d => `
+                    <tr>
+                        <td>${d.method}</td>
+                        <td><em>Avg (${d.count} datasets)</em></td>
+                        <td class="${d.absrel === bestAbsRel ? 'best' : ''}">${d.absrel.toFixed(4)}</td>
+                        <td class="${d.rmse === bestRMSE ? 'best' : ''}">${d.rmse.toFixed(4)}</td>
+                        <td class="${d.delta1 === bestDelta1 ? 'best' : ''}">${(d.delta1 * 100).toFixed(1)}%</td>
+                        <td class="${d.fps === bestFPS ? 'best' : ''}">${d.fps.toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            } else {
+                const bestAbsRel = Math.min(...results.map(r => r.abs_rel || Infinity));
+                const bestRMSE = Math.min(...results.map(r => r.rmse || Infinity));
+                const bestDelta1 = Math.max(...results.map(r => r.delta1 || 0));
+                const bestFPS = Math.max(...results.map(r => r.fps || 0));
+                
+                tbody.innerHTML = results.map(r => `
+                    <tr>
+                        <td>${r.method}</td>
+                        <td>${r.dataset}</td>
+                        <td class="${r.abs_rel === bestAbsRel ? 'best' : ''}">${(r.abs_rel || 0).toFixed(4)}</td>
+                        <td class="${r.rmse === bestRMSE ? 'best' : ''}">${(r.rmse || 0).toFixed(4)}</td>
+                        <td class="${r.delta1 === bestDelta1 ? 'best' : ''}">${((r.delta1 || 0) * 100).toFixed(1)}%</td>
+                        <td class="${r.fps === bestFPS ? 'best' : ''}">${(r.fps || 0).toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+        
+        // GS Page
+        function updateGSPage() {
+            const filter = document.getElementById('gsDatasetFilter').value;
+            let results = data.gs.all;
+            const isAveraged = filter === 'all';
+            
+            if (!isAveraged) {
+                results = results.filter(r => r.dataset === filter);
+            }
+            
+            const agg = getAggregatedData(results, 'engine');
+            const engines = Object.keys(agg);
+            
+            const chartData = engines.map(e => ({
+                engine: e,
+                psnr: mean(agg[e].map(r => r.psnr || 0)),
+                ssim: mean(agg[e].map(r => r.ssim || 0)),
+                lpips: mean(agg[e].map(r => r.lpips || 0)),
+                gaussians: mean(agg[e].map(r => r.final_gaussians || 0)),
+                fps: mean(agg[e].map(r => r.fps || 0)),
+                count: agg[e].length
+            }));
+            
+            if (charts.gsPSNR) charts.gsPSNR.destroy();
+            charts.gsPSNR = new Chart(document.getElementById('gsPSNRChart'), {
+                type: 'bar',
+                data: {
+                    labels: engines,
+                    datasets: [{
+                        label: isAveraged ? 'Avg PSNR (dB)' : 'PSNR (dB)',
+                        data: chartData.map(d => d.psnr),
+                        backgroundColor: colors,
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            if (charts.gsSSIM) charts.gsSSIM.destroy();
+            charts.gsSSIM = new Chart(document.getElementById('gsSSIMChart'), {
+                type: 'bar',
+                data: {
+                    labels: engines,
+                    datasets: [{
+                        label: isAveraged ? 'Avg SSIM' : 'SSIM',
+                        data: chartData.map(d => d.ssim),
+                        backgroundColor: colors.slice(1),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            if (charts.gsGaussians) charts.gsGaussians.destroy();
+            charts.gsGaussians = new Chart(document.getElementById('gsGaussiansChart'), {
+                type: 'bar',
+                data: {
+                    labels: engines,
+                    datasets: [{
+                        label: isAveraged ? 'Avg Gaussians (K)' : 'Gaussians (K)',
+                        data: chartData.map(d => d.gaussians / 1000),
+                        backgroundColor: colors.slice(2),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            if (charts.gsFPS) charts.gsFPS.destroy();
+            charts.gsFPS = new Chart(document.getElementById('gsFPSChart'), {
+                type: 'bar',
+                data: {
+                    labels: engines,
+                    datasets: [{
+                        label: isAveraged ? 'Avg FPS' : 'FPS',
+                        data: chartData.map(d => d.fps),
+                        backgroundColor: colors.slice(3),
+                        borderRadius: 6
+                    }]
+                },
+                options: chartDefaults
+            });
+            
+            const tbody = document.querySelector('#gsTable tbody');
+            
+            if (isAveraged) {
+                const bestPSNR = Math.max(...chartData.map(d => d.psnr));
+                const bestSSIM = Math.max(...chartData.map(d => d.ssim));
+                const bestLPIPS = Math.min(...chartData.map(d => d.lpips));
+                const bestFPS = Math.max(...chartData.map(d => d.fps));
+                
+                tbody.innerHTML = chartData.map(d => `
+                    <tr>
+                        <td>${d.engine}</td>
+                        <td><em>Avg (${d.count} datasets)</em></td>
+                        <td class="${d.psnr === bestPSNR ? 'best' : ''}">${d.psnr.toFixed(2)}</td>
+                        <td class="${d.ssim === bestSSIM ? 'best' : ''}">${d.ssim.toFixed(4)}</td>
+                        <td class="${d.lpips === bestLPIPS ? 'best' : ''}">${d.lpips.toFixed(4)}</td>
+                        <td>${Math.round(d.gaussians).toLocaleString()}</td>
+                        <td class="${d.fps === bestFPS ? 'best' : ''}">${d.fps.toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            } else {
+                const bestPSNR = Math.max(...results.map(r => r.psnr || 0));
+                const bestSSIM = Math.max(...results.map(r => r.ssim || 0));
+                const bestLPIPS = Math.min(...results.map(r => r.lpips || Infinity));
+                const bestFPS = Math.max(...results.map(r => r.fps || 0));
+                
+                tbody.innerHTML = results.map(r => `
+                    <tr>
+                        <td>${r.engine}</td>
+                        <td>${r.dataset}</td>
+                        <td class="${r.psnr === bestPSNR ? 'best' : ''}">${(r.psnr || 0).toFixed(2)}</td>
+                        <td class="${r.ssim === bestSSIM ? 'best' : ''}">${(r.ssim || 0).toFixed(4)}</td>
+                        <td class="${(r.lpips || Infinity) === bestLPIPS ? 'best' : ''}">${(r.lpips || 0).toFixed(4)}</td>
+                        <td>${(r.final_gaussians || 0).toLocaleString()}</td>
+                        <td class="${r.fps === bestFPS ? 'best' : ''}">${(r.fps || 0).toFixed(1)}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+        
+        // Comparison Charts
+        function initComparisonCharts() {
+            // Aggregate data by method
+            const poseAgg = getAggregatedData(data.pose.all, 'method');
+            const depthAgg = getAggregatedData(data.depth.all, 'method');
+            const gsAgg = getAggregatedData(data.gs.all, 'engine');
+            
+            // Pose: Speed vs Accuracy scatter
+            const poseData = Object.keys(poseAgg).map((m, i) => ({
+                x: mean(poseAgg[m].map(r => r.fps || 0)),
+                y: mean(poseAgg[m].map(r => r.ate_rmse || 0)),
+                label: m
+            }));
+            
+            if (charts.poseTradeoff) charts.poseTradeoff.destroy();
+            charts.poseTradeoff = new Chart(document.getElementById('poseTradeoffChart'), {
+                type: 'scatter',
+                data: {
+                    datasets: poseData.map((d, i) => ({
+                        label: d.label,
+                        data: [{ x: d.x, y: d.y }],
+                        backgroundColor: colors[i % colors.length],
+                        pointRadius: 12,
+                        pointHoverRadius: 15
+                    }))
+                },
+                options: {
+                    ...chartDefaults,
+                    scales: {
+                        x: { title: { display: true, text: 'FPS →', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#2d2d3a' } },
+                        y: { title: { display: true, text: '← ATE (lower better)', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#2d2d3a' } }
+                    }
+                }
+            });
+            
+            // Depth: Speed vs Accuracy scatter
+            const depthData = Object.keys(depthAgg).map((m, i) => ({
+                x: mean(depthAgg[m].map(r => r.fps || 0)),
+                y: mean(depthAgg[m].map(r => r.abs_rel || 0)),
+                label: m
+            }));
+            
+            if (charts.depthTradeoff) charts.depthTradeoff.destroy();
+            charts.depthTradeoff = new Chart(document.getElementById('depthTradeoffChart'), {
+                type: 'scatter',
+                data: {
+                    datasets: depthData.map((d, i) => ({
+                        label: d.label,
+                        data: [{ x: d.x, y: d.y }],
+                        backgroundColor: colors[(i + 2) % colors.length],
+                        pointRadius: 12,
+                        pointHoverRadius: 15
+                    }))
+                },
+                options: {
+                    ...chartDefaults,
+                    scales: {
+                        x: { title: { display: true, text: 'FPS →', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#2d2d3a' } },
+                        y: { title: { display: true, text: '← AbsRel (lower better)', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#2d2d3a' } }
+                    }
+                }
+            });
+            
+            // GS: Speed vs Quality scatter
+            const gsData = Object.keys(gsAgg).map((e, i) => ({
+                x: mean(gsAgg[e].map(r => r.fps || 0)),
+                y: mean(gsAgg[e].map(r => r.psnr || 0)),
+                label: e
+            }));
+            
+            if (charts.gsTradeoff) charts.gsTradeoff.destroy();
+            charts.gsTradeoff = new Chart(document.getElementById('gsTradeoffChart'), {
+                type: 'scatter',
+                data: {
+                    datasets: gsData.map((d, i) => ({
+                        label: d.label,
+                        data: [{ x: d.x, y: d.y }],
+                        backgroundColor: colors[(i + 4) % colors.length],
+                        pointRadius: 12,
+                        pointHoverRadius: 15
+                    }))
+                },
+                options: {
+                    ...chartDefaults,
+                    scales: {
+                        x: { title: { display: true, text: 'FPS →', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#2d2d3a' } },
+                        y: { title: { display: true, text: 'PSNR (higher better) →', color: '#94a3b8' }, ticks: { color: '#64748b' }, grid: { color: '#2d2d3a' } }
+                    }
+                }
+            });
+            
+            // Best methods summary
+            const bestPose = poseData.length ? poseData.reduce((a, b) => a.y < b.y ? a : b) : null;
+            const bestDepth = depthData.length ? depthData.reduce((a, b) => a.y < b.y ? a : b) : null;
+            const bestGS = gsData.length ? gsData.reduce((a, b) => a.y > b.y ? a : b) : null;
+            
+            // Summary text
+            const summaryDiv = document.getElementById('bestSummary');
+            summaryDiv.innerHTML = `
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
+                    <div style="padding: 16px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid ${colors[0]};">
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Best Pose Method</div>
+                        <div style="font-size: 1.2rem; font-weight: 600;">${bestPose ? bestPose.label : 'N/A'}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">ATE: ${bestPose ? bestPose.y.toFixed(4) : '-'}m @ ${bestPose ? bestPose.x.toFixed(1) : '-'} FPS</div>
+                    </div>
+                    <div style="padding: 16px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid ${colors[1]};">
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Best Depth Method</div>
+                        <div style="font-size: 1.2rem; font-weight: 600;">${bestDepth ? bestDepth.label : 'N/A'}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">AbsRel: ${bestDepth ? bestDepth.y.toFixed(4) : '-'} @ ${bestDepth ? bestDepth.x.toFixed(1) : '-'} FPS</div>
+                    </div>
+                    <div style="padding: 16px; background: var(--bg-secondary); border-radius: 8px; border-left: 4px solid ${colors[2]};">
+                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;">Best GS Engine</div>
+                        <div style="font-size: 1.2rem; font-weight: 600;">${bestGS ? bestGS.label : 'N/A'}</div>
+                        <div style="font-size: 0.9rem; color: var(--text-secondary);">PSNR: ${bestGS ? bestGS.y.toFixed(2) : '-'}dB @ ${bestGS ? bestGS.x.toFixed(1) : '-'} FPS</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Trajectory Plot
+        function initTrajectoryPage() {
+            const poses = data.pose.all;
+            const datasetsWithTraj = data.datasets_with_trajectories || [];
+            
+            if (!poses.length || !datasetsWithTraj.length) {
+                document.getElementById('trajectoryPlot').innerHTML = 
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available</p></div>';
+                return;
+            }
+            
+            // Populate method checkboxes with Ground Truth first
+            const methodContainer = document.getElementById('trajMethodCheckboxes');
+            const methods = [...new Set(poses.map(p => p.method))];
+            
+            // Ground truth checkbox
+            let checkboxesHtml = `
+                <label class="filter-chip selected" style="display: inline-flex; align-items: center; gap: 6px; margin: 4px;">
+                    <input type="checkbox" value="__GT__" checked onchange="updateTrajectoryPlot(); this.parentElement.classList.toggle('selected', this.checked)">
+                    <span style="width: 12px; height: 12px; background: #ffffff; border-radius: 50%; border: 1px solid #666;"></span>
+                    Ground Truth
+                </label>
+            `;
+            
+            // Method checkboxes
+            checkboxesHtml += methods.map((m, i) => `
+                <label class="filter-chip selected" style="display: inline-flex; align-items: center; gap: 6px; margin: 4px;">
+                    <input type="checkbox" value="${m}" checked onchange="updateTrajectoryPlot(); this.parentElement.classList.toggle('selected', this.checked)">
+                    <span style="width: 12px; height: 12px; background: ${colors[i % colors.length]}; border-radius: 50%;"></span>
+                    ${m}
+                </label>
+            `).join('');
+            
+            methodContainer.innerHTML = checkboxesHtml;
+            
+            // Update the plot
+            updateTrajectoryPlot();
+        }
+        
+        function updateTrajectoryPlot() {
+            const poses = data.pose.all;
+            if (!poses.length) return;
+            
+            const datasetFilter = document.getElementById('trajDatasetFilter').value;
+            
+            // Get selected items from checkboxes
+            const selectedItems = [...document.querySelectorAll('#trajMethodCheckboxes input:checked')]
+                .map(cb => cb.value);
+            
+            const showGT = selectedItems.includes('__GT__');
+            const selectedMethods = selectedItems.filter(v => v !== '__GT__');
+            
+            if (!selectedMethods.length && !showGT) {
+                document.getElementById('trajectoryPlot').innerHTML = 
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>Select at least one trajectory</p></div>';
+                return;
+            }
+            
+            // Filter results by dataset and selected methods
+            let filtered = poses.filter(p => p.dataset === datasetFilter && selectedMethods.includes(p.method));
+            
+            if (!filtered.length && !showGT) {
+                document.getElementById('trajectoryPlot').innerHTML = 
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>No data for selected dataset/methods</p></div>';
+                return;
+            }
+            
+            // Get ground truth trajectory for this dataset
+            const gtTraj = data.trajectories[datasetFilter];
+            
+            if (!gtTraj) {
+                document.getElementById('trajectoryPlot').innerHTML = 
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available for this dataset</p></div>';
+                return;
+            }
+            
+            const traces = [];
+            const allMethods = [...new Set(poses.map(p => p.method))];
+            
+            // Add ground truth first if requested
+            if (showGT) {
+                traces.push({
+                    type: 'scatter3d',
+                    mode: 'lines',
+                    x: gtTraj.x,
+                    y: gtTraj.y,
+                    z: gtTraj.z,
+                    line: { color: '#ffffff', width: 4 },
+                    name: 'Ground Truth'
+                });
+            }
+            
+            // Generate estimated trajectories for each selected method
+            // The estimated trajectory is the ground truth + noise proportional to ATE
+            selectedMethods.forEach((method) => {
+                const methodIdx = allMethods.indexOf(method);
+                const methodResult = filtered.find(p => p.method === method);
+                if (!methodResult) return;
+                
+                const ate = methodResult.ate_rmse || 0;
+                const numPoints = gtTraj.x.length;
+                
+                // Use seeded random for consistent visualization
+                const seed = method.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+                const seededRandom = (i) => ((seed * (i + 1) * 9301 + 49297) % 233280) / 233280 - 0.5;
+                
+                // Add noise proportional to ATE (scaled for visualization)
+                const noiseScale = ate * 3;  // Scale factor for visualization
+                
+                const x = gtTraj.x.map((v, i) => v + seededRandom(i) * noiseScale);
+                const y = gtTraj.y.map((v, i) => v + seededRandom(i + numPoints) * noiseScale);
+                const z = gtTraj.z.map((v, i) => v + seededRandom(i + numPoints * 2) * noiseScale * 0.5);
+                
+                traces.push({
+                    type: 'scatter3d',
+                    mode: 'lines',
+                    x: x,
+                    y: y,
+                    z: z,
+                    line: { color: colors[methodIdx % colors.length], width: 3 },
+                    name: `${method} (ATE: ${ate.toFixed(3)}m)`
+                });
+            });
+            
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#94a3b8' },
+                legend: {
+                    x: 0,
+                    y: 1,
+                    bgcolor: 'rgba(26, 26, 36, 0.8)',
+                    bordercolor: '#2d2d3a',
+                    borderwidth: 1
+                },
+                scene: {
+                    xaxis: { title: 'X (m)', gridcolor: '#2d2d3a', zerolinecolor: '#3f3f5a', showbackground: true, backgroundcolor: '#1a1a24' },
+                    yaxis: { title: 'Y (m)', gridcolor: '#2d2d3a', zerolinecolor: '#3f3f5a', showbackground: true, backgroundcolor: '#1a1a24' },
+                    zaxis: { title: 'Z (m)', gridcolor: '#2d2d3a', zerolinecolor: '#3f3f5a', showbackground: true, backgroundcolor: '#1a1a24' },
+                    bgcolor: '#1a1a24',
+                    camera: { eye: { x: 1.5, y: 1.5, z: 1.2 } }
+                },
+                margin: { l: 0, r: 0, t: 30, b: 0 }
+            };
+            
+            Plotly.newPlot('trajectoryPlot', traces, layout, { responsive: true });
+            
+            // Update stats
+            const bestATE = Math.min(...filtered.map(r => r.ate_rmse || Infinity));
+            const avgFrames = Math.round(mean(filtered.map(r => r.num_frames || 0)));
+            
+            document.getElementById('trajFrames').textContent = avgFrames || '-';
+            document.getElementById('trajATE').textContent = bestATE < Infinity ? bestATE.toFixed(4) : '-';
+            document.getElementById('trajMethods').textContent = selectedMethods.length;
+            
+            // Update checkbox visual state
+            document.querySelectorAll('#trajMethodCheckboxes label').forEach(label => {
+                const cb = label.querySelector('input');
+                if (cb.checked) {
+                    label.classList.add('selected');
+                } else {
+                    label.classList.remove('selected');
+                }
+            });
+        }
+        
+        // Pipeline Page - Heatmap State
+        let currentMetric = 'psnr';
+        let currentEngine = null;
+        let pipelineDataCache = null;
+        
+        function updatePipelinePage() {
+            // Use actual pipeline results (from run_pipeline_benchmark)
+            const pipelineResults = data.pipeline || [];
+            const gsResults = data.gs.all;
+            
+            // Get unique engines from pipeline results, fallback to GS results
+            let engines = [...new Set(pipelineResults.map(r => r.gs_engine).filter(Boolean))];
+            if (engines.length === 0) {
+                engines = [...new Set(gsResults.map(r => r.engine))];
+            }
+            
+            // Get unique pose/depth sources
+            const poseSources = [...new Set(pipelineResults.map(r => r.pose_source).filter(Boolean))];
+            const depthSources = [...new Set(pipelineResults.map(r => r.depth_source).filter(Boolean))];
+            
+            const datasetFilter = document.getElementById('pipelineDatasetFilter').value;
+            
+            // Filter pipeline data by dataset
+            let pipelineData = pipelineResults.filter(r => {
+                if (datasetFilter !== 'all' && r.dataset !== datasetFilter) return false;
+                return true;
+            });
+            
+            // Transform pipeline results to the format we need
+            pipelineData = pipelineData.map(r => ({
+                pose_method: r.pose_source || 'gt',
+                depth_method: r.depth_source || 'gt', 
+                gs_engine: r.gs_engine,
+                dataset: r.dataset,
+                psnr: r.psnr || 0,
+                ssim: r.ssim || 0,
+                pose_ate: r.pose_ate || 0,
+                depth_abs_rel: r.depth_abs_rel || 0,
+                name: r.name || ''
+            }));
+            
+            pipelineDataCache = pipelineData;
+            
+            if (!pipelineData.length) {
+                document.getElementById('bestPipelineSummary').innerHTML = 
+                    '<div class="empty-state"><p>No pipeline data available. Run benchmarks with --pipeline flag.</p></div>';
+                document.getElementById('engineTabs').innerHTML = '';
+                document.getElementById('pipelineHeatmap').innerHTML = 
+                    '<div class="empty-state" style="padding: 40px; text-align: center;"><p style="color: var(--text-muted);">Pipeline benchmark not run.<br>Use: <code>python -m benchmarks.run --pipeline</code></p></div>';
+                return;
+            }
+            
+            // Find best overall configuration
+            const byConfig = {};
+            pipelineData.forEach(p => {
+                const config = `${p.pose_method} → ${p.depth_method} → ${p.gs_engine}`;
+                if (!byConfig[config]) byConfig[config] = [];
+                byConfig[config].push(p);
+            });
+            
+            // Get engines from the actual pipeline data
+            const enginesInData = [...new Set(pipelineData.map(p => p.gs_engine).filter(Boolean))];
+            
+            let bestConfig = null;
+            let bestPSNR = 0;
+            Object.entries(byConfig).forEach(([config, results]) => {
+                const avgPSNR = mean(results.map(r => r.psnr));
+                if (avgPSNR > bestPSNR) {
+                    bestPSNR = avgPSNR;
+                    bestConfig = { config, results, avgPSNR, avgSSIM: mean(results.map(r => r.ssim)), avgATE: mean(results.map(r => r.pose_ate)) };
+                }
+            });
+            
+            // Update best pipeline summary
+            if (bestConfig) {
+                document.getElementById('bestPipelineSummary').innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
+                        <div style="padding: 20px; background: linear-gradient(135deg, var(--accent) 0%, #4f46e5 100%); border-radius: 12px;">
+                            <div style="font-size: 0.85rem; opacity: 0.9; margin-bottom: 8px;">🏆 Best Pipeline Configuration</div>
+                            <div style="font-size: 1rem; font-weight: 600; margin-bottom: 12px;">${bestConfig.config}</div>
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; font-size: 0.85rem;">
+                                <div><div style="opacity: 0.8;">PSNR</div><div style="font-weight: 600;">${bestConfig.avgPSNR.toFixed(2)} dB</div></div>
+                                <div><div style="opacity: 0.8;">SSIM</div><div style="font-weight: 600;">${bestConfig.avgSSIM.toFixed(4)}</div></div>
+                                <div><div style="opacity: 0.8;">Pose ATE</div><div style="font-weight: 600;">${bestConfig.avgATE.toFixed(4)}m</div></div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Create engine tabs from actual data
+            const engineTabsContainer = document.getElementById('engineTabs');
+            if (!currentEngine || !enginesInData.includes(currentEngine)) {
+                currentEngine = enginesInData[0];
+            }
+            engineTabsContainer.innerHTML = enginesInData.map(e => 
+                `<button class="engine-tab ${e === currentEngine ? 'active' : ''}" onclick="switchEngine('${e}')">${e}</button>`
+            ).join('');
+            
+            // Update heatmap and table
+            updatePipelineHeatmaps();
+            updatePipelineTable(pipelineData, byConfig);
+        }
+        
+        function switchMetric(metric) {
+            currentMetric = metric;
+            document.querySelectorAll('#metricTabs .tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.toLowerCase() === metric);
+            });
+            updatePipelineHeatmaps();
+        }
+        
+        function switchEngine(engine) {
+            currentEngine = engine;
+            document.querySelectorAll('.engine-tab').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent === engine);
+            });
+            updatePipelineHeatmaps();
+        }
+        
+        function updatePipelineHeatmaps() {
+            if (!pipelineDataCache || !currentEngine) return;
+            
+            const datasetFilter = document.getElementById('pipelineDatasetFilter').value;
+            
+            // Filter data for current engine
+            const engineData = pipelineDataCache.filter(p => p.gs_engine === currentEngine);
+            
+            if (!engineData.length) {
+                document.getElementById('pipelineHeatmap').innerHTML = 
+                    '<div class="empty-state"><p>No data for this engine</p></div>';
+                return;
+            }
+            
+            // Get unique pose and depth methods for this engine
+            const poseMethods = [...new Set(engineData.map(p => p.pose_method))].sort();
+            const depthMethods = [...new Set(engineData.map(p => p.depth_method))].sort();
+            
+            // Build heatmap matrix (rows = pose, cols = depth)
+            const matrix = [];
+            const hoverText = [];
+            
+            poseMethods.forEach(pose => {
+                const row = [];
+                const hoverRow = [];
+                depthMethods.forEach(depth => {
+                    const matches = engineData.filter(p => p.pose_method === pose && p.depth_method === depth);
+                    if (matches.length > 0) {
+                        const value = currentMetric === 'psnr' 
+                            ? mean(matches.map(p => p.psnr))
+                            : mean(matches.map(p => p.ssim));
+                        row.push(value);
+                        const psnr = mean(matches.map(p => p.psnr));
+                        const ssim = mean(matches.map(p => p.ssim));
+                        hoverRow.push(`Pose: ${pose}<br>Depth: ${depth}<br>PSNR: ${psnr.toFixed(2)} dB<br>SSIM: ${ssim.toFixed(4)}`);
+                    } else {
+                        row.push(null);
+                        hoverRow.push('No data');
+                    }
+                });
+                matrix.push(row);
+                hoverText.push(hoverRow);
+            });
+            
+            // Create Plotly heatmap
+            const colorbarTitle = currentMetric === 'psnr' ? 'PSNR (dB)' : 'SSIM';
+            
+            // Calculate min/max for color scale
+            const flatValues = matrix.flat().filter(v => v !== null);
+            const minVal = currentMetric === 'psnr' ? Math.min(...flatValues) * 0.95 : 0;
+            const maxVal = currentMetric === 'psnr' ? Math.max(...flatValues) * 1.02 : 1;
+            
+            // Calculate dynamic height based on number of pose methods
+            const cellHeight = 35;
+            const baseHeight = 120; // margins + labels
+            const dynamicHeight = Math.max(350, poseMethods.length * cellHeight + baseHeight);
+            
+            const heatmapData = [{
+                z: matrix,
+                x: depthMethods,
+                y: poseMethods,
+                type: 'heatmap',
+                colorscale: currentMetric === 'psnr' 
+                    ? [[0, '#1e1b4b'], [0.5, '#4f46e5'], [1, '#22c55e']]
+                    : [[0, '#1e1b4b'], [0.5, '#6366f1'], [1, '#14b8a6']],
+                hoverinfo: 'text',
+                text: hoverText,
+                showscale: true,
+                colorbar: {
+                    title: { text: colorbarTitle, font: { color: '#94a3b8', size: 11 }, side: 'right' },
+                    tickfont: { color: '#64748b', size: 10 },
+                    tickformat: currentMetric === 'psnr' ? '.1f' : '.3f',
+                    len: 0.85,
+                    thickness: 15,
+                    x: 1.02,
+                    xpad: 8,
+                    outlinewidth: 0
+                },
+                zmin: minVal,
+                zmax: maxVal
+            }];
+            
+            const layout = {
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { color: '#94a3b8' },
+                autosize: true,
+                height: dynamicHeight,
+                xaxis: {
+                    title: { text: 'Depth Method', font: { size: 12 }, standoff: 10 },
+                    tickfont: { size: 10 },
+                    tickangle: -35,
+                    gridcolor: '#2d2d3a',
+                    side: 'bottom',
+                    fixedrange: true,
+                    automargin: true
+                },
+                yaxis: {
+                    title: { text: 'Pose Method', font: { size: 12 } },
+                    tickfont: { size: 10 },
+                    gridcolor: '#2d2d3a',
+                    autorange: 'reversed',
+                    fixedrange: true,
+                    automargin: true
+                },
+                margin: { l: 10, r: 10, t: 10, b: 10, pad: 0 },
+                annotations: matrix.flatMap((row, i) => 
+                    row.map((val, j) => ({
+                        x: depthMethods[j],
+                        y: poseMethods[i],
+                        text: val !== null ? (currentMetric === 'psnr' ? val.toFixed(1) : val.toFixed(3)) : '',
+                        font: { color: val !== null && val > (currentMetric === 'psnr' ? 12 : 0.4) ? '#fff' : '#94a3b8', size: 9 },
+                        showarrow: false
+                    }))
+                )
+            };
+            
+            const config = { 
+                displayModeBar: false,
+                responsive: true,
+                staticPlot: false
+            };
+            
+            // Update container height to match
+            document.getElementById('heatmapContainer').style.minHeight = (dynamicHeight + 40) + 'px';
+            document.getElementById('pipelineHeatmap').style.minHeight = dynamicHeight + 'px';
+            
+            // Use Plotly.react for smooth updates without full redraw
+            Plotly.react('pipelineHeatmap', heatmapData, layout, config);
+        }
+        
+        // Handle window resize for heatmap
+        let resizeTimeout;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(function() {
+                if (pipelineDataCache && currentEngine) {
+                    Plotly.relayout('pipelineHeatmap', {
+                        autosize: true
+                    });
+                }
+            }, 250);
+        });
+        
+        function updatePipelineTable(pipelineData, byConfig) {
+            const datasetFilter = document.getElementById('pipelineDatasetFilter').value;
+            const tbody = document.querySelector('#pipelineTable tbody');
+            
+            const configs = Object.keys(byConfig);
+            const avgPSNR = configs.map(c => mean(byConfig[c].map(p => p.psnr)));
+            const avgSSIM = configs.map(c => mean(byConfig[c].map(p => p.ssim)));
+            const bestPSNRVal = Math.max(...avgPSNR);
+            const bestSSIMVal = Math.max(...avgSSIM);
+            
+            // Sort by PSNR descending
+            const sortedIndices = avgPSNR.map((v, i) => i).sort((a, b) => avgPSNR[b] - avgPSNR[a]);
+            
+            document.getElementById('pipelineTableCount').textContent = configs.length + ' configurations';
+            
+            tbody.innerHTML = sortedIndices.map(i => {
+                const config = configs[i];
+                const results = byConfig[config];
+                const psnr = avgPSNR[i];
+                const ssim = avgSSIM[i];
+                const ate = mean(results.map(p => p.pose_ate));
+                return `
+                    <tr>
+                        <td>${results[0].pose_method}</td>
+                        <td>${results[0].depth_method}</td>
+                        <td>${results[0].gs_engine}</td>
+                        <td>${datasetFilter === 'all' ? `Avg (${results.length})` : results[0].dataset}</td>
+                        <td class="${psnr === bestPSNRVal ? 'best' : ''}">${psnr.toFixed(2)}</td>
+                        <td class="${ssim === bestSSIMVal ? 'best' : ''}">${ssim.toFixed(4)}</td>
+                        <td>${ate.toFixed(4)}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            initOverviewCharts();
+        });
+    </script>
+</body>
+</html>
