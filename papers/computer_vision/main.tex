@@ -5,6 +5,8 @@
 \input{preamble}
 
 \definecolor{cvprblue}{rgb}{0.21,0.49,0.74}
+% Needed for table cells spanning multiple rows (\multirow)
+\usepackage{multirow}
 \usepackage[pagebackref,breaklinks,colorlinks,allcolors=cvprblue]{hyperref}
 
 \def\paperID{*****}
@@ -23,7 +25,7 @@ California State Polytechnic University, Pomona\\
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{abstract}
-Accurate camera pose and depth estimation are critical prerequisites for 3D scene reconstruction, yet their relative importance and interaction effects remain understudied. We present a comprehensive evaluation of eleven pose estimation methods---spanning classical feature-based (ORB, SIFT, optical flow) and modern learned approaches (SuperPoint, R2D2, LoFTR, LightGlue, RoMa)---alongside four monocular depth estimators (MiDaS, Depth Anything V2/V3, Depth Pro) within a unified 3D Gaussian Splatting pipeline. Through experiments on 17 sequences from TUM RGB-D and Replica datasets, we analyze accuracy-speed trade-offs and downstream reconstruction impact. Our key findings include: (1) classical robust optical flow achieves \\textbf{best accuracy (0.068m ATE)} while running at 41 FPS---outperforming learned methods on well-textured indoor scenes; (2) pose estimation errors cause \\textbf{8+ dB PSNR degradation}, making pose accuracy the critical bottleneck; (3) surprisingly, \\textbf{learned depth improves reconstruction quality} over sensor depth by +4.5 dB through smoother initialization; (4) only optical flow achieves real-time operation ($>$10 FPS) on edge hardware (NVIDIA Jetson Orin). Our benchmark includes 537 pose estimation runs, 204 depth estimation runs, and 2,979 full pipeline evaluations. We provide an interactive results viewer and open-source implementation at \\url{https://github.com/ParsaRezaei/AirSplatMap}.
+Accurate camera pose and depth estimation are critical prerequisites for 3D scene reconstruction, yet their relative importance and interaction effects remain understudied. We present a comprehensive evaluation of eleven pose estimation methods---spanning classical feature-based (ORB, SIFT, optical flow) and modern learned approaches (SuperPoint, R2D2, LoFTR, LightGlue, RoMa)---alongside four monocular depth estimators (MiDaS, Depth Anything V2/V3, Depth Pro) within a unified 3D Gaussian Splatting pipeline. Through experiments on 17 sequences from TUM RGB-D and Replica datasets, we analyze accuracy-speed trade-offs and downstream reconstruction impact. Our key findings include: (1) classical robust optical flow achieves \textbf{best accuracy (0.068m ATE)} while running at 41 FPS---outperforming learned methods on well-textured indoor scenes; (2) pose estimation errors cause \textbf{8+ dB PSNR degradation}, making pose accuracy the critical bottleneck; (3) surprisingly, \textbf{learned depth improves reconstruction quality} over sensor depth by +4.5 dB through smoother initialization; (4) only optical flow achieves real-time operation ($>$10 FPS) on edge hardware (NVIDIA Jetson Orin). Our benchmark includes 537 pose estimation runs, 204 depth estimation runs, and 2,979 full pipeline evaluations. We provide an interactive results viewer and open-source implementation at \url{https://github.com/ParsaRezaei/AirSplatMap}.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -116,7 +118,7 @@ Our evaluation framework processes RGB video through three stages (Figure~\ref{f
 
 \textbf{Stage 2: Depth Estimation.} Each frame is processed independently to produce dense depth maps $D_t \in \mathbb{R}^{H \times W}$. For relative depth methods, we apply per-frame scale-shift alignment to ground truth when computing metrics.
 
-\textbf{Stage 3: Reconstruction.} Poses and depths feed into GraphDeco~\cite{kerbl3Dgaussians} 3DGS with fixed hyperparameters, enabling controlled comparison of upstream method choices.
+\textbf{Stage 3: Reconstruction.} Poses and depths feed into \textbf{five 3DGS engines}: GraphDeco~\cite{kerbl3Dgaussians} (original implementation), gsplat~\cite{ye2024gsplat} (optimized CUDA kernels), MonoGS~\cite{matsuki2024monogs} (monocular SLAM), SplaTAM~\cite{keetha2024splatam} (dense visual SLAM), and Gaussian-SLAM~\cite{yugay2023gaussianslam} (factor graph optimization). All engines use consistent hyperparameters to enable controlled comparison of upstream method choices.
 
 \subsection{Pose Estimation Methods}
 
@@ -261,16 +263,23 @@ All methods are implemented in Python with PyTorch for GPU acceleration. Classic
 \item Feature extraction: 2000 keypoints maximum per frame
 \item Flow methods: Pyramid levels 5, window size 21
 \item Learned methods: Original pretrained weights without fine-tuning
+\item 3DGS engines: 30,000 iterations, default densification parameters
 \end{itemize}
 
-Experiments run on Ubuntu 22.04 with CUDA 12.1. Desktop: Intel i7-9700K, 64GB RAM, RTX 2080 Ti (11GB). Edge: NVIDIA Jetson AGX Orin at 35W TDP.
+\textbf{Hardware Platforms:}
+\begin{itemize}
+\item \textbf{Ubuntu Desktop:} Intel i9-9600K, 64GB RAM, NVIDIA RTX 2080 Ti (11GB), CUDA 12.1
+\item \textbf{Windows Desktop:} AMD Ryzen 7 3700X, 64GB RAM, NVIDIA RTX 2080 Ti (11GB), CUDA 12.1
+\item \textbf{Edge Device:} NVIDIA Jetson Orin Nano Super at 25W TDP
+\item \textbf{MacBook Pro:} Apple M2 Pro with MPS acceleration (pose/depth estimation only; 3DGS engines require CUDA)
+\end{itemize}
 
 \subsection{Pose Estimation Results}
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/pose_comparison.png}
-\caption{\textbf{Pose Estimation Comparison.} ATE RMSE (meters) across eleven methods. Classical methods (blue) achieve competitive accuracy at higher speeds than learned methods (orange).}
+\caption{\textbf{Pose Estimation Comparison.} ATE RMSE (meters, lower is better) across eleven methods. Classical methods (blue) achieve competitive accuracy at higher speeds than learned methods (red).}
 \label{fig:pose_comparison}
 \end{figure}
 
@@ -356,6 +365,7 @@ DA V2 & 0.480 & 0.328 & 10.2 & 335 MB \\
 \textbf{Key Finding:} Depth Pro achieves lowest AbsRel (0.046) with 97.7\% of pixels within $\delta_1$ threshold, but runs at only 0.3 FPS---impractical for real-time use. MiDaS offers best speed (11.7 FPS) with acceptable accuracy. Note that Depth Anything V2/V3 require proper scale alignment; without it, relative depth predictions show high AbsRel.
 
 \subsection{Downstream Reconstruction Impact}
+\label{sec:downstream}
 
 \begin{figure}[t]
 \centering
@@ -727,9 +737,11 @@ Based on our findings, we provide the following recommendations for practitioner
 
 \textbf{For system design:} Invest computational budget in pose estimation first, and consider using learned monocular depth over RGB-D sensors for initialization.
 
-\subsection{Contributions}
+\subsection{Author Contributions}
 
-This work was completed by Parsa Rezaei, who designed the unified evaluation framework, implemented all eleven pose estimation methods and four depth estimators with consistent interfaces, conducted all 3,991 benchmark experiments across two hardware platforms, performed the statistical analysis, and wrote this paper.
+\textbf{Parsa Rezaei} designed and implemented the AirSplatMap evaluation framework, developed all eleven pose estimation methods and four depth estimators with consistent interfaces, built the benchmark infrastructure and interactive visualization dashboard, conducted all 3,991 experiments across four hardware platforms, and performed the statistical analysis.
+
+\textbf{Acknowledgment:} The 3DGS reconstruction backend used for downstream quality analysis (Section~\ref{sec:downstream}) was implemented by Sunny Yoshimitsu Nguyen, whose integration of five Gaussian splatting engines is detailed in our companion deep learning paper~\cite{rezaei2024airsplatmap_dl}.
 
 \subsection{Future Work}
 

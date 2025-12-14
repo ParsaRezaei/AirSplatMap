@@ -306,9 +306,15 @@ where $T_{\text{total}}$ is total processing time in seconds. Real-time operatio
 
 \subsection{Hardware Platforms}
 
-\textbf{Desktop (RTX 2080 Ti):} 16-core Intel CPU @ 3.6 GHz, 64 GB RAM, NVIDIA RTX 2080 Ti (11 GB VRAM), 250W TDP, Ubuntu 22.04, CUDA 12.1.
+We evaluate across multiple hardware configurations to characterize deployment scenarios:
 
-\textbf{Edge (Jetson AGX Orin):} 12-core ARM Cortex-A78AE @ 2.2 GHz, 64 GB unified memory (7.44 GB available for GPU), 60W TDP (configurable 15-60W), JetPack 6.0, CUDA 12.2.
+\textbf{Ubuntu Desktop:} Intel i9-9600K (6-core @ 3.7 GHz), 64 GB RAM, NVIDIA RTX 2080 Ti (11 GB VRAM), 250W TDP, Ubuntu 22.04, CUDA 12.1.
+
+\textbf{Windows Desktop:} AMD Ryzen 7 3700X (8-core @ 3.6 GHz), 64 GB RAM, NVIDIA RTX 2080 Ti (11 GB VRAM), 250W TDP, Windows 11, CUDA 12.1.
+
+\textbf{Edge Device:} NVIDIA Jetson Orin Nano Super, 8 GB unified memory, 25W TDP, JetPack 6.0, CUDA 12.2.
+
+\textbf{MacBook Pro:} Apple M2 Pro with 16 GB unified memory. Note: 3DGS engines require CUDA and cannot run on MPS; only pose and depth estimation methods were evaluated on this platform.
 
 \subsection{Implementation Details}
 
@@ -443,7 +449,7 @@ Keyframe & MiDaS & 8.78 & -3.93 \\
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/training_curves.png}
-\caption{\textbf{Training Dynamics.} Loss convergence for each engine shown separately to avoid overlap. GraphDeco shows smooth convergence while SLAM-based methods exhibit higher variance.}
+\caption{\textbf{Training Dynamics.} Loss convergence for each engine. GraphDeco shows smooth convergence while SLAM-based methods exhibit higher variance.}
 \label{fig:training_curves}
 \end{figure}
 
@@ -638,7 +644,13 @@ We presented AirSplatMap, a comprehensive pipeline and benchmark for real-time 3
 
 \textbf{(4) Edge deployment requires hybrid strategies.} While 3DGS training is impractical on edge hardware (1.87 FPS), rendering achieves real-time operation (38.7 FPS) with 6$\times$ power savings. This enables train-on-desktop, deploy-on-edge workflows for practical drone applications.
 
-\textbf{Contributions:} Parsa Rezaei designed the evaluation framework, implemented engine integrations, conducted all experiments, performed analysis, and wrote this paper. Sunny Yoshimitsu Nguyen contributed to depth estimation integration, data collection, and experimental validation.
+\subsection{Author Contributions}
+
+This work represents a collaborative effort between two researchers with complementary expertise:
+
+\textbf{Parsa Rezaei} designed the AirSplatMap evaluation framework and benchmark infrastructure, implemented the pose and depth estimation pipelines, developed the interactive visualization dashboard and results viewer, and established the experimental methodology for degradation analysis.
+
+\textbf{Sunny Yoshimitsu Nguyen} implemented all five 3DGS engine integrations (GraphDeco, gsplat, MonoGS, SplaTAM, Gaussian-SLAM), developed the depth-based Gaussian initialization module, configured the training pipelines for each engine, conducted the engine comparison and edge deployment experiments, and contributed to the training dynamics analysis.
 
 \textbf{Future Work:} We plan to extend analysis to outdoor datasets (KITTI~\cite{geiger2012kitti}), evaluate recent foundation models (DUSt3R~\cite{wang2024dust3r}), develop adaptive method selection based on scene characteristics, and investigate streaming strategies for large-scale scenes.
 
