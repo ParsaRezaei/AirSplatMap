@@ -1,20 +1,4 @@
 {
-  "jetson": {
-    "benchmarks": [
-      "benchmark_20251208_111826"
-    ],
-    "latest": "benchmark_20251208_111826",
-    "count": 1,
-    "metadata": {
-      "benchmark_20251208_111826": {
-        "has_report": true,
-        "timestamp": "2025-12-08T11:18:26",
-        "display_name": "2025-12-08 11:18",
-        "has_results_json": true,
-        "has_plots": true
-      }
-    }
-  },
   "pastup": {
     "benchmarks": [
       "benchmark_20251205_215836",
@@ -58,6 +42,182 @@
         "has_report": true,
         "timestamp": "2025-12-05T06:29:53",
         "display_name": "2025-12-05 06:29",
+        "has_results_json": true,
+        "has_plots": true
+      }
+    }
+  },
+  "jetson": {
+    "benchmarks": [
+      "benchmark_20251213_113045",
+      "benchmark_20251212_183235",
+      "benchmark_20251212_172500",
+      "benchmark_20251212_004250",
+      "benchmark_20251208_111826"
+    ],
+    "latest": "benchmark_20251213_113045",
+    "count": 5,
+    "metadata": {
+      "benchmark_20251213_113045": {
+        "has_report": true,
+        "timestamp": "2025-12-13T11:30:45",
+        "display_name": "2025-12-13 11:30",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251212_183235": {
+        "has_report": true,
+        "timestamp": "2025-12-12T18:32:35",
+        "display_name": "2025-12-12 18:32",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251212_172500": {
+        "has_report": true,
+        "timestamp": "2025-12-12T17:25:00",
+        "display_name": "2025-12-12 17:25",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251212_004250": {
+        "has_report": true,
+        "timestamp": "2025-12-12T00:42:50",
+        "display_name": "2025-12-12 00:42",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251208_111826": {
+        "has_report": true,
+        "timestamp": "2025-12-08T11:18:26",
+        "display_name": "2025-12-08 11:18",
+        "has_results_json": true,
+        "has_plots": true
+      }
+    }
+  },
+  "Parsas-MBP": {
+    "benchmarks": [
+      "benchmark_20251212_044318",
+      "benchmark_20251212_024934",
+      "benchmark_20251212_024809",
+      "benchmark_20251212_022948",
+      "benchmark_20251212_022634"
+    ],
+    "latest": "benchmark_20251212_044318",
+    "count": 5,
+    "metadata": {
+      "benchmark_20251212_044318": {
+        "has_report": true,
+        "timestamp": "2025-12-12T04:43:18",
+        "display_name": "2025-12-12 04:43",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251212_024934": {
+        "has_report": true,
+        "timestamp": "2025-12-12T02:49:34",
+        "display_name": "2025-12-12 02:49",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251212_024809": {
+        "has_report": true,
+        "timestamp": "2025-12-12T02:48:09",
+        "display_name": "2025-12-12 02:48",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251212_022948": {
+        "has_report": true,
+        "timestamp": "2025-12-12T02:29:48",
+        "display_name": "2025-12-12 02:29",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251212_022634": {
+        "has_report": true,
+        "timestamp": "2025-12-12T02:26:34",
+        "display_name": "2025-12-12 02:26",
+        "has_results_json": true,
+        "has_plots": true
+      }
+    }
+  },
+  "Eury-PC": {
+    "benchmarks": [
+      "benchmark_20251213_111221",
+      "benchmark_20251213_105523",
+      "benchmark_20251213_105204",
+      "benchmark_20251213_103151",
+      "benchmark_20251213_014601",
+      "benchmark_20251213_003407",
+      "benchmark_20251212_223553",
+      "benchmark_20251211_122818",
+      "benchmark_20251210_002224"
+    ],
+    "latest": "benchmark_20251213_111221",
+    "count": 9,
+    "metadata": {
+      "benchmark_20251213_111221": {
+        "has_report": true,
+        "timestamp": "2025-12-13T11:12:21",
+        "display_name": "2025-12-13 11:12",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251213_105523": {
+        "has_report": true,
+        "timestamp": "2025-12-13T10:55:23",
+        "display_name": "2025-12-13 10:55",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251213_105204": {
+        "has_report": true,
+        "timestamp": "2025-12-13T10:52:04",
+        "display_name": "2025-12-13 10:52",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251213_103151": {
+        "has_report": true,
+        "timestamp": "2025-12-13T10:31:51",
+        "display_name": "2025-12-13 10:31",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251213_014601": {
+        "has_report": true,
+        "timestamp": "2025-12-13T01:46:01",
+        "display_name": "2025-12-13 01:46",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251213_003407": {
+        "has_report": true,
+        "timestamp": "2025-12-13T00:34:07",
+        "display_name": "2025-12-13 00:34",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251212_223553": {
+        "has_report": true,
+        "timestamp": "2025-12-12T22:35:53",
+        "display_name": "2025-12-12 22:35",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251211_122818": {
+        "has_report": true,
+        "timestamp": "2025-12-11T12:28:18",
+        "display_name": "2025-12-11 12:28",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251210_002224": {
+        "has_report": true,
+        "timestamp": "2025-12-10T00:22:24",
+        "display_name": "2025-12-10 00:22",
         "has_results_json": true,
         "has_plots": true
       }
