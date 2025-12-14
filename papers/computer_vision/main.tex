@@ -118,7 +118,23 @@ Our evaluation framework processes RGB video through three stages (Figure~\ref{f
 
 \textbf{Stage 2: Depth Estimation.} Each frame is processed independently to produce dense depth maps $D_t \in \mathbb{R}^{H \times W}$. For relative depth methods, we apply per-frame scale-shift alignment to ground truth when computing metrics.
 
-\textbf{Stage 3: Reconstruction.} Poses and depths feed into \textbf{five 3DGS engines}: GraphDeco~\cite{kerbl3Dgaussians} (original implementation), gsplat~\cite{ye2024gsplat} (optimized CUDA kernels), MonoGS~\cite{matsuki2024monogs} (monocular SLAM), SplaTAM~\cite{keetha2024splatam} (dense visual SLAM), and Gaussian-SLAM~\cite{yugay2023gaussianslam} (factor graph optimization). All engines use consistent hyperparameters to enable controlled comparison of upstream method choices.
+\textbf{Stage 3: Reconstruction.} Poses and depths feed into \textbf{five 3DGS engines}: GraphDeco~\cite{kerbl3Dgaussians} (original implementation), gsplat~\cite{ye2024gsplat} (optimized CUDA kernels), MonoGS~\cite{matsuki2024monogs} (monocular SLAM), SplaTAM~\cite{keetha2024splatam} (dense visual SLAM), and Gaussian-SLAM~\cite{yugay2023gaussianslam} (factor graph optimization).
+
+\subsection{3DGS Optimization Objective}
+
+To evaluate the downstream impact of pose and depth errors, we utilize the standard 3D Gaussian Splatting optimization objective. The loss function $\mathcal{L}$ combines L1 photometric error and Structural Similarity (SSIM) to guide the optimization of Gaussian parameters (position, covariance, opacity, color):
+
+\begin{equation}
+\mathcal{L} = (1 - \lambda)\mathcal{L}_1 + \lambda \mathcal{L}_{\text{SSIM}}
+\end{equation}
+
+where $\lambda = 0.2$ is a weighting factor. The L1 loss ensures pixel-wise color fidelity:
+
+\begin{equation}
+\mathcal{L}_1 = \frac{1}{|\mathcal{P}|} \sum_{p \in \mathcal{P}} |I_p - \hat{I}_p|
+\end{equation}
+
+where $I_p$ and $\hat{I}_p$ are the ground truth and rendered pixel intensities. The SSIM loss enforces structural consistency, which is critical for perceptual quality. By fixing this downstream objective, we can isolate the impact of upstream pose and depth variations on the final reconstruction quality.
 
 \subsection{Pose Estimation Methods}
 
@@ -238,9 +254,13 @@ where $\phi_l$ extracts features from layer $l$ of AlexNet, $w_l$ are learned we
 \label{fig:eval_framework}
 \end{figure}
 
+Unless otherwise noted, downstream 3DGS reconstruction uses \textbf{gsplat} as the state-of-the-art baseline engine; it achieves 15.0 dB PSNR on TUM fr1\_desk and 28.1 dB on Replica room0, making it the strongest renderer in our pool for comparing upstream pose/depth choices.
+
 \subsection{Datasets}
 
 We evaluate on established RGB-D benchmarks providing ground truth camera poses and depth:
+
+	extbf{Data usage.} All frames are used for evaluation (no train/val/test split) because we analyze end-to-end error propagation rather than train a model. TUM RGB-D contributes seven sequences (\textasciitilde15K frames total) at 640$\times$480, Replica adds eight synthetic sequences (\textasciitilde15K frames) at 640$\times$480; inputs are RGB, outputs are dense depth and rendered RGB for PSNR/SSIM/LPIPS evaluation.
 
 \textbf{TUM RGB-D}~\cite{sturm2012tum}: Seven indoor sequences captured with Microsoft Kinect at 640$\times$480 resolution, 30 Hz. Ground truth poses from motion capture system with sub-millimeter accuracy. Sequences include:
 \begin{itemize}
@@ -259,9 +279,9 @@ In total, we evaluate on \textbf{17 sequences} spanning diverse indoor environme
 
 All methods are implemented in Python with PyTorch for GPU acceleration. Classical methods use OpenCV implementations. For reproducibility:
 \begin{itemize}
-\item RANSAC: 1000 iterations, threshold 0.01, confidence 0.999
+\item Essential matrix estimation: OpenCV RANSAC with confidence 0.999, threshold 1.0 pixel
 \item Feature extraction: 2000 keypoints maximum per frame
-\item Flow methods: Pyramid levels 5, window size 21
+\item Flow methods: Farneb\"ack algorithm with 5 pyramid levels, 21-pixel window
 \item Learned methods: Original pretrained weights without fine-tuning
 \item 3DGS engines: 30,000 iterations, default densification parameters
 \end{itemize}
@@ -271,7 +291,7 @@ All methods are implemented in Python with PyTorch for GPU acceleration. Classic
 \item \textbf{Ubuntu Desktop:} Intel i9-9600K, 64GB RAM, NVIDIA RTX 2080 Ti (11GB), CUDA 12.1
 \item \textbf{Windows Desktop:} AMD Ryzen 7 3700X, 64GB RAM, NVIDIA RTX 2080 Ti (11GB), CUDA 12.1
 \item \textbf{Edge Device:} NVIDIA Jetson Orin Nano Super at 25W TDP
-\item \textbf{MacBook Pro:} Apple M2 Pro with MPS acceleration (pose/depth estimation only; 3DGS engines require CUDA)
+\item \textbf{MacBook Pro:} Intel Core i9-9880H, 32 GB RAM, AMD Radeon Pro 5500M (pose/depth estimation only; 3DGS engines require CUDA)
 \end{itemize}
 
 \subsection{Pose Estimation Results}
@@ -605,61 +625,9 @@ LoFTR & 0.096 & 0.112 & +17\% \\
 
 Optical flow and learned matchers generalize well. Feature-based methods suffer domain shift due to different texture distributions between real (TUM) and synthetic (Replica) data.
 
-\subsection{Ablation Studies}
+\subsection{Implementation Notes}
 
-We ablate key design choices:
-
-\textbf{Number of RANSAC iterations:}
-\begin{table}[h]
-\small
-\centering
-\begin{tabular}{lccc}
-\toprule
-Iterations & ATE & Runtime & Inlier \% \\
-\midrule
-100 & 0.089 & 1.8 ms & 78\% \\
-500 & 0.075 & 3.2 ms & 85\% \\
-1000 & 0.074 & 5.1 ms & 86\% \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-500 iterations provide sufficient outlier rejection; more shows diminishing returns.
-
-\textbf{Correspondence sampling density:}
-\begin{table}[h]
-\small
-\centering
-\begin{tabular}{lccc}
-\toprule
-Points & ATE & Runtime & Coverage \\
-\midrule
-500 & 0.092 & 2.1 ms & 62\% \\
-1000 & 0.078 & 2.8 ms & 78\% \\
-2000 & 0.075 & 3.2 ms & 89\% \\
-4000 & 0.074 & 4.5 ms & 95\% \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-2000 correspondences provide optimal trade-off between accuracy and speed.
-
-\textbf{Bidirectional consistency threshold:}
-\begin{table}[h]
-\small
-\centering
-\begin{tabular}{lccc}
-\toprule
-Threshold (px) & ATE & Lost \% & Valid \% \\
-\midrule
-0.5 & 0.082 & 0.1\% & 45\% \\
-1.0 & 0.075 & 0.2\% & 62\% \\
-2.0 & 0.078 & 0.3\% & 78\% \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-1.0 pixel threshold balances consistency checking rigor against correspondence availability.
+All pose estimation methods use OpenCV's built-in essential matrix estimation with RANSAC for geometric verification. For optical flow methods, we use Farneb\"ack's polynomial expansion algorithm with 5 pyramid levels and 21-pixel window size. Feature-based methods (ORB, SIFT) extract up to 2000 keypoints per frame with ratio test filtering (threshold 0.75). Learned methods (LoFTR, SuperPoint, LightGlue, R2D2, RoMa) use their original pre-trained weights without fine-tuning. Depth estimators (MiDaS, Depth Anything V2/V3, Depth Pro) similarly use default configurations from their respective repositories.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Discussion}
@@ -741,7 +709,7 @@ Based on our findings, we provide the following recommendations for practitioner
 
 \textbf{Parsa Rezaei} designed and implemented the AirSplatMap evaluation framework, developed all eleven pose estimation methods and four depth estimators with consistent interfaces, built the benchmark infrastructure and interactive visualization dashboard, conducted all 3,991 experiments across four hardware platforms, and performed the statistical analysis.
 
-\textbf{Acknowledgment:} The 3DGS reconstruction backend used for downstream quality analysis (Section~\ref{sec:downstream}) was implemented by Sunny Yoshimitsu Nguyen, whose integration of five Gaussian splatting engines is detailed in our companion deep learning paper~\cite{rezaei2024airsplatmap_dl}.
+\textbf{Acknowledgment:} The 3DGS reconstruction backend used for downstream quality analysis (Section~\ref{sec:downstream}) was implemented by Sunny Yoshimitsu Nguyen, who integrated five Gaussian splatting engines (GraphDeco, gsplat, MonoGS, SplaTAM, Gaussian-SLAM).
 
 \subsection{Future Work}
 
