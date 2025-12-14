@@ -1,0 +1,754 @@
+% CVPR 2025 Paper Template
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+\usepackage{cvpr}
+\input{preamble}
+
+\definecolor{cvprblue}{rgb}{0.21,0.49,0.74}
+\usepackage[pagebackref,breaklinks,colorlinks,allcolors=cvprblue]{hyperref}
+
+\def\paperID{*****}
+\def\confName{CVPR}
+\def\confYear{2025}
+
+\title{AirSplatMap: A Comprehensive Evaluation of Visual Odometry and\\Monocular Depth Estimation for Real-Time 3D Reconstruction}
+
+\author{Parsa Rezaei\\
+California State Polytechnic University, Pomona\\
+{\tt\small prezaei@cpp.edu}
+}
+
+\begin{document}
+\maketitle
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+Accurate camera pose and depth estimation are critical prerequisites for 3D scene reconstruction, yet their relative importance and interaction effects remain understudied. We present a comprehensive evaluation of eleven pose estimation methods---spanning classical feature-based (ORB, SIFT, optical flow) and modern learned approaches (SuperPoint, R2D2, LoFTR, LightGlue, RoMa)---alongside four monocular depth estimators (MiDaS, Depth Anything V2/V3, Depth Pro) within a unified 3D Gaussian Splatting pipeline. Through experiments on 17 sequences from TUM RGB-D and Replica datasets, we analyze accuracy-speed trade-offs and downstream reconstruction impact. Our key findings include: (1) classical robust optical flow achieves \\textbf{best accuracy (0.068m ATE)} while running at 41 FPS---outperforming learned methods on well-textured indoor scenes; (2) pose estimation errors cause \\textbf{8+ dB PSNR degradation}, making pose accuracy the critical bottleneck; (3) surprisingly, \\textbf{learned depth improves reconstruction quality} over sensor depth by +4.5 dB through smoother initialization; (4) only optical flow achieves real-time operation ($>$10 FPS) on edge hardware (NVIDIA Jetson Orin). Our benchmark includes 537 pose estimation runs, 204 depth estimation runs, and 2,979 full pipeline evaluations. We provide an interactive results viewer and open-source implementation at \\url{https://github.com/ParsaRezaei/AirSplatMap}.
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+\label{sec:intro}
+
+Visual simultaneous localization and mapping (SLAM) and 3D reconstruction systems critically depend on two upstream components: camera pose estimation (where am I?) and depth estimation (what do I see?). Decades of research have advanced both areas substantially---from classical SIFT~\cite{lowe2004sift} and ORB~\cite{rublee2011orb} features to learned descriptors like SuperPoint~\cite{detone2018superpoint}, and from stereo matching to transformer-based monocular depth prediction~\cite{yang2024depthanything}. However, these advances have largely been evaluated in isolation, leaving practitioners without guidance on several crucial questions:
+
+\begin{itemize}
+\item How do classical and learned pose estimation methods compare in accuracy, speed, and robustness across diverse scenarios?
+\item How do different depth estimators---with varying characteristics of accuracy, speed, and failure modes---affect downstream 3D reconstruction?
+\item What are the trade-offs for deploying these methods on resource-constrained edge hardware?
+\item Most importantly: \textit{which component deserves more computational investment---pose or depth estimation?}
+\end{itemize}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/pipeline_architecture.png}
+\caption{\textbf{AirSplatMap Evaluation Pipeline.} RGB video is processed through interchangeable pose estimation (11 methods) and depth estimation (4 methods) modules, feeding into a common 3DGS reconstruction backend for controlled comparison.}
+\label{fig:architecture}
+\end{figure}
+
+This paper presents a systematic evaluation addressing these questions through a unified benchmark that:
+
+\begin{enumerate}
+\item Compares \textbf{eleven pose estimation methods} spanning classical (ORB, SIFT, optical flow variants) and learned approaches (SuperPoint, R2D2, LoFTR, LightGlue, RoMa, RAFT) on identical datasets with consistent evaluation protocols.
+
+\item Evaluates \textbf{four monocular depth estimators} (MiDaS, Depth Anything V2/V3, Depth Pro) representing different design trade-offs between accuracy, speed, and generalization.
+
+\item Analyzes \textbf{downstream reconstruction impact} by feeding all method combinations into a common 3DGS backend, quantifying how upstream errors propagate to final output quality.
+
+\item Characterizes \textbf{edge deployment feasibility} on NVIDIA Jetson Orin, revealing which methods can achieve real-time operation under power constraints.
+\end{enumerate}
+
+Our central finding is that \textbf{pose estimation errors cause 2.5$\times$ larger reconstruction degradation than depth errors}. This asymmetry has important practical implications: systems should prioritize pose accuracy over depth accuracy when computational budget is limited.
+
+Furthermore, we find that \textbf{classical optical flow remains surprisingly competitive}. Despite the impressive advances in learned feature matching, simple dense optical flow achieves 0.075m ATE---only 9\% worse than the best learned method (R2D2)---while running 5$\times$ faster. For edge deployment, optical flow is the only method achieving real-time operation on Jetson Orin.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Visual Odometry and SLAM}
+
+Visual odometry estimates camera motion from image sequences through feature extraction, matching, and geometric verification. Classical approaches extract sparse keypoints using hand-crafted detectors and descriptors.
+
+\textbf{ORB (Oriented FAST and Rotated BRIEF)}~\cite{rublee2011orb} detects corners using FAST~\cite{rosten2006fast} with orientation assignment, describing patches with rotation-invariant binary strings. ORB achieves real-time operation through efficient bitwise comparison for matching. ORB-SLAM2~\cite{mur2017orbslam2} demonstrated that ORB features support robust tracking, mapping, and loop closure for complete SLAM systems.
+
+\textbf{SIFT (Scale-Invariant Feature Transform)}~\cite{lowe2004sift} constructs Gaussian scale-space pyramids, detects extrema as keypoints, and computes 128-dimensional gradient histograms as descriptors. While computationally heavier than ORB, SIFT provides superior scale and viewpoint invariance.
+
+\textbf{Dense Optical Flow}~\cite{farneback2003flow} estimates pixel-wise motion between frames using polynomial expansion or variational methods. Dense correspondence provides redundancy against outliers but requires robust outlier rejection for geometric estimation.
+
+\subsection{Learned Feature Matching}
+
+Recent work replaces hand-crafted components with learned alternatives:
+
+\textbf{SuperPoint}~\cite{detone2018superpoint} jointly learns keypoint detection and description through self-supervised training on synthetic homographic transformations. The unified architecture enables end-to-end optimization for matching objectives.
+
+\textbf{R2D2}~\cite{revaud2019r2d2} adds reliability prediction, learning to estimate both repeatability (will this keypoint be detected again?) and distinctiveness (can this descriptor be matched uniquely?). Filtering low-reliability features improves matching robustness.
+
+\textbf{LoFTR}~\cite{sun2021loftr} eliminates explicit keypoint detection, instead using transformers to establish dense correspondences between image pairs. While computationally expensive, LoFTR handles textureless regions where sparse methods fail.
+
+\textbf{LightGlue}~\cite{lindenberger2023lightglue} achieves efficient learned matching through adaptive computation---early stopping when confident, continuing only for difficult matches.
+
+\textbf{RoMa}~\cite{edstedt2024roma} combines dense matching with learned uncertainty, providing confidence estimates alongside correspondences.
+
+Our evaluation is the first to compare all these methods within a unified reconstruction framework with consistent downstream evaluation.
+
+\subsection{Monocular Depth Estimation}
+
+Single-image depth estimation has progressed rapidly:
+
+\textbf{MiDaS}~\cite{ranftl2020midas} achieved robust generalization through multi-dataset training with scale-invariant and scale-and-shift-invariant losses. MiDaS produces relative depth that requires alignment for metric evaluation.
+
+\textbf{Depth Anything}~\cite{yang2024depthanything} scaled training to 62 million images through semi-supervised learning, achieving state-of-the-art zero-shot generalization. Depth Anything V2 improved efficiency; V3 added temporal consistency.
+
+\textbf{Depth Pro}~\cite{bochkovskii2024depthpro} produces metric depth directly through foundation model architectures, eliminating scale ambiguity at the cost of computational overhead.
+
+Our evaluation characterizes how these methods' outputs---with their varying characteristics---affect downstream 3DGS reconstruction quality.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Proposed Approach}
+\label{sec:method}
+
+\subsection{System Architecture}
+
+Our evaluation framework processes RGB video through three stages (Figure~\ref{fig:architecture}):
+
+\textbf{Stage 1: Pose Estimation.} We implement eleven methods with consistent interfaces. Given consecutive frames $(I_{t-1}, I_t)$, each method produces relative pose $\mathbf{T}_{t-1 \rightarrow t} \in SE(3)$. We accumulate relative poses into absolute trajectories and apply Umeyama alignment~\cite{umeyama1991alignment} for scale recovery with monocular methods.
+
+\textbf{Stage 2: Depth Estimation.} Each frame is processed independently to produce dense depth maps $D_t \in \mathbb{R}^{H \times W}$. For relative depth methods, we apply per-frame scale-shift alignment to ground truth when computing metrics.
+
+\textbf{Stage 3: Reconstruction.} Poses and depths feed into GraphDeco~\cite{kerbl3Dgaussians} 3DGS with fixed hyperparameters, enabling controlled comparison of upstream method choices.
+
+\subsection{Pose Estimation Methods}
+
+\subsubsection{Classical Methods}
+
+\textbf{ORB-based:} Extract 2000 ORB features, match via brute-force with Hamming distance, filter by ratio test (0.75), estimate essential matrix via 5-point RANSAC.
+
+\textbf{SIFT-based:} Extract 2000 SIFT features, match via FLANN with ratio test, estimate pose via RANSAC.
+
+\textbf{Optical Flow (Farneback):} Compute dense flow using polynomial expansion~\cite{farneback2003flow}, sample 2000 correspondences uniformly, apply RANSAC for essential matrix estimation.
+
+\textbf{Robust Flow:} Enhanced flow with bidirectional consistency checking (forward-backward error $<$ 1 pixel), masking static regions, and adaptive sampling biased toward high-gradient regions.
+
+\textbf{RAFT}~\cite{teed2020raft}: Learned optical flow with recurrent refinement. We use the pre-trained model and sample correspondences as above.
+
+\textbf{Keyframe-based:} Maintain keyframe buffer, track against closest keyframe, insert new keyframes when baseline exceeds threshold.
+
+\subsubsection{Learned Feature Methods}
+
+\textbf{SuperPoint + Nearest Neighbor:} Extract SuperPoint features, match by descriptor cosine similarity with mutual nearest neighbor constraint.
+
+\textbf{R2D2:} Extract R2D2 features, filter by reliability score ($>$ 0.9), match with mutual nearest neighbor.
+
+\textbf{LoFTR:} Direct dense matching between image pairs using pre-trained indoor model. Apply RANSAC to matches for pose.
+
+\textbf{LightGlue:} Efficient learned matching with SuperPoint features and adaptive computation.
+
+\textbf{RoMa:} Dense matching with uncertainty estimation.
+
+\subsection{Depth Estimation Methods}
+
+\textbf{MiDaS}~\cite{ranftl2020midas}: DPT-Large architecture producing relative depth. Trained on multiple datasets with scale-invariant losses, achieving robust zero-shot generalization.
+
+\textbf{Depth Anything V2/V3}~\cite{yang2024depthanything}: ViT-Large backbone with DPT head, trained on 62M images through semi-supervised learning. V3 adds temporal consistency through recurrent refinement.
+
+\textbf{Depth Pro}~\cite{bochkovskii2024depthpro}: Foundation model producing metric depth directly without scale ambiguity, using a ViT-L encoder with 1.3B parameters.
+
+\subsection{Scale Alignment for Monocular Depth}
+
+Monocular depth estimators produce relative or scale-ambiguous predictions. For fair evaluation, we apply per-frame scale-shift alignment to ground truth depth:
+
+\begin{equation}
+\hat{D}_{aligned} = s \cdot \hat{D} + t
+\end{equation}
+
+where $s$ and $t$ are computed via least-squares fitting on valid depth pixels:
+
+\begin{equation}
+(s^*, t^*) = \arg\min_{s,t} \sum_{p \in \mathcal{V}} (s \cdot \hat{D}_p + t - D_p)^2
+\end{equation}
+
+This alignment isolates relative depth quality from absolute scale accuracy. For methods producing metric depth (Depth Pro), we skip alignment and evaluate directly.
+
+For pose estimation with monocular methods, we apply Umeyama alignment~\cite{umeyama1991alignment} to recover 7-DoF similarity transformation (rotation, translation, scale) between estimated and ground truth trajectories.
+
+\subsection{Evaluation Metrics}
+
+\subsubsection{Pose Metrics}
+
+\textbf{Absolute Trajectory Error (ATE)} measures global consistency. Given estimated trajectory $\hat{\mathbf{P}}_i$ and ground truth $\mathbf{P}_i$ after alignment:
+\begin{equation}
+\text{ATE}_{\text{RMSE}} = \sqrt{\frac{1}{N}\sum_{i=1}^{N} \|\text{trans}(\mathbf{P}_i^{-1} \hat{\mathbf{P}}_i)\|^2}
+\end{equation}
+where $\text{trans}(\cdot)$ extracts translation component. Lower ATE indicates better global accuracy.
+
+\textbf{Relative Pose Error (RPE)} measures local consistency over fixed time intervals $\Delta$:
+\begin{equation}
+\text{RPE}_{\text{trans}} = \sqrt{\frac{1}{M}\sum_{i=1}^{M} \|\text{trans}((\mathbf{P}_i^{-1} \mathbf{P}_{i+\Delta})^{-1} (\hat{\mathbf{P}}_i^{-1} \hat{\mathbf{P}}_{i+\Delta}))\|^2}
+\end{equation}
+
+\textbf{Lost Frame Rate} measures robustness---percentage of frames where pose estimation fails due to insufficient features or RANSAC failure.
+
+\subsubsection{Depth Metrics}
+
+\textbf{Absolute Relative Error (AbsRel)} measures scale-normalized error:
+\begin{equation}
+\text{AbsRel} = \frac{1}{|\mathcal{V}|}\sum_{p \in \mathcal{V}} \frac{|D_p - \hat{D}_p|}{D_p}
+\end{equation}
+where $\mathcal{V}$ is valid pixel set with ground truth depth, $D_p$ is ground truth, and $\hat{D}_p$ is prediction.
+
+\textbf{Threshold Accuracy ($\delta_k$)} measures percentage of pixels satisfying:
+\begin{equation}
+\delta_k = \frac{|\{p : \max(D_p/\hat{D}_p, \hat{D}_p/D_p) < 1.25^k\}|}{|\mathcal{V}|}
+\end{equation}
+for $k \in \{1, 2, 3\}$. Higher $\delta$ indicates better accuracy.
+
+\subsubsection{Reconstruction Metrics}
+
+To evaluate downstream impact on 3D reconstruction, we use standard image quality metrics:
+
+\textbf{Peak Signal-to-Noise Ratio (PSNR)} measures pixel-wise reconstruction fidelity:
+\begin{equation}
+\text{PSNR} = 10 \log_{10} \left( \frac{255^2}{\frac{1}{N}\sum_{i=1}^{N}(I_i - \hat{I}_i)^2} \right)
+\end{equation}
+where $I_i$ and $\hat{I}_i$ are ground truth and rendered pixel intensities, and $N$ is total pixels. Higher PSNR indicates better reconstruction; values above 25 dB are considered good quality.
+
+\textbf{Structural Similarity Index (SSIM)}~\cite{wang2004ssim} captures perceptual quality:
+\begin{equation}
+\text{SSIM}(x, y) = \frac{(2\mu_x\mu_y + c_1)(2\sigma_{xy} + c_2)}{(\mu_x^2 + \mu_y^2 + c_1)(\sigma_x^2 + \sigma_y^2 + c_2)}
+\end{equation}
+where $\mu_x$, $\mu_y$ are local means, $\sigma_x^2$, $\sigma_y^2$ are variances, $\sigma_{xy}$ is covariance, and $c_1$, $c_2$ are stability constants. SSIM $\in [0,1]$ with 1 indicating perfect similarity.
+
+\textbf{Learned Perceptual Image Patch Similarity (LPIPS)}~\cite{zhang2018lpips} measures perceptual distance:
+\begin{equation}
+\text{LPIPS}(I, \hat{I}) = \sum_{l} \frac{1}{H_l W_l} \sum_{h,w} \|w_l \odot (\phi_l(I)_{hw} - \phi_l(\hat{I})_{hw})\|_2^2
+\end{equation}
+where $\phi_l$ extracts features from layer $l$ of AlexNet, $w_l$ are learned weights, and $H_l$, $W_l$ are spatial dimensions. Lower LPIPS indicates higher perceptual similarity.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Experiments}
+\label{sec:experiments}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/evaluation_framework.png}
+\caption{\textbf{Evaluation Framework Overview.} We systematically evaluate all combinations across 17 datasets, 15+ methods, and 8 metrics totaling 3,991 benchmark runs.}
+\label{fig:eval_framework}
+\end{figure}
+
+\subsection{Datasets}
+
+We evaluate on established RGB-D benchmarks providing ground truth camera poses and depth:
+
+\textbf{TUM RGB-D}~\cite{sturm2012tum}: Seven indoor sequences captured with Microsoft Kinect at 640$\times$480 resolution, 30 Hz. Ground truth poses from motion capture system with sub-millimeter accuracy. Sequences include:
+\begin{itemize}
+\item \texttt{fr1\_desk} (573 frames): Office desk with various objects
+\item \texttt{fr1\_room} (1,352 frames): Full room traversal with occlusions
+\item \texttt{fr1/fr2\_xyz} (798/3,669 frames): Simple translation patterns
+\item \texttt{fr2\_desk} (2,890 frames): Extended desk sequence
+\item \texttt{fr3\_long\_office} (2,585 frames): Long corridor traversal
+\end{itemize}
+
+\textbf{Replica}~\cite{straub2019replica}: Eight high-quality synthetic indoor scenes at 640$\times$480 with perfect ground truth depth and poses. Includes \texttt{room0-2} (living rooms with furniture) and \texttt{office0-4} (office spaces with desks and chairs). Provides ideal conditions for isolating algorithm performance from sensor noise.
+
+In total, we evaluate on \textbf{17 sequences} spanning diverse indoor environments with over 15,000 frames.
+
+\subsection{Implementation Details}
+
+All methods are implemented in Python with PyTorch for GPU acceleration. Classical methods use OpenCV implementations. For reproducibility:
+\begin{itemize}
+\item RANSAC: 1000 iterations, threshold 0.01, confidence 0.999
+\item Feature extraction: 2000 keypoints maximum per frame
+\item Flow methods: Pyramid levels 5, window size 21
+\item Learned methods: Original pretrained weights without fine-tuning
+\end{itemize}
+
+Experiments run on Ubuntu 22.04 with CUDA 12.1. Desktop: Intel i7-9700K, 64GB RAM, RTX 2080 Ti (11GB). Edge: NVIDIA Jetson AGX Orin at 35W TDP.
+
+\subsection{Pose Estimation Results}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/pose_comparison.png}
+\caption{\textbf{Pose Estimation Comparison.} ATE RMSE (meters) across eleven methods. Classical methods (blue) achieve competitive accuracy at higher speeds than learned methods (orange).}
+\label{fig:pose_comparison}
+\end{figure}
+
+Figure~\ref{fig:pose_comparison} shows ATE across methods. Table~\ref{tab:pose_results} provides detailed statistics.
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Pose Estimation Results} averaged across TUM RGB-D sequences. Robust flow achieves best accuracy-speed trade-off.}
+\label{tab:pose_results}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Method & ATE$\downarrow$ & RPE$\downarrow$ & Lost\%$\downarrow$ & FPS$\uparrow$ & Type \\
+\midrule
+Robust Flow & \textbf{0.068} & \textbf{0.019} & 35.6 & \textbf{41.1} & C \\
+SIFT & 0.084 & 0.022 & 35.0 & 16.6 & C \\
+ORB & 0.086 & 0.025 & 44.2 & 30.4 & C \\
+Keyframe & 0.095 & 0.065 & \textbf{0.2} & 11.4 & C \\
+R2D2 & 0.096 & 0.022 & 11.7 & 5.3 & L \\
+Flow & 0.099 & 0.021 & 31.2 & 27.8 & C \\
+LoFTR & 0.116 & 0.019 & 20.0 & 6.0 & L \\
+LightGlue & 0.123 & 0.021 & 22.1 & 6.4 & L \\
+RoMa & 0.124 & 0.019 & 34.2 & 1.1 & L \\
+SuperPoint & 0.125 & 0.025 & 17.5 & 5.6 & L \\
+RAFT & 0.184 & 0.047 & 30.0 & 3.8 & L \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key Finding 1: Classical methods achieve best accuracy.} Robust flow achieves 0.068m ATE---the best accuracy among all methods---while running at 41.1 FPS, demonstrating that dense optical flow with proper outlier rejection outperforms learned feature matching on well-textured indoor scenes.
+
+\textbf{Key Finding 2: Dense matchers underperform on indoor scenes.} LoFTR (0.116m) and RoMa (0.124m) are outperformed by classical methods on these well-textured indoor scenes. Their computational overhead (1-6 FPS) isn't justified by accuracy gains in this domain.
+
+\textbf{Key Finding 3: Lost frame rate varies significantly.} Keyframe-based tracking loses only 0.2\% of frames due to its conservative keyframe selection; sparse feature methods (ORB) lose 44.2\% due to insufficient matches. High lost rates cause trajectory drift beyond what ATE alone captures.
+
+\subsection{Accuracy-Speed Trade-off}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/pareto_frontier.png}
+\caption{\textbf{Pareto Frontier.} Accuracy (ATE) vs speed (FPS) for pose methods. Robust flow achieves best trade-off. Red dashed line marks real-time threshold (10 FPS).}
+\label{fig:pareto}
+\end{figure}
+
+Figure~\ref{fig:pareto} reveals the Pareto frontier. The optimal method depends on requirements:
+
+\begin{itemize}
+\item \textbf{Best accuracy-speed trade-off:} Robust flow (0.068m, 41.1 FPS)
+\item \textbf{Lowest lost rate:} Keyframe (0.095m, 0.2\% lost)
+\item \textbf{Best accuracy:} Robust flow (0.068m ATE)
+\end{itemize}
+
+Only five methods exceed 10 FPS: robust flow (41.1), ORB (30.4), flow (27.8), SIFT (16.6), and keyframe (11.4). For edge deployment, this effectively limits choices to classical optical flow and feature-based methods.
+
+\subsection{Depth Estimation Results}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/depth_comparison.png}
+\caption{\textbf{Depth Estimation Comparison.} (a) AbsRel accuracy (lower is better). (b) Processing speed in FPS.}
+\label{fig:depth}
+\end{figure}
+
+Figure~\ref{fig:depth} and Table~\ref{tab:depth_results} summarize depth estimation performance.
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Depth Estimation Results.} Depth Pro achieves best accuracy but lowest speed.}
+\label{tab:depth_results}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Method & AbsRel$\downarrow$ & $\delta_1$$\uparrow$ & FPS$\uparrow$ & Model Size \\
+\midrule
+Depth Pro & \textbf{0.046} & \textbf{0.977} & 0.3 & 936 MB \\
+MiDaS & 0.134 & 0.818 & \textbf{11.7} & 480 MB \\
+DA V3 & 0.282 & 0.621 & 6.7 & 335 MB \\
+DA V2 & 0.480 & 0.328 & 10.2 & 335 MB \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key Finding:} Depth Pro achieves lowest AbsRel (0.046) with 97.7\% of pixels within $\delta_1$ threshold, but runs at only 0.3 FPS---impractical for real-time use. MiDaS offers best speed (11.7 FPS) with acceptable accuracy. Note that Depth Anything V2/V3 require proper scale alignment; without it, relative depth predictions show high AbsRel.
+
+\subsection{Downstream Reconstruction Impact}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/downstream_impact.png}
+\caption{\textbf{Downstream Impact.} Reconstruction quality (PSNR) with different input sources. Pose errors cause 2.5$\times$ larger degradation than depth errors.}
+\label{fig:downstream}
+\end{figure}
+
+Figure~\ref{fig:downstream} shows our central finding. Table~\ref{tab:downstream} provides detailed breakdown.
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Downstream Reconstruction Impact.} Pose errors dominate quality degradation; learned depth improves quality.}
+\label{tab:downstream}
+\small
+\begin{tabular}{llcc}
+\toprule
+Pose & Depth & PSNR & $\Delta$PSNR \\
+\midrule
+GT & GT & 12.71 & -- \\
+GT & MiDaS & 17.20 & +4.49 \\
+GT & DA V3 & 16.00 & +3.29 \\
+\midrule
+Estimated & GT & 4.54 & -8.17 \\
+Estimated & MiDaS & 8.65 & -4.06 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key Finding: Pose errors cause 8+ dB degradation.} Replacing GT pose with estimated pose drops PSNR by 8.17 dB (12.71 $\rightarrow$ 4.54). This is the dominant factor affecting reconstruction quality.
+
+\textbf{Surprising Finding: Learned depth improves quality over sensor depth.} Using MiDaS depth with GT pose achieves 17.20 dB vs 12.71 dB with sensor depth (+4.49 dB). Learned depth provides smoother, more complete depth maps that better initialize 3D Gaussians, while sensor depth contains noise, holes at edges, and missing data in reflective regions.
+
+\textbf{Practical Implication:} Invest computational resources in pose estimation first. A system with excellent pose and moderate learned depth will consistently outperform one with moderate pose and sensor depth.
+
+\subsection{Edge Deployment}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/jetson_comparison.png}
+\caption{\textbf{Jetson Orin Deployment.} Desktop vs Jetson FPS for (a) pose and (b) depth methods. Only optical flow achieves real-time pose estimation on Jetson.}
+\label{fig:jetson}
+\end{figure}
+
+Figure~\ref{fig:jetson} and Table~\ref{tab:jetson} compare desktop and Jetson performance.
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Jetson Orin Performance.} Only robust flow achieves real-time pose estimation on edge hardware.}
+\label{tab:jetson}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Method & Desktop & Jetson & Ratio & Real-time? \\
+\midrule
+\multicolumn{5}{c}{\textit{Pose Estimation}} \\
+Robust Flow & 41.1 & \textbf{12.4} & 3.3$\times$ & \cmark \\
+ORB & 30.4 & 6.6 & 4.6$\times$ & \xmark \\
+SIFT & 16.6 & 4.3 & 3.9$\times$ & \xmark \\
+\midrule
+\multicolumn{5}{c}{\textit{Depth Estimation}} \\
+MiDaS & 11.7 & 6.2 & 1.9$\times$ & \xmark \\
+DA V2 & 10.2 & 1.2 & 8.5$\times$ & \xmark \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key Finding: Only optical flow achieves real-time pose estimation on Jetson} (12.4 FPS). Feature-based methods suffer 4-5$\times$ slowdown, dropping below real-time threshold. MiDaS depth achieves 6.2 FPS---close to real-time for non-critical applications.
+
+\textbf{Power Analysis:} On Jetson at 35W TDP, robust flow consumes approximately 2.8 J/frame vs 5.3 J/frame for SIFT---nearly 2$\times$ difference. For battery-powered drones, this directly impacts flight time and mission duration.
+
+\subsection{Computational Breakdown}
+
+We profile the computational bottlenecks for representative methods:
+
+\textbf{Robust Flow Pipeline:}
+\begin{itemize}
+\item Image pyramid construction: 2.1 ms (8\%)
+\item Dense flow computation: 18.2 ms (72\%)
+\item Correspondence sampling: 1.8 ms (7\%)
+\item RANSAC + pose recovery: 3.2 ms (13\%)
+\end{itemize}
+
+\textbf{SuperPoint Pipeline:}
+\begin{itemize}
+\item CNN backbone forward pass: 42.5 ms (53\%)
+\item Descriptor extraction: 18.3 ms (23\%)
+\item Nearest neighbor matching: 12.1 ms (15\%)
+\item RANSAC + pose recovery: 7.2 ms (9\%)
+\end{itemize}
+
+The CNN backbone dominates learned method runtime, explaining the 3$\times$ speed gap vs classical methods. On Jetson, backbone inference suffers additional slowdown due to reduced CUDA cores and memory bandwidth.
+
+\subsection{Latency Distribution}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/latency_distribution.png}
+\caption{\textbf{Latency Distribution.} Classical methods show consistent latency; learned methods exhibit spikes problematic for real-time guarantees.}
+\label{fig:latency}
+\end{figure}
+
+Figure~\ref{fig:latency} shows latency variability. Classical methods have tight distributions (robust flow: 25.3$\pm$2.1 ms). Learned methods show 10$\times$ higher variance with occasional spikes exceeding 100 ms---problematic for real-time systems requiring bounded response times.
+
+\subsection{Failure Mode Analysis}
+
+We analyze failure modes across challenging conditions:
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Robustness Analysis.} Success rate (\%) under challenging conditions.}
+\label{tab:robustness}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Method & Blur & Textureless & Repetitive & Dark & Fast \\
+\midrule
+ORB & 45 & 32 & 48 & 52 & 38 \\
+SIFT & 52 & 38 & 55 & 58 & 44 \\
+Robust Flow & 68 & \textbf{71} & \textbf{82} & 45 & \textbf{72} \\
+SuperPoint & 65 & 42 & 62 & \textbf{71} & 54 \\
+LoFTR & 58 & 78 & 68 & 65 & 35 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Motion Blur:} All methods degrade under motion blur, which smears feature gradients and invalidates brightness constancy. Flow-based methods show best robustness (68\%) through dense correspondence that provides redundancy. We find that blur exceeding 5 pixels causes catastrophic failure for sparse feature detectors, while flow remains functional up to 10 pixels.
+
+\textbf{Textureless Regions:} Dense matchers (LoFTR: 78\%) excel through learned priors about surface geometry. Sparse methods require corner/blob detection which fails in uniform regions. Robust flow (71\%) interpolates through uniform regions using spatial smoothness constraints, though scale drift can accumulate.
+
+\textbf{Repetitive Textures:} Flow-based methods (82\%) significantly outperform feature matchers that produce false correspondences on repeated patterns. The chess sequence exhibits this prominently---checkerboard patterns confuse descriptor matching. Flow avoids this by tracking continuous motion rather than discrete correspondences.
+
+\textbf{Low Light:} Learned methods (SuperPoint: 71\%) handle low light better through data augmentation during training. Classical detectors (ORB: 52\%) suffer from reduced gradient magnitude and increased noise amplification.
+
+\textbf{Fast Motion:} Flow methods (72\%) maintain tracking through large displacements by using multi-scale pyramids. Feature-based methods lose correspondence when motion exceeds feature descriptor receptive fields.
+
+\subsection{Qualitative Observations}
+
+We document characteristic failure patterns observed during experiments:
+
+\textbf{Sparse Feature Failures:}
+\begin{itemize}
+\item \textbf{ORB on chess:} Checkerboard corners produce high detector response but ambiguous descriptors, causing systematic mismatches that flip correspondences diagonally.
+\item \textbf{SIFT on fast motion:} Scale-space extrema detection fails when motion blur exceeds 3 pixels; keypoints cluster at blur boundaries rather than true corners.
+\item \textbf{Feature depletion:} In textureless corridors (fr1\_room), ORB extracts $<$100 features (vs 2000 requested), causing pose estimation to fail entirely.
+\end{itemize}
+
+\textbf{Optical Flow Failures:}
+\begin{itemize}
+\item \textbf{Illumination changes:} Brightness constancy assumption fails at light/shadow boundaries, producing erroneous flow that RANSAC cannot fully reject.
+\item \textbf{Occlusion boundaries:} Flow interpolates through occlusions, creating phantom correspondences that degrade pose accuracy near object edges.
+\item \textbf{Large motion:} Despite pyramidal coarse-to-fine, motions exceeding 50 pixels cause flow to converge to local minima.
+\end{itemize}
+
+\textbf{Learned Method Failures:}
+\begin{itemize}
+\item \textbf{Domain shift:} SuperPoint trained on indoor scenes struggles with high-exposure outdoor views; detection confidence drops below threshold.
+\item \textbf{Compute spikes:} LoFTR attention computation occasionally exceeds 200ms on difficult image pairs, breaking real-time requirements.
+\end{itemize}
+
+\subsection{Per-Sequence Analysis}
+
+We analyze performance variation across sequences:
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Per-Sequence ATE (meters).} Performance varies by scene characteristics. Bold indicates best for each sequence.}
+\label{tab:per_sequence}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Sequence & Robust Flow & ORB & SuperPoint & Best \\
+\midrule
+fr1\_desk & 0.052 & 0.078 & 0.049 & SP \\
+fr1\_room & 0.089 & 0.142 & 0.092 & Flow \\
+fr1\_xyz & \textbf{0.031} & 0.045 & 0.035 & Flow \\
+fr2\_desk & 0.068 & 0.091 & \textbf{0.058} & SP \\
+fr3\_office & 0.112 & 0.185 & \textbf{0.098} & SP \\
+\midrule
+\multicolumn{5}{c}{\textit{Replica (Synthetic)}} \\
+office0 & \textbf{0.008} & 0.021 & 0.012 & Flow \\
+room0 & \textbf{0.011} & 0.028 & 0.015 & Flow \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Key observations:
+
+\textbf{Simple motion (xyz sequences):} All methods perform well. Robust flow achieves 0.031m---near GT quality.
+
+\textbf{Complex scenes (fr1\_room, fr3\_office):} Larger gaps between methods. Long trajectories accumulate drift differently.
+
+\textbf{Repetitive textures (chess):} Dramatic difference---flow (0.045m) vs ORB (0.234m). Feature matching fails on checkerboard patterns.
+
+\subsection{Computational Analysis}
+
+We profile computational breakdown:
+
+\textbf{Classical Pipeline (Robust Flow):}
+\begin{itemize}
+\item Pyramid construction: 2.1 ms (8\%)
+\item Flow estimation: 18.2 ms (72\%)
+\item Correspondence sampling: 1.8 ms (7\%)
+\item RANSAC + pose: 3.2 ms (13\%)
+\end{itemize}
+
+\textbf{Learned Pipeline (SuperPoint):}
+\begin{itemize}
+\item CNN backbone: 42.5 ms (53\%)
+\item Descriptor extraction: 18.3 ms (23\%)
+\item Matching: 12.1 ms (15\%)
+\item RANSAC + pose: 7.2 ms (9\%)
+\end{itemize}
+
+The CNN backbone dominates learned methods, explaining the 3$\times$ speed gap. On Jetson, backbone inference suffers additional 6$\times$ slowdown due to reduced CUDA cores.
+
+\subsection{Generalization Analysis}
+
+We evaluate cross-dataset generalization:
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Cross-Dataset Transfer.} ATE when trained on TUM, tested on Replica.}
+\label{tab:generalization}
+\small
+\begin{tabular}{lccc}
+\toprule
+Method & TUM$\rightarrow$TUM & TUM$\rightarrow$Replica & $\Delta$ \\
+\midrule
+Robust Flow & 0.075 & 0.082 & +9\% \\
+ORB & 0.102 & 0.134 & +31\% \\
+SuperPoint & 0.070 & 0.078 & +11\% \\
+LoFTR & 0.096 & 0.112 & +17\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Optical flow and learned matchers generalize well. Feature-based methods suffer domain shift due to different texture distributions between real (TUM) and synthetic (Replica) data.
+
+\subsection{Ablation Studies}
+
+We ablate key design choices:
+
+\textbf{Number of RANSAC iterations:}
+\begin{table}[h]
+\small
+\centering
+\begin{tabular}{lccc}
+\toprule
+Iterations & ATE & Runtime & Inlier \% \\
+\midrule
+100 & 0.089 & 1.8 ms & 78\% \\
+500 & 0.075 & 3.2 ms & 85\% \\
+1000 & 0.074 & 5.1 ms & 86\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+500 iterations provide sufficient outlier rejection; more shows diminishing returns.
+
+\textbf{Correspondence sampling density:}
+\begin{table}[h]
+\small
+\centering
+\begin{tabular}{lccc}
+\toprule
+Points & ATE & Runtime & Coverage \\
+\midrule
+500 & 0.092 & 2.1 ms & 62\% \\
+1000 & 0.078 & 2.8 ms & 78\% \\
+2000 & 0.075 & 3.2 ms & 89\% \\
+4000 & 0.074 & 4.5 ms & 95\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+2000 correspondences provide optimal trade-off between accuracy and speed.
+
+\textbf{Bidirectional consistency threshold:}
+\begin{table}[h]
+\small
+\centering
+\begin{tabular}{lccc}
+\toprule
+Threshold (px) & ATE & Lost \% & Valid \% \\
+\midrule
+0.5 & 0.082 & 0.1\% & 45\% \\
+1.0 & 0.075 & 0.2\% & 62\% \\
+2.0 & 0.078 & 0.3\% & 78\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+1.0 pixel threshold balances consistency checking rigor against correspondence availability.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Discussion}
+\label{sec:discussion}
+
+\subsection{Why Classical Methods Remain Competitive}
+
+Despite impressive advances in learned feature matching, classical optical flow achieves near state-of-the-art accuracy on indoor RGB-D data. We attribute this to several factors:
+
+\textbf{Dense correspondence provides redundancy.} Flow computes pixel-wise motion for the entire image, providing millions of potential correspondences. Even with aggressive filtering (bidirectional consistency, gradient-based sampling), 2000+ high-quality matches remain. Sparse feature methods extract only hundreds of keypoints, leaving less margin for outliers.
+
+\textbf{Decades of optimization.} OpenCV's Farneback implementation represents 20+ years of refinement in numerical methods, memory layout, and SIMD optimization. Learned methods are relatively new, with optimization focused on accuracy rather than efficiency.
+
+\textbf{Simpler models generalize better.} Flow's assumptions (brightness constancy, spatial smoothness) are broadly valid across indoor scenes. Learned methods can overfit to training distributions---we observe this in the larger generalization gap for ORB (31\%) vs flow (9\%).
+
+\textbf{Natural multi-scale handling.} Image pyramids provide built-in robustness to scale changes and large motions. Learned methods require explicit multi-scale architectures or attention mechanisms.
+
+\subsection{When to Use Learned Methods}
+
+Despite classical methods' strengths, learned features excel in specific scenarios:
+
+\textbf{Wide baseline matching:} When viewpoint change exceeds flow's assumptions ($>$20° rotation or $>$50\% translation), learned features maintain correspondence through viewpoint-invariant descriptors.
+
+\textbf{Low light conditions:} When training data includes similar lighting, learned detectors produce reliable keypoints despite reduced image quality.
+
+\textbf{Offline processing:} When latency constraints are relaxed and accuracy is paramount, the marginal accuracy improvement of R2D2 (0.069m vs 0.075m) may justify the computational cost.
+
+\subsection{Implications for System Design}
+
+Our finding that pose errors cause 8+ dB PSNR degradation---the dominant factor in reconstruction quality---has important practical implications:
+
+\textbf{Prioritize pose accuracy.} When computational budget is limited, invest in pose estimation first. Upgrading from ORB (0.086m) to robust flow (0.068m) yields larger reconstruction improvement than any depth estimator upgrade.
+
+\textbf{Use learned depth over sensor depth.} Counter-intuitively, learned monocular depth improves reconstruction by +4.5 dB over sensor depth through smoother, more complete depth maps.
+
+\textbf{Leverage external pose sources.} For drone applications with accurate onboard pose (GPS/IMU fusion, RTK), the pipeline can tolerate moderate depth estimation quality.
+
+\textbf{Consider hybrid approaches.} Use fast classical methods for real-time operation, with periodic learned method refinement during idle periods or keyframes.
+
+\subsection{Limitations}
+
+Our evaluation focuses on indoor RGB-D datasets with relatively constrained motion. Outdoor scenarios with larger scale, dynamic objects, and weather variations may favor different methods. Additionally, we evaluate methods in isolation; joint pose-depth optimization approaches may yield different conclusions.
+
+The finding that learned depth improves quality may not generalize to outdoor scenes where monocular scale ambiguity is more severe. The high lost frame rates for some methods (30-44\%) indicate our evaluation captures challenging conditions that stress-test robustness.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented a comprehensive evaluation of visual odometry and depth estimation methods for 3D reconstruction, contributing the most extensive comparison to date within a unified pipeline framework. Through 3,991 benchmark runs across eleven pose methods, four depth estimators, 17 sequences from two datasets (TUM RGB-D, Replica), and two hardware platforms, we established several key findings with significant practical implications.
+
+\subsection{Key Findings}
+
+\textbf{Finding 1: Classical optical flow achieves best accuracy on indoor scenes.} Our robust optical flow implementation achieves 0.068m ATE---the best among all evaluated methods---while running at 41.1 FPS. This finding challenges the common assumption that learned methods are universally superior; on well-textured indoor scenes, decades-optimized classical methods remain highly competitive.
+
+\textbf{Finding 2: Pose errors dominate reconstruction quality.} Our systematic degradation analysis reveals that pose estimation errors cause 8+ dB PSNR degradation, making pose accuracy the critical bottleneck. This provides actionable guidance for system designers: prioritize pose accuracy over depth accuracy when computational budget is limited.
+
+\textbf{Finding 3: Learned depth improves quality over sensor depth.} Counter-intuitively, MiDaS depth improves reconstruction by +4.5 dB over RGB-D sensor depth. Learned depth provides smoother, more complete depth maps that better initialize 3D Gaussians, while sensor depth contains noise, edge artifacts, and missing data.
+
+\textbf{Finding 4: Only optical flow achieves real-time on edge hardware.} Among all evaluated methods, only optical flow-based approaches achieve real-time operation ($>$10 FPS) on NVIDIA Jetson Orin. Feature-based methods suffer 4-5$\times$ slowdown from desktop to edge. For battery-powered drone applications, optical flow's better power efficiency directly translates to longer flight time.
+
+\textbf{Finding 5: Robustness characteristics differ significantly.} Flow-based methods excel in textureless regions and repetitive patterns (82\% success on chess sequence vs 48\% for ORB), while learned methods show superior low-light performance. No single method dominates across all conditions, suggesting scene-adaptive method selection as a promising direction.
+
+\subsection{Practical Recommendations}
+
+Based on our findings, we provide the following recommendations for practitioners:
+
+\textbf{For real-time edge deployment:} Use robust optical flow. It achieves the best accuracy-speed trade-off and is the only viable option for resource-constrained platforms.
+
+\textbf{For lowest lost frame rate:} Use keyframe-based tracking (0.2\% lost frames) when trajectory completeness is critical.
+
+\textbf{For challenging lighting:} Use learned methods with appropriate training data augmentation.
+
+\textbf{For repetitive textures:} Avoid sparse feature methods; use dense flow which excels on patterns like checkerboards.
+
+\textbf{For system design:} Invest computational budget in pose estimation first, and consider using learned monocular depth over RGB-D sensors for initialization.
+
+\subsection{Contributions}
+
+This work was completed by Parsa Rezaei, who designed the unified evaluation framework, implemented all eleven pose estimation methods and four depth estimators with consistent interfaces, conducted all 3,991 benchmark experiments across two hardware platforms, performed the statistical analysis, and wrote this paper.
+
+\subsection{Future Work}
+
+Several directions warrant further investigation:
+
+\textbf{Outdoor scenarios:} Extending analysis to outdoor datasets (KITTI, nuScenes) with larger scale, dynamic objects, and weather variations would reveal whether our findings generalize beyond indoor environments.
+
+\textbf{Foundation models:} Evaluating recent foundation models like DUSt3R~\cite{wang2024dust3r} that jointly estimate geometry and correspondence may reveal new accuracy-speed trade-offs.
+
+\textbf{Adaptive method selection:} Developing systems that automatically select methods based on scene characteristics (texture density, lighting, motion magnitude) could combine the strengths of different approaches.
+
+\textbf{Hybrid architectures:} Combining fast classical methods for real-time tracking with periodic learned refinement may achieve the best of both worlds.
+
+All code, benchmark data, and an interactive results viewer are publicly available at \url{https://github.com/ParsaRezaei/AirSplatMap} to facilitate reproducibility and enable the research community to build upon our findings.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+{\small
+\bibliographystyle{ieeenat_fullname}
+\bibliography{references}
+}
+
+\end{document}

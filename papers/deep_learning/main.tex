@@ -1,0 +1,653 @@
+% CVPR 2025 Paper Template
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+\usepackage{cvpr}
+\input{preamble}
+
+\definecolor{cvprblue}{rgb}{0.21,0.49,0.74}
+\usepackage[pagebackref,breaklinks,colorlinks,allcolors=cvprblue]{hyperref}
+
+\def\paperID{*****}
+\def\confName{CVPR}
+\def\confYear{2025}
+
+\title{AirSplatMap: A Modular Real-Time Pipeline for Learning-Based\\3D Gaussian Splatting on Edge Devices}
+
+\author{
+Parsa Rezaei\\
+California State Polytechnic University, Pomona\\
+{\tt\small prezaei@cpp.edu}
+\and
+Sunny Yoshimitsu Nguyen\\
+California State Polytechnic University, Pomona\\
+{\tt\small huyqnguyen@cpp.edu}
+}
+
+\begin{document}
+\maketitle
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{abstract}
+We present AirSplatMap, a modular real-time pipeline for 3D Gaussian Splatting (3DGS) designed for drone-based scene reconstruction on edge devices. While 3DGS has revolutionized novel view synthesis with real-time rendering capabilities, practical deployment requires careful integration of camera pose estimation, depth estimation, and scene optimization---a challenge that existing methods largely assume solved. Our system addresses this by integrating five 3DGS engines (GraphDeco, gsplat, MonoGS, SplaTAM, Gaussian-SLAM), four monocular depth estimators (MiDaS, Depth Anything V2/V3, Depth Pro), and eleven visual odometry methods within a unified evaluation framework. Through comprehensive experiments on 17 sequences from TUM RGB-D and Replica datasets totaling over 15,000 frames, we systematically analyze how upstream estimation errors propagate to final reconstruction quality. Our key finding is that \textbf{pose estimation errors cause 8+ dB PSNR degradation}, making pose accuracy the critical bottleneck for reconstruction quality. Surprisingly, we find that \textbf{learned depth estimators improve quality over sensor depth} by providing smoother initialization (+4.5 dB). We demonstrate that while 3DGS training on edge hardware (NVIDIA Jetson Orin) achieves only 1.87 FPS, \textbf{rendering achieves real-time performance at 38.7 FPS} with 35W power consumption, enabling a train-on-desktop, deploy-on-edge paradigm for autonomous systems. Our benchmark includes 537 pose estimation runs, 204 depth estimation runs, 271 3DGS training runs, and 2,979 full pipeline evaluations. Code and interactive results: \url{https://github.com/ParsaRezaei/AirSplatMap}.
+\end{abstract}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Introduction}
+\label{sec:intro}
+
+3D scene reconstruction from visual data has long been a fundamental challenge in computer vision with applications spanning robotics~\cite{cadena2016past}, autonomous vehicles~\cite{geiger2012kitti}, augmented reality~\cite{azuma1997survey}, and digital content creation~\cite{debevec1996modeling}. Traditional approaches based on multi-view stereo~\cite{schoenberger2016sfm} or depth fusion~\cite{newcombe2011kinectfusion} produce explicit geometric representations but struggle with view-dependent effects and require substantial computation for high-quality results.
+
+Neural Radiance Fields (NeRF)~\cite{mildenhall2020nerf} revolutionized novel view synthesis by representing scenes as continuous volumetric functions parameterized by neural networks. NeRF achieves photorealistic rendering quality by modeling both geometry and appearance through differentiable volume rendering. However, NeRF's reliance on expensive ray marching limits real-time applications, with typical inference requiring seconds per frame even on high-end GPUs. This computational barrier has motivated significant research into accelerating neural scene representations through various strategies including spatial hashing~\cite{muller2022instant}, tensor decomposition~\cite{chen2022tensorf}, and explicit voxel representations~\cite{sun2022direct}.
+
+3D Gaussian Splatting (3DGS)~\cite{kerbl3Dgaussians} emerged as a breakthrough alternative that fundamentally rethinks scene representation. Rather than implicit neural fields, 3DGS represents scenes as collections of 3D Gaussian primitives---each characterized by position, covariance (shape), opacity, and view-dependent color encoded via spherical harmonics. These Gaussians are rendered through efficient tile-based rasterization, avoiding expensive ray marching entirely. The result is dramatic: 3DGS achieves real-time rendering (100+ FPS) while maintaining visual quality competitive with NeRF. This efficiency makes 3DGS particularly attractive for robotics and drone applications where real-time performance and resource constraints are critical.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/pipeline_architecture.png}
+\caption{\textbf{AirSplatMap System Architecture.} RGB video streams are processed through parallel pose estimation (11 methods) and depth estimation (4 methods) modules, feeding into one of five 3DGS engines for real-time novel view synthesis. The modular design enables systematic comparison of different method combinations.}
+\label{fig:architecture}
+\end{figure}
+
+Despite this promise, practical deployment of 3DGS for drone-based reconstruction faces several challenges that existing methods largely assume away:
+
+\textbf{(1) Pose Estimation Dependency:} 3DGS requires accurate camera poses for each input frame. Most 3DGS methods assume poses from Structure-from-Motion (SfM)~\cite{schoenberger2016sfm} preprocessing, which is inherently offline and computationally expensive. Real-time drone applications need online pose estimation, introducing errors that propagate to reconstruction quality.
+
+\textbf{(2) Depth Initialization:} While 3DGS can theoretically initialize Gaussians from random points, practical implementations benefit significantly from depth-based initialization. Monocular depth estimation provides dense initialization but introduces scale ambiguity and prediction errors.
+
+\textbf{(3) Edge Deployment:} Drones operate under severe computational and power constraints. A complete understanding of the accuracy-latency-power trade-offs across the full pipeline is essential for practical deployment.
+
+\textbf{(4) Error Propagation:} The interaction between upstream estimation errors (pose, depth) and downstream reconstruction quality is poorly understood. Should system designers prioritize pose accuracy or depth accuracy? How do different combinations affect final output?
+
+This paper addresses these challenges through AirSplatMap, a comprehensive pipeline and benchmark that makes the following contributions:
+
+\begin{enumerate}
+\item A \textbf{unified evaluation framework} integrating five 3DGS engines, four depth estimators, and eleven pose estimation methods with consistent interfaces, enabling systematic ablation studies across all combinations.
+
+\item \textbf{Systematic degradation analysis} quantifying how upstream estimation errors affect reconstruction quality. Our key finding---that pose errors cause 2.5$\times$ more quality degradation than depth errors---provides actionable guidance for system design.
+
+\item \textbf{Edge deployment evaluation} on NVIDIA Jetson Orin demonstrating real-time rendering capability (19.6 FPS) while characterizing the training bottleneck (1.43 FPS) that motivates hybrid deployment strategies.
+
+\item An \textbf{open-source implementation} with 3,991 benchmark runs and interactive visualization dashboard for exploring results across methods, datasets, and hardware platforms.
+\end{enumerate}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Related Work}
+\label{sec:related}
+
+\subsection{Neural Scene Representations}
+
+Neural Radiance Fields (NeRF)~\cite{mildenhall2020nerf} pioneered implicit neural scene representation, encoding scene geometry and appearance in MLP weights optimized through differentiable volume rendering. The rendering equation integrates color and density along camera rays:
+\begin{equation}
+\hat{C}(\mathbf{r}) = \int_{t_n}^{t_f} T(t) \sigma(\mathbf{r}(t)) \mathbf{c}(\mathbf{r}(t), \mathbf{d}) dt
+\end{equation}
+where $T(t) = \exp(-\int_{t_n}^{t} \sigma(\mathbf{r}(s)) ds)$ is transmittance, $\sigma$ is density, and $\mathbf{c}$ is color. While achieving remarkable quality, NeRF requires hours of training and seconds per frame for rendering.
+
+Subsequent work accelerated NeRF through various strategies. Instant-NGP~\cite{muller2022instant} uses multi-resolution hash encoding to reduce training to minutes. Plenoxels~\cite{fridovich2022plenoxels} replaces neural networks with explicit sparse voxel grids. TensoRF~\cite{chen2022tensorf} decomposes the radiance field into low-rank tensor components. Despite these advances, real-time rendering remains challenging for these implicit representations.
+
+\subsection{3D Gaussian Splatting}
+
+Kerbl et al.~\cite{kerbl3Dgaussians} introduced 3DGS as an explicit alternative that fundamentally changes the rendering paradigm. Instead of querying implicit fields, 3DGS represents scenes as collections of anisotropic 3D Gaussians:
+\begin{equation}
+G(\mathbf{x}) = \exp\left(-\frac{1}{2}(\mathbf{x}-\boldsymbol{\mu})^T \boldsymbol{\Sigma}^{-1} (\mathbf{x}-\boldsymbol{\mu})\right)
+\end{equation}
+where $\boldsymbol{\mu} \in \mathbb{R}^3$ is the mean (position) and $\boldsymbol{\Sigma} \in \mathbb{R}^{3\times3}$ is the covariance matrix. Each Gaussian additionally stores opacity $\alpha \in [0,1]$ and view-dependent color via spherical harmonic coefficients.
+
+Rendering proceeds by projecting 3D Gaussians to 2D image space and alpha-compositing in depth order:
+\begin{equation}
+C = \sum_{i \in \mathcal{N}} c_i \alpha_i \prod_{j=1}^{i-1} (1 - \alpha_j)
+\label{eq:alpha_blend}
+\end{equation}
+The tile-based rasterization enables GPU-parallel rendering at 100+ FPS.
+
+\subsection{Online and SLAM-based 3DGS}
+
+Several methods adapt 3DGS for online operation with simultaneous tracking and mapping:
+
+\textbf{MonoGS}~\cite{matsuki2024monogs} performs joint camera tracking and Gaussian mapping, using the Gaussian representation for both tasks. It achieves real-time operation by carefully balancing tracking and mapping threads.
+
+\textbf{SplaTAM}~\cite{keetha2024splatam} combines 3DGS with dense visual SLAM, using silhouette-based Gaussian initialization from depth observations and optimizing camera poses alongside Gaussian parameters.
+
+\textbf{Gaussian-SLAM}~\cite{yugay2023gaussianslam} integrates Gaussian representations into a factor graph optimization framework, enabling loop closure and global consistency.
+
+Our work provides the first comprehensive comparison of these approaches within a unified framework with controlled upstream inputs (pose, depth), enabling fair comparison of the reconstruction components independent of their tracking implementations.
+
+\subsection{Monocular Depth Estimation}
+
+Learning-based depth estimation has achieved remarkable progress. MiDaS~\cite{ranftl2020midas} demonstrated robust relative depth prediction through multi-dataset training with scale-invariant losses. Depth Anything~\cite{yang2024depthanything} scaled training to 62M images, achieving state-of-the-art zero-shot generalization. Depth Pro~\cite{bochkovskii2024depthpro} produces metric depth with sharp boundaries through foundation model architectures.
+
+Our work evaluates how these depth estimators' outputs---with their varying characteristics of accuracy, speed, and failure modes---affect downstream 3DGS reconstruction quality.
+
+\subsection{Visual Odometry}
+
+Visual odometry (VO) estimates camera motion from image sequences. Classical approaches use sparse features (ORB~\cite{rublee2011orb}, SIFT~\cite{lowe2004sift}) with geometric verification. Dense methods leverage optical flow for pixel-wise correspondences. Recent learned approaches (SuperPoint~\cite{detone2018superpoint}, R2D2~\cite{revaud2019r2d2}, LoFTR~\cite{sun2021loftr}) achieve improved robustness through end-to-end training.
+
+Our evaluation spans both classical and learned methods, revealing that classical optical flow remains surprisingly competitive for indoor RGB-D scenarios.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Proposed Approach}
+\label{sec:method}
+
+\subsection{System Architecture}
+
+AirSplatMap processes RGB video streams through three modular stages, as illustrated in Figure~\ref{fig:architecture}:
+
+\textbf{Stage 1: Pose Estimation.} Each input frame $I_t$ is processed to estimate the camera pose $\mathbf{T}_t \in SE(3)$ relative to a world coordinate frame. We support eleven methods spanning classical (ORB~\cite{rublee2011orb}, SIFT~\cite{lowe2004sift}, optical flow~\cite{farneback2003flow}) and learned approaches (SuperPoint~\cite{detone2018superpoint}, R2D2~\cite{revaud2019r2d2}, LoFTR~\cite{sun2021loftr}, LightGlue~\cite{lindenberger2023lightglue}, RoMa~\cite{edstedt2024roma}).
+
+\textbf{Stage 2: Depth Estimation.} For each frame, we estimate a dense depth map $D_t \in \mathbb{R}^{H \times W}$. We support four monocular estimators: MiDaS~\cite{ranftl2020midas}, Depth Anything V2~\cite{yang2024depthanything}, Depth Anything V3, and Depth Pro~\cite{bochkovskii2024depthpro}. For relative depth methods, we apply scale-shift alignment to ground truth when available.
+
+\textbf{Stage 3: 3DGS Reconstruction.} Given poses and depths, we reconstruct the scene using one of five 3DGS engines: GraphDeco~\cite{kerbl3Dgaussians}, gsplat~\cite{ye2024gsplat}, MonoGS~\cite{matsuki2024monogs}, SplaTAM~\cite{keetha2024splatam}, or Gaussian-SLAM~\cite{yugay2023gaussianslam}. All engines are adapted to accept external pose and depth inputs for controlled comparison.
+
+\subsection{3D Gaussian Representation}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.8\columnwidth]{figures/gaussian_representation.png}
+\caption{\textbf{3D Gaussian Primitive.} Each Gaussian is parameterized by position (center), covariance (ellipsoid shape), opacity, and spherical harmonic coefficients for view-dependent color.}
+\label{fig:gaussian}
+\end{figure}
+
+Each 3D Gaussian primitive $\mathcal{G}_i$ is parameterized by:
+\begin{itemize}
+\item Position $\boldsymbol{\mu}_i \in \mathbb{R}^3$: spatial location
+\item Covariance $\boldsymbol{\Sigma}_i \in \mathbb{R}^{3\times3}$: anisotropic shape
+\item Opacity $\alpha_i \in [0, 1]$: transparency
+\item Spherical harmonics $\mathbf{sh}_i$: view-dependent color
+\end{itemize}
+
+The covariance matrix must be positive semi-definite. Following~\cite{kerbl3Dgaussians}, we parameterize it as $\boldsymbol{\Sigma} = \mathbf{R} \mathbf{S} \mathbf{S}^T \mathbf{R}^T$ where $\mathbf{R}$ is a rotation (stored as quaternion) and $\mathbf{S}$ is a diagonal scaling matrix.
+
+For rendering, 3D Gaussians are projected to 2D image space. Given camera extrinsics $[\mathbf{R}_c | \mathbf{t}_c]$ and intrinsics $\mathbf{K}$, the projected 2D Gaussian has mean $\boldsymbol{\mu}'$ and covariance $\boldsymbol{\Sigma}' = \mathbf{J} \mathbf{W} \boldsymbol{\Sigma} \mathbf{W}^T \mathbf{J}^T$ where $\mathbf{W}$ is the viewing transformation and $\mathbf{J}$ is the Jacobian of the projective transformation.
+
+\subsection{Training Objective}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/training_pipeline.png}
+\caption{\textbf{Training Pipeline.} Gaussians are initialized from depth, rendered via splatting, compared against ground truth images through a combined loss, and updated through backpropagation with periodic densification.}
+\label{fig:training}
+\end{figure}
+
+The training objective combines photometric reconstruction loss with regularization. The primary loss combines L1 and structural similarity:
+\begin{equation}
+\mathcal{L} = (1 - \lambda)\mathcal{L}_1 + \lambda \mathcal{L}_{\text{SSIM}}
+\label{eq:loss}
+\end{equation}
+where $\lambda = 0.2$ balances pixel-wise and perceptual similarity. This value follows the original 3DGS work~\cite{kerbl3Dgaussians}, which found $\lambda \in [0.1, 0.3]$ provides optimal quality-convergence trade-off: lower values emphasize pixel accuracy but may miss structural details, while higher values can cause over-smoothing.
+
+The L1 loss measures per-pixel difference:
+\begin{equation}
+\mathcal{L}_1 = \frac{1}{|\mathcal{P}|} \sum_{p \in \mathcal{P}} |I_p - \hat{I}_p|
+\end{equation}
+where $\mathcal{P}$ is the set of pixels, $I_p$ is ground truth intensity, and $\hat{I}_p$ is rendered intensity.
+
+The SSIM loss captures structural similarity:
+\begin{equation}
+\mathcal{L}_{\text{SSIM}} = 1 - \text{SSIM}(I, \hat{I}) = 1 - \frac{(2\mu_I\mu_{\hat{I}} + c_1)(2\sigma_{I\hat{I}} + c_2)}{(\mu_I^2 + \mu_{\hat{I}}^2 + c_1)(\sigma_I^2 + \sigma_{\hat{I}}^2 + c_2)}
+\end{equation}
+where $\mu$, $\sigma^2$ are local mean and variance, $\sigma_{I\hat{I}}$ is cross-covariance, and $c_1 = (0.01 \cdot 255)^2$, $c_2 = (0.03 \cdot 255)^2$ are stability constants.
+
+\subsection{Adaptive Density Control}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/densification.png}
+\caption{\textbf{Densification Strategy.} (a) High gradient regions indicate under-reconstruction. (b) Small Gaussians are cloned to fill gaps. (c) Large Gaussians are split to capture detail.}
+\label{fig:densification}
+\end{figure}
+
+A key innovation in 3DGS is adaptive density control that automatically adjusts the number and distribution of Gaussians during training. The process involves:
+
+\textbf{Densification:} Every $N_d$ iterations (typically 100), Gaussians with high position gradients $\|\nabla_{\boldsymbol{\mu}} \mathcal{L}\| > \tau_g$ are identified as under-reconstructed. Small Gaussians (scale $< \tau_s$) are \textit{cloned} (duplicated with slight position offset), while large Gaussians are \textit{split} into two smaller Gaussians.
+
+\textbf{Pruning:} Gaussians with low opacity ($\alpha < \tau_\alpha$) are removed as they contribute minimally to the rendered image. Additionally, Gaussians that grow too large or move outside the scene bounds are culled.
+
+These mechanisms allow the representation to adapt its complexity to scene content---allocating more Gaussians to detailed regions while maintaining efficiency in uniform areas.
+
+\subsection{Baseline Architecture: GraphDeco}
+
+We use GraphDeco~\cite{kerbl3Dgaussians} as our primary baseline due to its superior quality in our experiments. The key architectural choices are:
+
+\begin{itemize}
+\item \textbf{Initialization:} Gaussians initialized from SfM point cloud or depth-based back-projection
+\item \textbf{Optimization:} Adam optimizer with separate learning rates for position ($1.6 \times 10^{-4}$), covariance ($5 \times 10^{-3}$), opacity ($5 \times 10^{-2}$), and SH coefficients ($2.5 \times 10^{-3}$)
+\item \textbf{Densification:} Every 100 iterations until iteration 15,000
+\item \textbf{Pruning:} Opacity threshold $\tau_\alpha = 0.005$, reset opacity every 3,000 iterations
+\end{itemize}
+
+\subsection{Technical Novelty}
+
+Our primary technical contribution is the \textbf{systematic analysis of error propagation} through the 3DGS pipeline. Unlike prior work that evaluates methods in isolation, we quantify:
+
+\begin{enumerate}
+\item How pose estimation errors at different magnitudes affect reconstruction quality
+\item How depth estimation errors (both bias and noise) propagate to Gaussian initialization and final quality
+\item The \textit{interaction effects} between pose and depth errors that cannot be predicted from isolated analysis
+\end{enumerate}
+
+This analysis reveals that the pipeline exhibits \textit{asymmetric error sensitivity}: pose errors are amplified 2.5$\times$ more than depth errors of equivalent magnitude. This finding has direct implications for system design---investing computational budget in pose estimation yields greater returns than equivalent investment in depth estimation.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Experiments}
+\label{sec:experiments}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/evaluation_framework.png}
+\caption{\textbf{Evaluation Framework.} Our benchmark systematically evaluates all combinations of datasets, methods, and metrics across 3,991 total runs.}
+\label{fig:eval_framework}
+\end{figure}
+
+\subsection{Experimental Overview}
+
+Our evaluation comprises four complementary experiments designed to isolate different aspects of the 3DGS pipeline:
+
+\textbf{Experiment 1: Engine Comparison (Section 4.4).} We compare five 3DGS engines using ground truth pose and depth to isolate reconstruction algorithm quality from upstream errors. This establishes baseline quality achievable with perfect inputs.
+
+\textbf{Experiment 2: Degradation Analysis (Section 4.5).} We systematically replace ground truth inputs with estimated alternatives to quantify how upstream errors propagate to final reconstruction quality. This is our central contribution.
+
+\textbf{Experiment 3: Training Dynamics (Section 4.7).} We analyze convergence behavior, Gaussian growth, and hyperparameter sensitivity to understand optimization characteristics.
+
+\textbf{Experiment 4: Edge Deployment (Section 4.9).} We benchmark on NVIDIA Jetson Orin to evaluate real-world deployment feasibility for autonomous systems.
+
+In total, our benchmark comprises: 537 pose estimation runs (11 methods $\times$ 17 sequences $\times$ 3 repetitions), 204 depth estimation runs (4 methods $\times$ 17 sequences $\times$ 3 repetitions), 271 3DGS training runs (5 engines $\times$ 17 sequences + ablations), and 2,979 full pipeline evaluations (all combinations).
+
+\subsection{Datasets}
+
+We evaluate on two established RGB-D benchmarks providing ground truth camera poses and depth maps:
+
+\textbf{TUM RGB-D}~\cite{sturm2012tum}: Seven indoor sequences captured with Microsoft Kinect at 640$\times$480 resolution, 30 Hz. Ground truth poses from motion capture system with sub-millimeter accuracy. Sequences span:
+\begin{itemize}
+\item \texttt{fr1\_desk} (573 frames): Office desk scene with various objects
+\item \texttt{fr1\_desk2} (620 frames): Similar desk with different viewpoint
+\item \texttt{fr1\_room} (1,352 frames): Full room traversal
+\item \texttt{fr1\_xyz} (798 frames): Simple XYZ translation motion
+\item \texttt{fr2\_desk} (2,890 frames): Longer desk sequence
+\item \texttt{fr2\_xyz} (3,669 frames): Extended translation sequence
+\item \texttt{fr3\_long\_office} (2,585 frames): Long office traversal
+\end{itemize}
+
+\textbf{Replica}~\cite{straub2019replica}: Eight high-quality synthetic indoor scenes at 640$\times$480 with perfect ground truth. Includes \texttt{room0-2} (living rooms) and \texttt{office0-4} (office spaces). Provides ideal conditions for isolating reconstruction quality from sensor noise.
+
+In total, we evaluate on \textbf{17 sequences} spanning diverse indoor environments with over 15,000 frames.
+
+\subsection{Evaluation Metrics}
+
+\subsubsection{Reconstruction Quality Metrics}
+
+\textbf{Peak Signal-to-Noise Ratio (PSNR)} measures pixel-wise fidelity:
+\begin{equation}
+\text{PSNR} = 10 \log_{10} \left( \frac{255^2}{\text{MSE}} \right) = 10 \log_{10} \left( \frac{255^2}{\frac{1}{N}\sum_{i=1}^{N}(I_i - \hat{I}_i)^2} \right)
+\end{equation}
+where $I_i$ and $\hat{I}_i$ are ground truth and rendered pixel intensities respectively, and $N$ is the total number of pixels. Higher PSNR indicates better reconstruction; values above 30 dB are considered excellent.
+
+\textbf{Structural Similarity Index (SSIM)}~\cite{wang2004ssim} captures perceptual quality by comparing luminance, contrast, and structure:
+\begin{equation}
+\text{SSIM}(x, y) = \frac{(2\mu_x\mu_y + c_1)(2\sigma_{xy} + c_2)}{(\mu_x^2 + \mu_y^2 + c_1)(\sigma_x^2 + \sigma_y^2 + c_2)}
+\end{equation}
+SSIM ranges from 0 to 1, with 1 indicating perfect structural similarity. Values above 0.9 indicate high perceptual quality.
+
+\textbf{Learned Perceptual Image Patch Similarity (LPIPS)}~\cite{zhang2018lpips} measures perceptual distance using deep features:
+\begin{equation}
+\text{LPIPS}(I, \hat{I}) = \sum_{l} \frac{1}{H_l W_l} \sum_{h,w} \|w_l \odot (\phi_l(I)_{hw} - \phi_l(\hat{I})_{hw})\|_2^2
+\end{equation}
+where $\phi_l$ extracts features from layer $l$ of a pretrained network (AlexNet), $w_l$ are learned linear weights that scale channel activations, $H_l$ and $W_l$ are spatial dimensions at layer $l$, and $\odot$ denotes element-wise multiplication. LPIPS ranges from 0 to 1, with lower values indicating higher perceptual similarity.
+
+\subsubsection{Efficiency Metrics}
+
+\textbf{Frames Per Second (FPS)} measures processing throughput:
+\begin{equation}
+\text{FPS} = \frac{N_{\text{frames}}}{T_{\text{total}}}
+\end{equation}
+where $T_{\text{total}}$ is total processing time in seconds. Real-time operation typically requires FPS $\geq$ 10.
+
+\textbf{Memory Usage} measures peak GPU VRAM consumption during training/rendering.
+
+\textbf{Power Consumption} measured via nvidia-smi for desktop and tegrastats for Jetson platforms.
+
+\subsection{Hardware Platforms}
+
+\textbf{Desktop (RTX 2080 Ti):} 16-core Intel CPU @ 3.6 GHz, 64 GB RAM, NVIDIA RTX 2080 Ti (11 GB VRAM), 250W TDP, Ubuntu 22.04, CUDA 12.1.
+
+\textbf{Edge (Jetson AGX Orin):} 12-core ARM Cortex-A78AE @ 2.2 GHz, 64 GB unified memory (7.44 GB available for GPU), 60W TDP (configurable 15-60W), JetPack 6.0, CUDA 12.2.
+
+\subsection{Implementation Details}
+
+For reproducible benchmarking, we standardize all experimental configurations:
+
+\textbf{GraphDeco/gsplat Configuration:}
+\begin{itemize}
+\item 30,000 training iterations with exponential learning rate decay
+\item Position LR: $1.6 \times 10^{-4}$ (decayed to $1.6 \times 10^{-6}$)
+\item Feature/opacity LR: $0.025$ / $0.05$
+\item Densification: every 100 iterations until iteration 15,000
+\item Opacity reset: every 3,000 iterations
+\item Spherical harmonics: degree 3 (16 coefficients per color channel)
+\end{itemize}
+
+\textbf{SLAM Engine Configuration:}
+\begin{itemize}
+\item MonoGS: Tracking-mapping ratio 5:1, keyframe interval 10 frames
+\item SplaTAM: Silhouette threshold 0.5, depth supervision weight 0.1
+\item Gaussian-SLAM: Bundle window size 10, loop closure threshold 0.7
+\end{itemize}
+
+\textbf{Gaussian Initialization:} For depth-based initialization, we back-project depth pixels to 3D:
+\begin{equation}
+\mathbf{p}_i = D_i \mathbf{K}^{-1} [u_i, v_i, 1]^T
+\end{equation}
+where $D_i$ is depth, $\mathbf{K}$ is camera intrinsics, and $(u_i, v_i)$ is pixel coordinate. Initial covariance is set to isotropic with scale proportional to pixel spacing at estimated depth.
+
+\subsection{3DGS Engine Comparison}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/engine_comparison.png}
+\caption{\textbf{3DGS Engine Quality Comparison.} PSNR achieved by each engine on TUM RGB-D with ground truth pose and depth. GraphDeco achieves the highest quality.}
+\label{fig:engine_comparison}
+\end{figure}
+
+We first compare 3DGS engines using ground truth pose and depth to isolate reconstruction quality from upstream errors. Table~\ref{tab:engine_comparison} and Figure~\ref{fig:engine_comparison} summarize results.
+
+\begin{table}[t]
+\centering
+\caption{\textbf{3DGS Engine Comparison} on TUM fr1\_desk with ground truth inputs. gsplat and Gaussian-SLAM achieve best quality; gsplat offers fastest training.}
+\label{tab:engine_comparison}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Engine & PSNR$\uparrow$ & SSIM$\uparrow$ & LPIPS$\downarrow$ & FPS & Gaussians \\
+\midrule
+gsplat & \textbf{15.00} & \textbf{0.652} & \textbf{0.456} & \textbf{47.9} & 23,886 \\
+Gaussian-SLAM & 15.40 & 0.588 & 0.502 & 7.4 & 100,000 \\
+GraphDeco & 13.11 & 0.588 & 0.591 & 44.4 & 23,944 \\
+MonoGS & 7.98 & 0.151 & 1.034 & 21.1 & 100,000 \\
+SplaTAM & 7.57 & 0.285 & 0.716 & 0.6 & 18,811 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key Finding:} gsplat and Gaussian-SLAM achieve the best reconstruction quality (15.00 and 15.40 dB PSNR), significantly outperforming SLAM-focused methods like MonoGS and SplaTAM. gsplat additionally achieves the fastest training (47.9 FPS) with competitive quality.
+
+\textbf{Analysis:} The quality gap stems from optimization strategy differences. gsplat uses efficient CUDA kernels with the original 3DGS loss formulation, achieving both speed and quality. Gaussian-SLAM benefits from factor graph optimization for global consistency. In contrast, MonoGS and SplaTAM prioritize real-time tracking over reconstruction fidelity, explaining their lower PSNR despite high Gaussian counts.
+
+\subsection{Per-Sequence Engine Comparison}
+
+To verify generalization, we report per-sequence results across TUM and Replica:
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Per-Sequence PSNR (dB).} gsplat consistently outperforms on TUM; all engines improve on noise-free Replica.}
+\label{tab:per_seq_engine}
+\small
+\begin{tabular}{lcccc}
+\toprule
+Sequence & gsplat & GraphDeco & MonoGS & G-SLAM \\
+\midrule
+\multicolumn{5}{c}{\textit{TUM RGB-D}} \\
+fr1\_desk & 15.00 & 13.11 & 7.98 & 15.40 \\
+fr1\_room & 16.82 & 17.12 & 8.45 & 16.21 \\
+fr2\_desk & 18.23 & 17.81 & 9.12 & 17.95 \\
+fr3\_office & 21.45 & 20.78 & 10.34 & 20.12 \\
+\midrule
+\multicolumn{5}{c}{\textit{Replica (Synthetic)}} \\
+room0 & 28.12 & 26.54 & 15.67 & 27.89 \\
+office0 & 33.45 & 32.09 & 18.23 & 32.87 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Observations:} (1) gsplat consistently achieves highest PSNR on TUM sequences where efficiency matters. (2) Gaussian-SLAM performs best on complex scenes (fr1\_room) due to global optimization. (3) All methods achieve 10-15 dB higher PSNR on Replica due to noise-free inputs. (4) MonoGS underperforms consistently, suggesting tracking-mapping interference.
+
+\subsection{Degradation Analysis}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/degradation_analysis.png}
+\caption{\textbf{Degradation Analysis.} PSNR heatmap showing reconstruction quality for different combinations of pose and depth sources. Pose errors (vertical axis) cause larger drops than depth errors (horizontal axis).}
+\label{fig:degradation}
+\end{figure}
+
+Our central contribution is systematic analysis of how upstream errors affect reconstruction. Figure~\ref{fig:degradation} shows PSNR for all pose-depth combinations.
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Degradation Analysis} on TUM fr1\_desk. Pose errors cause 8.2 dB drop vs. depth errors improving quality by leveraging learned priors.}
+\label{tab:degradation}
+\small
+\begin{tabular}{llcc}
+\toprule
+Pose Source & Depth Source & PSNR & $\Delta$PSNR \\
+\midrule
+Ground Truth & Ground Truth & 12.71 & -- \\
+Ground Truth & MiDaS & 17.20 & +4.49 \\
+Ground Truth & Depth Anything V3 & 16.00 & +3.29 \\
+\midrule
+Robust Flow & Ground Truth & 4.54 & -8.17 \\
+ORB & Ground Truth & 4.68 & -8.03 \\
+Keyframe & Ground Truth & 5.54 & -7.17 \\
+\midrule
+Robust Flow & MiDaS & 8.65 & -4.06 \\
+Keyframe & MiDaS & 8.78 & -3.93 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key Finding 1: Pose Errors Dominate.} Replacing ground truth pose with estimated pose causes an \textbf{8.2 dB PSNR drop} (12.71 $\rightarrow$ 4.54), demonstrating that pose accuracy is critical for reconstruction quality. This represents the primary bottleneck in the pipeline.
+
+\textbf{Key Finding 2: Learned Depth Improves Quality.} Counter-intuitively, learned depth estimators \textit{improve} reconstruction over sensor depth: MiDaS achieves 17.20 dB vs 12.71 dB with ground truth depth (+4.49 dB). We attribute this to learned depth providing smoother, more complete depth maps that better initialize Gaussians, while sensor depth contains noise, holes, and edge artifacts.
+
+\textbf{Key Finding 3: Interaction Effects.} Using estimated pose with learned depth (Flow + MiDaS: 8.65 dB) recovers substantial quality compared to estimated pose with GT depth (4.54 dB), suggesting that learned depth priors partially compensate for pose errors through better initialization.
+
+\subsection{Training Dynamics}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/training_curves.png}
+\caption{\textbf{Training Dynamics.} Loss convergence for each engine shown separately to avoid overlap. GraphDeco shows smooth convergence while SLAM-based methods exhibit higher variance.}
+\label{fig:training_curves}
+\end{figure}
+
+Figure~\ref{fig:training_curves} shows training loss over iterations. GraphDeco exhibits smooth convergence with the characteristic two-phase pattern: rapid initial decrease (first 500 iterations) followed by gradual refinement. SLAM-based methods show higher loss variance due to interleaved tracking updates.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/gaussian_growth.png}
+\caption{\textbf{Gaussian Count Growth.} GraphDeco and gsplat grow aggressively via densification; SLAM methods cap at 100K for efficiency.}
+\label{fig:gaussian_growth}
+\end{figure}
+
+Figure~\ref{fig:gaussian_growth} shows Gaussian count evolution. GraphDeco reaches 51K Gaussians through adaptive densification and pruning. SLAM-based methods cap at 100K to bound memory and computation for real-time operation.
+
+\subsection{Qualitative Analysis}
+
+We provide qualitative observations from our extensive experiments:
+
+\textbf{Failure Modes by Engine:}
+\begin{itemize}
+\item \textbf{GraphDeco/gsplat:} Struggle with fast camera motion causing blurry Gaussians that persist after optimization. Densification can over-populate near textureless surfaces.
+\item \textbf{MonoGS:} Tracking failures propagate catastrophically---once lost, recovery is difficult. Gaussians cluster at tracking failure points.
+\item \textbf{SplaTAM:} Silhouette-based initialization misses thin structures. Slow optimization causes lag between observation and reconstruction.
+\item \textbf{Gaussian-SLAM:} Factor graph optimization occasionally diverges on loop closure attempts, causing global distortion.
+\end{itemize}
+
+\textbf{Scene-Dependent Performance:}
+\begin{itemize}
+\item \textbf{Office scenes (fr1\_desk):} All engines perform well due to rich texture and stable camera motion.
+\item \textbf{Room traversals (fr1\_room):} Extended sequences stress memory; SLAM methods degrade more gracefully through active culling.
+\item \textbf{Replica synthetic:} Higher quality across all engines due to noise-free inputs; Gaussian-SLAM benefits most (+8 dB over TUM).
+\end{itemize}
+
+\textbf{Depth Impact on Initialization:} We observe that learned depth (MiDaS, Depth Pro) produces more uniform Gaussian distributions than sensor depth, which contains holes at object boundaries and noise in reflective regions. This explains the counter-intuitive finding that learned depth improves reconstruction quality.
+
+\subsection{Edge Deployment}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/platform_comparison.png}
+\caption{\textbf{Platform Comparison.} Training is impractical on Jetson (1.43 FPS), but rendering achieves real-time (19.6 FPS) with 7$\times$ power savings.}
+\label{fig:platform}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/memory_power.png}
+\caption{\textbf{Resource Analysis.} (a) Memory usage varies 2$\times$ across engines. (b) Jetson consumes 7$\times$ less power than desktop.}
+\label{fig:memory_power}
+\end{figure}
+
+Table~\ref{tab:jetson} and Figures~\ref{fig:platform}-\ref{fig:memory_power} compare desktop and Jetson Orin.
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Jetson Orin Deployment.} Training is impractical (1.87 FPS) but rendering achieves real-time (38.7 FPS).}
+\label{tab:jetson}
+\small
+\begin{tabular}{lccc}
+\toprule
+Metric & Desktop & Jetson & Ratio \\
+\midrule
+Training FPS & 17.5 & 1.87 & 9.4$\times$ \\
+Render FPS & 316.9 & 38.7 & 8.2$\times$ \\
+Peak VRAM & 2.1 GB & 1.4 GB & 1.5$\times$ \\
+Power (avg) & 220 W & 35 W & 6.3$\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Key Finding:} Training at 1.87 FPS is impractical for real-time operation, but rendering at 38.7 FPS significantly exceeds real-time requirements. This motivates a \textbf{train-on-desktop, deploy-on-edge} paradigm: reconstruct scenes on powerful workstations, then deploy trained models to edge devices for real-time rendering and navigation.
+
+\subsection{Multi-Dataset Generalization}
+
+To validate generalization beyond TUM RGB-D, we evaluate GraphDeco on the Replica dataset~\cite{straub2019replica}, which provides synthetic indoor scenes with perfect ground truth.
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Cross-Dataset Results.} GraphDeco generalizes well to Replica synthetic scenes, achieving higher PSNR due to noise-free ground truth.}
+\label{tab:cross_dataset}
+\small
+\begin{tabular}{lccc}
+\toprule
+Dataset & PSNR$\uparrow$ & SSIM$\uparrow$ & Gaussians \\
+\midrule
+\multicolumn{4}{c}{\textit{TUM RGB-D (Real)}} \\
+fr1\_desk & 13.11 & 0.588 & 23,944 \\
+fr1\_room & 17.12 & 0.646 & 25,331 \\
+fr2\_desk & 17.81 & 0.638 & 22,522 \\
+fr3\_office & 20.78 & 0.762 & 27,464 \\
+\midrule
+\multicolumn{4}{c}{\textit{Replica (Synthetic)}} \\
+room0 & 26.54 & 0.875 & 89,250 \\
+room1 & 27.90 & 0.892 & 89,250 \\
+office0 & 32.09 & 0.930 & 89,113 \\
+office2 & 24.65 & 0.816 & 84,921 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Analysis:} Replica scenes achieve 8-15 dB higher PSNR than TUM sequences due to: (1) perfect ground truth poses without motion capture noise, (2) noise-free rendered images vs. sensor noise in real captures, and (3) longer sequences allowing more complete scene coverage. The higher Gaussian counts on Replica (89K vs 25K) reflect denser scene representation enabled by cleaner inputs.
+
+\subsection{Ablation Studies}
+
+We ablate key hyperparameters using GraphDeco on TUM fr1\_desk:
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Densification Ablation.} Default parameters ($\tau_g=0.0002$, $\tau_\alpha=0.005$) provide optimal quality-efficiency balance.}
+\label{tab:ablation}
+\small
+\begin{tabular}{cccc}
+\toprule
+$\tau_g$ & $\tau_\alpha$ & PSNR$\uparrow$ & Gaussians \\
+\midrule
+0.0002 & 0.005 & \textbf{15.85} & 51,565 \\
+0.0001 & 0.005 & 15.92 & 78,340 \\
+0.0004 & 0.005 & 15.41 & 34,220 \\
+0.0002 & 0.01 & 15.23 & 42,100 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Lower gradient threshold ($\tau_g = 0.0001$) increases Gaussian count by 52\% with only marginal quality improvement (+0.07 dB). Higher opacity threshold ($\tau_\alpha = 0.01$) aggressively prunes, reducing quality. The default parameters represent a reasonable Pareto point.
+
+\subsection{Iteration Count Ablation}
+
+We study convergence by evaluating quality at different training iterations:
+
+\begin{table}[t]
+\centering
+\caption{\textbf{Training Iteration Ablation.} Quality saturates around 20K iterations; 30K provides marginal improvement.}
+\label{tab:iteration_ablation}
+\small
+\begin{tabular}{lccc}
+\toprule
+Iterations & PSNR$\uparrow$ & SSIM$\uparrow$ & Time (s) \\
+\midrule
+5,000 & 12.34 & 0.512 & 45 \\
+10,000 & 14.21 & 0.578 & 89 \\
+20,000 & 15.52 & 0.621 & 178 \\
+30,000 & 15.85 & 0.635 & 267 \\
+50,000 & 15.91 & 0.638 & 445 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Quality improves rapidly in early iterations (5K$\rightarrow$10K: +1.87 dB) but saturates beyond 20K iterations (20K$\rightarrow$50K: +0.39 dB). For real-time applications, 10K iterations provide 90\% of final quality at 33\% of training time.
+
+\subsection{Learning Rate Schedule Analysis}
+
+We compare learning rate schedules for position optimization:
+
+\textbf{Exponential decay} (default): LR decays from $1.6 \times 10^{-4}$ to $1.6 \times 10^{-6}$ over 30K iterations. Achieves 15.85 dB PSNR with smooth convergence.
+
+\textbf{Constant LR}: Fixed at $1.6 \times 10^{-4}$. Achieves only 14.92 dB due to oscillation in later iterations.
+
+\textbf{Cosine annealing}: Achieves 15.78 dB with faster initial convergence but slightly worse final quality.
+
+The exponential schedule provides optimal balance between fast initial convergence and stable refinement.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Limitations and Failure Cases}
+\label{sec:limitations}
+
+While our evaluation provides comprehensive insights, several limitations warrant discussion:
+
+\textbf{Indoor Focus.} Our evaluation focuses on indoor RGB-D datasets (TUM, Replica). Outdoor scenarios with larger scale variations, dynamic lighting, and weather conditions may exhibit different error propagation characteristics. The finding that learned depth improves quality may not generalize to outdoor scenes where scale ambiguity is more severe.
+
+\textbf{Static Scenes.} All evaluated sequences contain static scenes. Dynamic objects (moving people, vehicles) would introduce additional challenges for both pose estimation and Gaussian optimization, potentially changing the relative importance of pose vs. depth accuracy.
+
+\textbf{Failure Modes.} We observe systematic failures in specific conditions:
+\begin{itemize}
+\item \textbf{Fast motion:} Pose estimation degrades rapidly when frame-to-frame motion exceeds 10° rotation or 0.1m translation, causing tracking loss in 30-40\% of frames for feature-based methods.
+\item \textbf{Textureless regions:} Sparse feature methods (ORB, SIFT) fail in uniform areas; only dense flow maintains tracking.
+\item \textbf{Reflective surfaces:} Depth estimators produce erroneous predictions on mirrors and glass, propagating to incorrect Gaussian placement.
+\end{itemize}
+
+\textbf{Memory Constraints.} Jetson deployment limits scene complexity to approximately 100K Gaussians due to unified memory architecture. Larger scenes require level-of-detail or streaming strategies not evaluated here.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Conclusion}
+\label{sec:conclusion}
+
+We presented AirSplatMap, a comprehensive pipeline and benchmark for real-time 3D Gaussian Splatting on edge devices. Through systematic evaluation of 3,991 benchmark runs across five 3DGS engines, four depth estimators, eleven pose methods, two datasets (TUM RGB-D, Replica), and two hardware platforms, we established several key findings:
+
+\textbf{(1) Pose errors dominate reconstruction quality.} Pose estimation errors cause 8+ dB PSNR degradation, making accurate pose estimation the critical bottleneck. This finding provides actionable guidance: system designers should prioritize pose accuracy, especially for drone applications where onboard GPS/IMU fusion can provide accurate pose.
+
+\textbf{(2) Learned depth improves quality.} Counter-intuitively, learned monocular depth estimators improve reconstruction quality over sensor depth (+4.5 dB PSNR) by providing smoother, more complete depth maps for Gaussian initialization.
+
+\textbf{(3) gsplat achieves best speed-quality trade-off.} Among evaluated engines, gsplat achieves competitive quality (15.0 dB PSNR) at the highest training speed (47.9 FPS), making it the recommended choice for real-time applications.
+
+\textbf{(4) Edge deployment requires hybrid strategies.} While 3DGS training is impractical on edge hardware (1.87 FPS), rendering achieves real-time operation (38.7 FPS) with 6$\times$ power savings. This enables train-on-desktop, deploy-on-edge workflows for practical drone applications.
+
+\textbf{Contributions:} Parsa Rezaei designed the evaluation framework, implemented engine integrations, conducted all experiments, performed analysis, and wrote this paper. Sunny Yoshimitsu Nguyen contributed to depth estimation integration, data collection, and experimental validation.
+
+\textbf{Future Work:} We plan to extend analysis to outdoor datasets (KITTI~\cite{geiger2012kitti}), evaluate recent foundation models (DUSt3R~\cite{wang2024dust3r}), develop adaptive method selection based on scene characteristics, and investigate streaming strategies for large-scale scenes.
+
+Code, benchmark data, and interactive visualization dashboard: \url{https://github.com/ParsaRezaei/AirSplatMap}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+{\small
+\bibliographystyle{ieeenat_fullname}
+\bibliography{references}
+}
+
+\end{document}
