@@ -146,20 +146,71 @@ def _align_trajectory_umeyama(estimated: np.ndarray, ground_truth: np.ndarray, f
     return aligned
 
 
-def _load_ground_truth_trajectories(datasets: List[str], datasets_dir: Path = None, max_points: int = 200) -> Dict[str, Dict]:
-    """Load ground truth trajectories from TUM datasets."""
+def _load_ground_truth_trajectories(datasets: List[str], datasets_dir: Path = None, cache_dir: Path = None, max_points: int = 200) -> Dict[str, Dict]:
+    """Load ground truth trajectories from benchmark cache or dataset files.
+    
+    Priority:
+    1. Load from benchmark cache (gt_poses.npy) - most reliable, already processed
+    2. Fall back to raw dataset files (TUM groundtruth.txt)
+    
+    Args:
+        datasets: List of dataset names
+        datasets_dir: Root datasets directory (for fallback)
+        cache_dir: Benchmark cache directory (preferred source)
+        max_points: Maximum points for trajectory visualization
+    """
     if datasets_dir is None:
-        datasets_dir = Path(__file__).parent.parent.parent / 'datasets' / 'tum'
+        datasets_dir = Path(__file__).parent.parent.parent / 'datasets'
     
     trajectories = {}
     
     for dataset in datasets:
-        gt_file = datasets_dir / dataset / 'groundtruth.txt'
-        if not gt_file.exists():
+        # Priority 1: Try loading from benchmark cache (most reliable)
+        if cache_dir is not None:
+            gt_cache_file = cache_dir / dataset / 'pose' / 'gt_poses.npy'
+            if gt_cache_file.exists():
+                try:
+                    gt_poses = np.load(gt_cache_file)  # (N, 4, 4) pose matrices
+                    positions = gt_poses[:, :3, 3]  # Extract translations (N, 3)
+                    
+                    # Subsample if too many points
+                    if len(positions) > max_points:
+                        indices = np.linspace(0, len(positions) - 1, max_points, dtype=int)
+                        positions = positions[indices]
+                    
+                    # Center the trajectory around origin for better visualization
+                    center = positions.mean(axis=0)
+                    positions = positions - center
+                    
+                    trajectories[dataset] = {
+                        'x': positions[:, 0].tolist(),
+                        'y': positions[:, 1].tolist(),
+                        'z': positions[:, 2].tolist(),
+                        'num_points': len(positions)
+                    }
+                    logger.debug(f"Loaded GT trajectory for {dataset} from cache ({len(positions)} points)")
+                    continue  # Success, move to next dataset
+                except Exception as e:
+                    logger.warning(f"Failed to load GT trajectory from cache for {dataset}: {e}")
+        
+        # Priority 2: Try loading from raw TUM dataset files
+        # Check multiple possible locations
+        possible_paths = [
+            datasets_dir / 'tum' / dataset / 'groundtruth.txt',
+            datasets_dir / dataset / 'groundtruth.txt',
+        ]
+        
+        gt_file = None
+        for path in possible_paths:
+            if path.exists():
+                gt_file = path
+                break
+        
+        if gt_file is None:
             continue
         
         try:
-            # Read ground truth file
+            # Read ground truth file (TUM format)
             positions = []
             with open(gt_file, 'r') as f:
                 for line in f:
@@ -189,6 +240,7 @@ def _load_ground_truth_trajectories(datasets: List[str], datasets_dir: Path = No
                     'z': positions[:, 2].tolist(),
                     'num_points': len(positions)
                 }
+                logger.debug(f"Loaded GT trajectory for {dataset} from file ({len(positions)} points)")
         except Exception as e:
             logger.warning(f"Failed to load trajectory for {dataset}: {e}")
     
@@ -225,7 +277,7 @@ def _load_estimated_trajectories(output_dir: Path, datasets: List[str], max_poin
         
         # Load ground truth poses for centering (NOT alignment - already done)
         gt_file = dataset_cache / 'gt_poses.npy'
-        gt_center = np.zeros(3)
+        gt_center = None  # Will be computed from first available trajectory
         if gt_file.exists():
             try:
                 gt_poses = np.load(gt_file)
@@ -250,6 +302,10 @@ def _load_estimated_trajectories(output_dir: Path, datasets: List[str], max_poin
                 if len(positions) > max_points:
                     indices = np.linspace(0, len(positions) - 1, max_points, dtype=int)
                     positions = positions[indices]
+                
+                # If no GT center computed yet, use first estimated trajectory as reference
+                if gt_center is None:
+                    gt_center = positions.mean(axis=0)
                 
                 # Center for visualization (same as GT centering)
                 positions = positions - gt_center
@@ -297,14 +353,21 @@ def generate_html_report(
     depth_agg = _aggregate_by_method(depth_results, 'method')
     gs_agg = _aggregate_by_method(gs_results, 'engine')
     
+    # Get cache directory for loading trajectories
+    cache_dir = output_dir / 'cache' if output_dir else None
+    
     # Load ground truth trajectories for visualization
-    trajectories = _load_ground_truth_trajectories(all_datasets)
+    # Priority: 1) benchmark cache (gt_poses.npy), 2) raw dataset files
+    trajectories = _load_ground_truth_trajectories(all_datasets, cache_dir=cache_dir)
     
     # Load estimated trajectories from cache
     estimated_trajectories = _load_estimated_trajectories(output_dir, all_datasets)
     
-    # Get datasets that have trajectory data
-    datasets_with_trajectories = [d for d in all_datasets if d in trajectories]
+    # Get datasets that have trajectory data (from GT or estimated)
+    datasets_with_trajectories = sorted(set(
+        list(trajectories.keys()) + 
+        [d for d in estimated_trajectories.keys() if estimated_trajectories[d]]
+    ))
     
     # Prepare JSON data for JavaScript
     data = {
@@ -1313,8 +1376,8 @@ def generate_html_report(
             <div class="filters">
                 <div class="filter-group">
                     <div class="filter-label">Dataset</div>
-                    <select id="trajDatasetFilter" onchange="updateTrajectoryPlot()">
-                        {_generate_options(sorted(set(r.get('dataset') for r in pose_results if r.get('dataset')))) if pose_results else '<option value="">No pose data available</option>'}
+                    <select id="trajDatasetFilter" onchange="updateTrajectoryMethodCheckboxes(); updateTrajectoryPlot()">
+                        {_generate_options(datasets_with_trajectories) if datasets_with_trajectories else '<option value="">No trajectory data available</option>'}
                     </select>
                 </div>
                 <div class="filter-group">
@@ -2053,32 +2116,53 @@ def generate_html_report(
             // Initialize range slider
             initTrajectorySlider();
             
-            // Populate method checkboxes with Ground Truth first
-            const methodContainer = document.getElementById('trajMethodCheckboxes');
-            const methods = [...new Set(poses.map(p => p.method))];
-            
-            // Ground truth checkbox
-            let checkboxesHtml = `
-                <label class="filter-chip selected" style="display: inline-flex; align-items: center; gap: 6px; margin: 4px;">
-                    <input type="checkbox" value="__GT__" checked onchange="updateTrajectoryPlot(); this.parentElement.classList.toggle('selected', this.checked)">
-                    <span style="width: 12px; height: 12px; background: #ffffff; border-radius: 50%; border: 1px solid #666;"></span>
-                    Ground Truth
-                </label>
-            `;
-            
-            // Method checkboxes
-            checkboxesHtml += methods.map((m, i) => `
-                <label class="filter-chip selected" style="display: inline-flex; align-items: center; gap: 6px; margin: 4px;">
-                    <input type="checkbox" value="${{m}}" checked onchange="updateTrajectoryPlot(); this.parentElement.classList.toggle('selected', this.checked)">
-                    <span style="width: 12px; height: 12px; background: ${{colors[i % colors.length]}}; border-radius: 50%;"></span>
-                    ${{m}}
-                </label>
-            `).join('');
-            
-            methodContainer.innerHTML = checkboxesHtml;
+            // Populate method checkboxes - dynamically based on selected dataset
+            updateTrajectoryMethodCheckboxes();
             
             // Update the plot
             updateTrajectoryPlot();
+        }}
+        
+        function updateTrajectoryMethodCheckboxes() {{
+            const methodContainer = document.getElementById('trajMethodCheckboxes');
+            const datasetFilter = document.getElementById('trajDatasetFilter').value;
+            const poses = data.pose.all;
+            const methods = [...new Set(poses.map(p => p.method))];
+            const gtTrajs = data.trajectories || {{}};
+            const estimatedTrajs = data.estimated_trajectories || {{}};
+            
+            // Check if this dataset has GT
+            const hasGT = !!gtTrajs[datasetFilter];
+            const datasetEstimated = estimatedTrajs[datasetFilter] || {{}};
+            
+            let checkboxesHtml = '';
+            
+            // Ground truth checkbox - only show if GT exists for this dataset
+            if (hasGT) {{
+                checkboxesHtml += `
+                    <label class="filter-chip selected" style="display: inline-flex; align-items: center; gap: 6px; margin: 4px;">
+                        <input type="checkbox" value="__GT__" checked onchange="updateTrajectoryPlot(); this.parentElement.classList.toggle('selected', this.checked)">
+                        <span style="width: 12px; height: 12px; background: #ffffff; border-radius: 50%; border: 1px solid #666;"></span>
+                        Ground Truth
+                    </label>
+                `;
+            }}
+            
+            // Method checkboxes - show which ones have actual trajectory data
+            checkboxesHtml += methods.map((m, i) => {{
+                const hasActualTraj = !!datasetEstimated[m];
+                const tooltip = hasActualTraj ? '' : ' title="Simulated based on ATE"';
+                const style = hasActualTraj ? '' : 'opacity: 0.7;';
+                return `
+                    <label class="filter-chip selected" style="display: inline-flex; align-items: center; gap: 6px; margin: 4px; ${{style}}"${{tooltip}}>
+                        <input type="checkbox" value="${{m}}" checked onchange="updateTrajectoryPlot(); this.parentElement.classList.toggle('selected', this.checked)">
+                        <span style="width: 12px; height: 12px; background: ${{colors[i % colors.length]}}; border-radius: 50%;"></span>
+                        ${{m}}${{hasActualTraj ? '' : ' *'}}
+                    </label>
+                `;
+            }}).join('');
+            
+            methodContainer.innerHTML = checkboxesHtml;
         }}
         
         function initTrajectorySlider() {{
@@ -2165,10 +2249,16 @@ def generate_html_report(
             
             // Get ground truth trajectory for this dataset
             const gtTrajFull = data.trajectories[datasetFilter];
+            const estimatedTrajs = data.estimated_trajectories || {{}};
+            const datasetEstimatedFull = estimatedTrajs[datasetFilter] || {{}};
             
-            if (!gtTrajFull) {{
+            // Check if we have any trajectory data at all
+            const hasGT = !!gtTrajFull;
+            const hasEstimated = Object.keys(datasetEstimatedFull).length > 0;
+            
+            if (!hasGT && !hasEstimated) {{
                 document.getElementById('trajectoryPlot').innerHTML = 
-                    '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available for this dataset</p></div>';
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available for this dataset.<br><br>Run benchmarks with --pose to generate trajectory cache.</p></div>';
                 return;
             }}
             
@@ -2176,14 +2266,14 @@ def generate_html_report(
             const startPercent = parseInt(document.getElementById('trajSliderMin')?.value || 0);
             const endPercent = parseInt(document.getElementById('trajSliderMax')?.value || 100);
             
-            // Slice trajectory based on time range
-            const gtTraj = sliceTrajectory(gtTrajFull, startPercent, endPercent);
+            // Slice GT trajectory if available
+            const gtTraj = gtTrajFull ? sliceTrajectory(gtTrajFull, startPercent, endPercent) : null;
             
             const traces = [];
             const allMethods = [...new Set(poses.map(p => p.method))];
             
-            // Add ground truth first if requested
-            if (showGT) {{
+            // Add ground truth first if requested and available
+            if (showGT && gtTraj) {{
                 traces.push({{
                     type: 'scatter3d',
                     mode: 'lines',
@@ -2196,10 +2286,7 @@ def generate_html_report(
             }}
             
             // Generate estimated trajectories for each selected method
-            // Use actual estimated trajectories from cache if available, otherwise simulate
-            const estimatedTrajs = data.estimated_trajectories || {{}};
-            const datasetEstimatedFull = estimatedTrajs[datasetFilter] || {{}};
-            
+            // Use actual estimated trajectories from cache if available
             selectedMethods.forEach((method) => {{
                 const methodIdx = allMethods.indexOf(method);
                 const methodResult = filtered.find(p => p.method === method);
@@ -2215,8 +2302,9 @@ def generate_html_report(
                     x = estTraj.x;
                     y = estTraj.y;
                     z = estTraj.z;
-                }} else {{
+                }} else if (gtTraj) {{
                     // Fallback: simulate trajectory with noise proportional to ATE
+                    // Only if GT is available to base the simulation on
                     const numPoints = gtTraj.x.length;
                     const seed = method.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
                     const seededRandom = (i) => ((seed * (i + 1) * 9301 + 49297) % 233280) / 233280 - 0.5;
@@ -2225,6 +2313,9 @@ def generate_html_report(
                     x = gtTraj.x.map((v, i) => v + seededRandom(i) * noiseScale);
                     y = gtTraj.y.map((v, i) => v + seededRandom(i + numPoints) * noiseScale);
                     z = gtTraj.z.map((v, i) => v + seededRandom(i + numPoints * 2) * noiseScale * 0.5);
+                }} else {{
+                    // No trajectory data available for this method
+                    return;
                 }}
                 
                 traces.push({{

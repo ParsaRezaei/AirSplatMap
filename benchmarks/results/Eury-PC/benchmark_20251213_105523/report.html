@@ -574,7 +574,7 @@
     <nav class="sidebar">
         <div class="sidebar-header">
             <h1>🚀 <span>AirSplatMap</span></h1>
-            <p>Benchmark Report • 2025-12-14 22:02</p>
+            <p>Benchmark Report • 2025-12-14 22:16</p>
         </div>
         
         <div class="nav-section">
@@ -966,8 +966,8 @@
             <div class="filters">
                 <div class="filter-group">
                     <div class="filter-label">Dataset</div>
-                    <select id="trajDatasetFilter" onchange="updateTrajectoryPlot()">
-                        <option value="">No pose data available</option>
+                    <select id="trajDatasetFilter" onchange="updateTrajectoryMethodCheckboxes(); updateTrajectoryPlot()">
+                        <option value="">No trajectory data available</option>
                     </select>
                 </div>
                 <div class="filter-group">
@@ -1706,32 +1706,53 @@
             // Initialize range slider
             initTrajectorySlider();
             
-            // Populate method checkboxes with Ground Truth first
-            const methodContainer = document.getElementById('trajMethodCheckboxes');
-            const methods = [...new Set(poses.map(p => p.method))];
-            
-            // Ground truth checkbox
-            let checkboxesHtml = `
-                <label class="filter-chip selected" style="display: inline-flex; align-items: center; gap: 6px; margin: 4px;">
-                    <input type="checkbox" value="__GT__" checked onchange="updateTrajectoryPlot(); this.parentElement.classList.toggle('selected', this.checked)">
-                    <span style="width: 12px; height: 12px; background: #ffffff; border-radius: 50%; border: 1px solid #666;"></span>
-                    Ground Truth
-                </label>
-            `;
-            
-            // Method checkboxes
-            checkboxesHtml += methods.map((m, i) => `
-                <label class="filter-chip selected" style="display: inline-flex; align-items: center; gap: 6px; margin: 4px;">
-                    <input type="checkbox" value="${m}" checked onchange="updateTrajectoryPlot(); this.parentElement.classList.toggle('selected', this.checked)">
-                    <span style="width: 12px; height: 12px; background: ${colors[i % colors.length]}; border-radius: 50%;"></span>
-                    ${m}
-                </label>
-            `).join('');
-            
-            methodContainer.innerHTML = checkboxesHtml;
+            // Populate method checkboxes - dynamically based on selected dataset
+            updateTrajectoryMethodCheckboxes();
             
             // Update the plot
             updateTrajectoryPlot();
+        }
+        
+        function updateTrajectoryMethodCheckboxes() {
+            const methodContainer = document.getElementById('trajMethodCheckboxes');
+            const datasetFilter = document.getElementById('trajDatasetFilter').value;
+            const poses = data.pose.all;
+            const methods = [...new Set(poses.map(p => p.method))];
+            const gtTrajs = data.trajectories || {};
+            const estimatedTrajs = data.estimated_trajectories || {};
+            
+            // Check if this dataset has GT
+            const hasGT = !!gtTrajs[datasetFilter];
+            const datasetEstimated = estimatedTrajs[datasetFilter] || {};
+            
+            let checkboxesHtml = '';
+            
+            // Ground truth checkbox - only show if GT exists for this dataset
+            if (hasGT) {
+                checkboxesHtml += `
+                    <label class="filter-chip selected" style="display: inline-flex; align-items: center; gap: 6px; margin: 4px;">
+                        <input type="checkbox" value="__GT__" checked onchange="updateTrajectoryPlot(); this.parentElement.classList.toggle('selected', this.checked)">
+                        <span style="width: 12px; height: 12px; background: #ffffff; border-radius: 50%; border: 1px solid #666;"></span>
+                        Ground Truth
+                    </label>
+                `;
+            }
+            
+            // Method checkboxes - show which ones have actual trajectory data
+            checkboxesHtml += methods.map((m, i) => {
+                const hasActualTraj = !!datasetEstimated[m];
+                const tooltip = hasActualTraj ? '' : ' title="Simulated based on ATE"';
+                const style = hasActualTraj ? '' : 'opacity: 0.7;';
+                return `
+                    <label class="filter-chip selected" style="display: inline-flex; align-items: center; gap: 6px; margin: 4px; ${style}"${tooltip}>
+                        <input type="checkbox" value="${m}" checked onchange="updateTrajectoryPlot(); this.parentElement.classList.toggle('selected', this.checked)">
+                        <span style="width: 12px; height: 12px; background: ${colors[i % colors.length]}; border-radius: 50%;"></span>
+                        ${m}${hasActualTraj ? '' : ' *'}
+                    </label>
+                `;
+            }).join('');
+            
+            methodContainer.innerHTML = checkboxesHtml;
         }
         
         function initTrajectorySlider() {
@@ -1818,10 +1839,16 @@
             
             // Get ground truth trajectory for this dataset
             const gtTrajFull = data.trajectories[datasetFilter];
+            const estimatedTrajs = data.estimated_trajectories || {};
+            const datasetEstimatedFull = estimatedTrajs[datasetFilter] || {};
             
-            if (!gtTrajFull) {
+            // Check if we have any trajectory data at all
+            const hasGT = !!gtTrajFull;
+            const hasEstimated = Object.keys(datasetEstimatedFull).length > 0;
+            
+            if (!hasGT && !hasEstimated) {
                 document.getElementById('trajectoryPlot').innerHTML = 
-                    '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available for this dataset</p></div>';
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available for this dataset.<br><br>Run benchmarks with --pose to generate trajectory cache.</p></div>';
                 return;
             }
             
@@ -1829,14 +1856,14 @@
             const startPercent = parseInt(document.getElementById('trajSliderMin')?.value || 0);
             const endPercent = parseInt(document.getElementById('trajSliderMax')?.value || 100);
             
-            // Slice trajectory based on time range
-            const gtTraj = sliceTrajectory(gtTrajFull, startPercent, endPercent);
+            // Slice GT trajectory if available
+            const gtTraj = gtTrajFull ? sliceTrajectory(gtTrajFull, startPercent, endPercent) : null;
             
             const traces = [];
             const allMethods = [...new Set(poses.map(p => p.method))];
             
-            // Add ground truth first if requested
-            if (showGT) {
+            // Add ground truth first if requested and available
+            if (showGT && gtTraj) {
                 traces.push({
                     type: 'scatter3d',
                     mode: 'lines',
@@ -1849,10 +1876,7 @@
             }
             
             // Generate estimated trajectories for each selected method
-            // Use actual estimated trajectories from cache if available, otherwise simulate
-            const estimatedTrajs = data.estimated_trajectories || {};
-            const datasetEstimatedFull = estimatedTrajs[datasetFilter] || {};
-            
+            // Use actual estimated trajectories from cache if available
             selectedMethods.forEach((method) => {
                 const methodIdx = allMethods.indexOf(method);
                 const methodResult = filtered.find(p => p.method === method);
@@ -1868,8 +1892,9 @@
                     x = estTraj.x;
                     y = estTraj.y;
                     z = estTraj.z;
-                } else {
+                } else if (gtTraj) {
                     // Fallback: simulate trajectory with noise proportional to ATE
+                    // Only if GT is available to base the simulation on
                     const numPoints = gtTraj.x.length;
                     const seed = method.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
                     const seededRandom = (i) => ((seed * (i + 1) * 9301 + 49297) % 233280) / 233280 - 0.5;
@@ -1878,6 +1903,9 @@
                     x = gtTraj.x.map((v, i) => v + seededRandom(i) * noiseScale);
                     y = gtTraj.y.map((v, i) => v + seededRandom(i + numPoints) * noiseScale);
                     z = gtTraj.z.map((v, i) => v + seededRandom(i + numPoints * 2) * noiseScale * 0.5);
+                } else {
+                    // No trajectory data available for this method
+                    return;
                 }
                 
                 traces.push({
