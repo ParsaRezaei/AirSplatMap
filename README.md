@@ -3,6 +3,24 @@
 Real-time 3D Gaussian Splatting for drones, robots, and cameras.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![GitHub Pages](https://img.shields.io/badge/Demo-GitHub%20Pages-blue)](https://ParsaRezaei.github.io/AirSplatMap/)
+[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-green.svg)](https://www.python.org/)
+[![CUDA 12.x](https://img.shields.io/badge/CUDA-12.x-brightgreen.svg)](https://developer.nvidia.com/cuda-toolkit)
+
+---
+
+## 🌐 Live Demo & Resources
+
+| Resource | Link |
+|----------|------|
+| 📊 **Interactive Benchmark Viewer** | [ParsaRezaei.github.io/AirSplatMap](https://ParsaRezaei.github.io/AirSplatMap/) |
+| 📖 **Full Documentation** | [docs/](docs/index.md) |
+| 🔬 **Research Papers** | [papers/](papers/README.md) |
+| 📈 **Benchmark Results** | [benchmarks/results/](benchmarks/results/index.html) |
+| 🎬 **Web Dashboard** | [dashboard/](dashboard/README.md) |
+| 🐛 **Issue Tracker** | [GitHub Issues](https://github.com/ParsaRezaei/AirSplatMap/issues) |
+
+---
 
 ## Overview
 
@@ -16,12 +34,13 @@ Camera/Drone → Pose Estimation → 3D Gaussian Splatting → Web Dashboard
 
 | Feature | Description |
 |---------|-------------|
-| 🚀 **Multiple 3DGS Engines** | GSplat, GraphDeco, MonoGS, SplaTAM, Photo-SLAM |
-| 📍 **Visual Odometry** | ORB, SIFT, LoFTR, SuperPoint, RealSense VIO |
-| 🎯 **Depth Estimation** | MiDaS, Depth Anything V2/V3, Depth Pro |
-| 🌐 **Web Dashboard** | Real-time 3D visualization in browser |
-| 📊 **Benchmarks** | Automated evaluation with plots |
-| 🤖 **ArduPilot** | MAVLink integration for drones/rovers |
+| 🚀 **Multiple 3DGS Engines** | [GSplat, GraphDeco, MonoGS, SplaTAM, Photo-SLAM, Gaussian-SLAM](docs/engines.md) |
+| 📍 **Visual Odometry** | [ORB, SIFT, LoFTR, SuperPoint, LightGlue, RoMa, RAFT](docs/pose_estimation.md) |
+| 🎯 **Depth Estimation** | [MiDaS, Depth Anything V2/V3, Apple Depth Pro](docs/depth_estimation.md) |
+| 🌐 **Web Dashboard** | [Real-time 3D visualization in browser](docs/dashboard.md) |
+| 📊 **Benchmarks** | [Automated evaluation with interactive HTML reports](docs/benchmarks.md) |
+| 🤖 **ArduPilot** | [MAVLink integration for drones/rovers](docs/ardupilot_integration.md) |
+| 🖥️ **Edge Deployment** | Full Jetson Orin support (JetPack 6.x) |
 
 ## 🖥️ Supported Platforms
 
@@ -37,7 +56,7 @@ Camera/Drone → Pose Estimation → 3D Gaussian Splatting → Web Dashboard
 Full support for **NVIDIA Jetson Orin** devices (Nano, NX, AGX) running JetPack 6.x:
 - Automatic detection of Jetson platform
 - NVIDIA's Jetson PyTorch wheel with SM 8.7 support
-- All 5 engines working: gsplat, graphdeco, monogs, splatam, gslam
+- All 6 engines working: gsplat, graphdeco, monogs, splatam, gslam, da3gs
 
 ## 📚 Documentation
 
@@ -52,6 +71,8 @@ Full support for **NVIDIA Jetson Orin** devices (Nano, NX, AGX) running JetPack 
 | [Benchmarks](docs/benchmarks.md) | Running evaluations |
 | [API Reference](docs/api_reference.md) | Python API docs |
 | [ArduPilot](docs/ardupilot_integration.md) | Drone/rover integration |
+
+> 📘 **New to AirSplatMap?** Start with [Getting Started](docs/getting_started.md) for installation and your first 3D reconstruction!
 
 ## 🚀 Quick Start
 
@@ -73,16 +94,19 @@ conda activate airsplatmap
 python -c "import torch; print(f'PyTorch {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
 ```
 
+> 📖 For detailed installation instructions, see [Getting Started](docs/getting_started.md).
+
 ### Run Web Dashboard
 
 ```bash
-# Start dashboard
 cd dashboard
-start_dashboard.bat       # Windows
 ./start_dashboard.sh      # Linux/macOS
+# start_dashboard.bat     # Windows
 
 # Open browser: http://127.0.0.1:9002
 ```
+
+> 🎬 Learn more about the dashboard in the [Dashboard Guide](docs/dashboard.md).
 
 ### Run TUM Dataset Demo
 
@@ -95,6 +119,19 @@ python scripts/demos/live_tum_demo.py --sequence fr1_desk --engine gsplat
 ```bash
 python scripts/demos/live_realsense_demo.py --engine gsplat
 ```
+
+### Run Benchmarks
+
+```bash
+# Quick benchmark
+python -m benchmarks.run --quick
+
+# View interactive results
+# Open benchmarks/results/<hostname>/benchmark_<timestamp>/report.html
+# Or view online: https://ParsaRezaei.github.io/AirSplatMap/
+```
+
+> 📊 See [Benchmarks Guide](docs/benchmarks.md) for comprehensive evaluation options.
 
 ## 📖 Architecture
 
@@ -433,14 +470,14 @@ AirSplatMap/
 
 ## 🎮 Available Engines
 
-| Engine | Speed | Real-time | Best For |
-|--------|-------|-----------|----------|
-| `gsplat` | ⭐⭐⭐⭐⭐ | ✅ | Real-time, low memory |
-| `graphdeco` | ⭐⭐⭐ | ❌ | Best quality |
-| `monogs` | ⭐⭐⭐⭐ | ✅ | SLAM with tracking |
-| `splatam` | ⭐⭐ | ❌ | RGB-D dense reconstruction |
-| `da3gs` | ⭐⭐ | ❌ | End-to-end depth + Gaussians |
-| `gslam` | ⭐⭐⭐ | ❌ | Large scenes with submaps |
+| Engine | Speed | Real-time | Best For | Docs |
+|--------|-------|-----------|----------|------|
+| `gsplat` | ⭐⭐⭐⭐⭐ | ✅ | Real-time, low memory | [Details](docs/engines.md#gsplat-recommended-for-real-time) |
+| `graphdeco` | ⭐⭐⭐ | ❌ | Best quality | [Details](docs/engines.md#graphdeco-best-quality) |
+| `monogs` | ⭐⭐⭐⭐ | ✅ | SLAM with tracking | [Details](docs/engines.md#monogs-real-time-slam) |
+| `splatam` | ⭐⭐ | ❌ | RGB-D dense reconstruction | [Details](docs/engines.md#splatam-rgb-d-slam) |
+| `da3gs` | ⭐⭐ | ❌ | End-to-end depth + Gaussians | [Details](docs/engines.md#da3gs) |
+| `gslam` | ⭐⭐⭐ | ❌ | Large scenes with submaps | [Details](docs/engines.md#gaussian-slam-gslam) |
 
 ```python
 from src.engines import get_engine, list_engines
@@ -452,19 +489,48 @@ print(list_engines())
 engine = get_engine("gsplat")
 ```
 
+> 📖 Full engine comparison and benchmarks in [Engines Guide](docs/engines.md).
+
 ## 📊 Benchmarks
+
+Run comprehensive evaluations on pose estimation, depth estimation, and 3D Gaussian Splatting:
 
 ```bash
 # Run full benchmark suite
-python -m benchmarks all --quick
+python -m benchmarks.run --quick
 
-# View results
-# Open benchmarks/results/report.html
+# Run specific benchmarks
+python -m benchmarks.run --pose     # Pose estimation only
+python -m benchmarks.run --depth    # Depth estimation only
+python -m benchmarks.run --gs       # Gaussian splatting only
+
+# View interactive results
+# Open benchmarks/results/<hostname>/benchmark_<timestamp>/report.html
 ```
+
+### View Results Online
+
+📊 **[Interactive Benchmark Viewer](https://ParsaRezaei.github.io/AirSplatMap/)** - Explore all benchmark results across different hardware configurations (Desktop, Jetson, etc.)
+
+> 📖 See [Benchmarks Guide](docs/benchmarks.md) for detailed evaluation options and metrics.
 
 ## 🔧 Configuration
 
-See full details in [docs/](docs/).
+Configuration options and advanced usage are covered in the documentation:
+
+- **Engine Configuration**: [docs/engines.md](docs/engines.md#custom-configuration)
+- **Pipeline Configuration**: [docs/architecture.md](docs/architecture.md#configuration)
+- **Dashboard Settings**: [docs/dashboard.md](docs/dashboard.md#configuration)
+- **ArduPilot Setup**: [docs/ardupilot_integration.md](docs/ardupilot_integration.md)
+
+## 📖 Research Papers
+
+AirSplatMap includes two CVPR-format academic papers in the [papers/](papers/) directory:
+
+1. **Deep Learning Paper**: Focus on 3DGS engines, optimization, and edge deployment
+2. **Computer Vision Paper**: Comprehensive evaluation of depth and pose estimation methods
+
+> 📄 See [papers/README.md](papers/README.md) for paper abstracts, key results, and building instructions.
 
 ## License
 
@@ -496,8 +562,24 @@ python -m pytest tests/
 3. Make changes
 4. Submit pull request
 
+> 🐛 Found a bug? [Open an issue](https://github.com/ParsaRezaei/AirSplatMap/issues)
+
+---
+
+## 📚 Additional Resources
+
+- **[TUM RGB-D Dataset](https://vision.in.tum.de/data/datasets/rgbd-dataset)** - Standard benchmark dataset
+- **[3D Gaussian Splatting (Original Paper)](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/)** - SIGGRAPH 2023
+- **[gsplat Library](https://docs.gsplat.studio/)** - Nerfstudio's optimized implementation
+- **[ArduPilot Documentation](https://ardupilot.org/dev/)** - Drone/rover integration
+
 ---
 
 <p align="center">
   Made with ❤️ for the 3D Gaussian Splatting community
+</p>
+<p align="center">
+  <a href="https://ParsaRezaei.github.io/AirSplatMap/">View Benchmarks</a> •
+  <a href="docs/getting_started.md">Get Started</a> •
+  <a href="https://github.com/ParsaRezaei/AirSplatMap/issues">Report Bug</a>
 </p>

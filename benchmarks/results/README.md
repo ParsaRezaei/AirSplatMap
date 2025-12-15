@@ -2,13 +2,17 @@
 
 This directory contains benchmark results and a web-based viewer for GitHub Pages.
 
+> 📊 **View Results Online**: [ParsaRezaei.github.io/AirSplatMap](https://ParsaRezaei.github.io/AirSplatMap/)
+
+---
+
 ## Viewing Results
 
-### On GitHub Pages
+### Online (GitHub Pages)
 
-Once GitHub Pages is enabled, navigate to:
+The easiest way to view results is the online viewer:
 ```
-https://<username>.github.io/<repo>/benchmarks/results/
+https://ParsaRezaei.github.io/AirSplatMap/
 ```
 
 ### Locally
@@ -24,6 +28,8 @@ python -m http.server 8000
 # Using Node.js
 npx serve .
 ```
+
+---
 
 ## Directory Structure
 
@@ -90,4 +96,12 @@ The viewer supports URL parameters for deep linking:
 - `?device=jetson` - Pre-select a device
 - `?device=jetson&benchmark=benchmark_20251208_111826` - Open specific benchmark
 
-Example: `https://yoursite.github.io/repo/benchmarks/results/?device=jetson&benchmark=latest`
+Example: `https://ParsaRezaei.github.io/AirSplatMap/?device=jetson&benchmark=latest`
+
+---
+
+## See Also
+
+- [Benchmarks Guide](../../docs/benchmarks.md) - How to run benchmarks
+- [benchmarks/README.md](../README.md) - Benchmark suite documentation
+- [Getting Started](../../docs/getting_started.md) - Installation and setup

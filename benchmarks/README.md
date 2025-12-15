@@ -2,6 +2,10 @@
 
 Comprehensive benchmarking tools for evaluating pose estimation, depth estimation, and 3D Gaussian Splatting methods against RGB-D ground truth datasets.
 
+> 📊 **View Results Online**: [ParsaRezaei.github.io/AirSplatMap](https://ParsaRezaei.github.io/AirSplatMap/) - Interactive benchmark viewer
+
+---
+
 ## Quick Start
 
 ```bash
@@ -17,6 +21,21 @@ python -m benchmarks.run --datasets fr1_desk fr2_desk fr3_office
 # Run comprehensive benchmark (all methods, all datasets)
 python -m benchmarks.run --comprehensive --multi-dataset
 ```
+
+---
+
+## Documentation
+
+| Resource | Link |
+|----------|------|
+| 📖 **Full Benchmarks Guide** | [docs/benchmarks.md](../docs/benchmarks.md) |
+| 📊 **Interactive Results Viewer** | [ParsaRezaei.github.io/AirSplatMap](https://ParsaRezaei.github.io/AirSplatMap/) |
+| 📁 **Datasets Guide** | [datasets/README.md](../datasets/README.md) |
+| 📍 **Pose Estimation Docs** | [docs/pose_estimation.md](../docs/pose_estimation.md) |
+| 🎯 **Depth Estimation Docs** | [docs/depth_estimation.md](../docs/depth_estimation.md) |
+| 🚀 **Engines Guide** | [docs/engines.md](../docs/engines.md) |
+
+---
 
 ## Supported Datasets
 
@@ -257,3 +276,4 @@ python benchmarks/batch/run_monogs_tum.py
 - [Pose Estimation Guide](../docs/pose_estimation.md)
 - [Depth Estimation Guide](../docs/depth_estimation.md)
 - [Engines Comparison](../docs/engines.md)
+- [Interactive Benchmark Viewer](https://ParsaRezaei.github.io/AirSplatMap/)

@@ -2,6 +2,10 @@
 
 This directory contains two CVPR-format academic papers for the AirSplatMap project.
 
+> 📊 **Benchmark Data Source**: [ParsaRezaei.github.io/AirSplatMap](https://ParsaRezaei.github.io/AirSplatMap/) - All experimental results come from our interactive benchmark viewer
+
+---
+
 ## Directory Structure
 
 ```
@@ -150,8 +154,12 @@ python generate_figures.py --paper cv --output ../computer_vision/figures/
 
 ## Online Resources
 
-- **Interactive Benchmark Viewer**: https://ParsaRezaei.github.io/AirSplatMap/
-- **Source Code**: https://github.com/ParsaRezaei/AirSplatMap
+| Resource | Link |
+|----------|------|
+| 📊 **Interactive Benchmark Viewer** | [ParsaRezaei.github.io/AirSplatMap](https://ParsaRezaei.github.io/AirSplatMap/) |
+| 💻 **Source Code** | [github.com/ParsaRezaei/AirSplatMap](https://github.com/ParsaRezaei/AirSplatMap) |
+| 📖 **Documentation** | [docs/](../docs/) |
+| 📈 **Raw Benchmark Data** | [benchmarks/results/](../benchmarks/results/) |
 
 ## Citation
 

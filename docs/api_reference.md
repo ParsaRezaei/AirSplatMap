@@ -2,6 +2,13 @@
 
 Complete API reference for AirSplatMap.
 
+> 📚 **Related Documentation**:
+> - [Getting Started](getting_started.md) - Installation and first run
+> - [Architecture](architecture.md) - System design overview
+> - [Engines](engines.md) - 3DGS engine comparison
+
+---
+
 ## Quick Import Reference
 
 ```python

@@ -2,6 +2,10 @@
 
 AirSplatMap supports multiple 3D Gaussian Splatting engines, each with different tradeoffs.
 
+> 📊 **View engine benchmarks**: [ParsaRezaei.github.io/AirSplatMap](https://ParsaRezaei.github.io/AirSplatMap/)
+
+---
+
 ## Engine Comparison
 
 | Engine | Speed | Memory | Quality | Real-time | RGB-D | Mono |
@@ -347,7 +351,9 @@ class BaseGSEngine(ABC):
 
 ## Benchmarks
 
-See [benchmarks.md](benchmarks.md) for detailed performance comparisons.
+See [Benchmarks Guide](benchmarks.md) for detailed performance comparisons.
+
+📊 **Interactive Results**: [ParsaRezaei.github.io/AirSplatMap](https://ParsaRezaei.github.io/AirSplatMap/)
 
 Quick summary on TUM `fr1_desk` (200 frames):
 
@@ -357,3 +363,12 @@ Quick summary on TUM `fr1_desk` (200 frames):
 | graphdeco | 25.3 | 3.5 | 8.4 | 210,000 |
 | monogs | 24.5 | 10.1 | 4.2 | 175,000 |
 | splatam | 24.2 | 0.8 | 6.8 | 195,000 |
+
+---
+
+## See Also
+
+- [Getting Started](getting_started.md) - Installation and first run
+- [Architecture](architecture.md) - System design overview
+- [Benchmarks Guide](benchmarks.md) - Running comprehensive evaluations
+- [API Reference](api_reference.md) - Python API documentation

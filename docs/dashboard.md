@@ -2,6 +2,10 @@
 
 AirSplatMap includes a real-time web dashboard for visualizing 3D Gaussian Splatting.
 
+> 🌐 **Quick Access**: Run `./start_dashboard.sh` and open [http://127.0.0.1:9002](http://127.0.0.1:9002)
+
+---
+
 ## Quick Start
 
 ```bash
@@ -355,3 +359,14 @@ ls datasets/tum/
 | F | Fullscreen |
 | 1-4 | Switch view tabs |
 | +/- | Zoom 3D view |
+
+---
+
+## See Also
+
+- [Getting Started](getting_started.md) - Installation and first run
+- [Architecture](architecture.md) - System design overview
+- [Engines](engines.md) - 3DGS engine comparison
+- [Benchmarks Guide](benchmarks.md) - Running comprehensive evaluations
+- [API Reference](api_reference.md) - Python API documentation
+- [Benchmark Viewer](https://ParsaRezaei.github.io/AirSplatMap/) - Interactive benchmark results

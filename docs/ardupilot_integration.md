@@ -2,6 +2,14 @@
 
 This guide explains how to use AirSplatMap with ArduPilot-based drones, rovers, boats, and other vehicles for real-time 3D Gaussian Splatting mapping.
 
+> 📚 **Related Documentation**:
+> - [Getting Started](getting_started.md) - Installation and first run
+> - [Pose Estimation](pose_estimation.md) - Visual odometry methods
+> - [Dashboard](dashboard.md) - Web dashboard usage
+> - [ArduPilot Official Docs](https://ardupilot.org/dev/)
+
+---
+
 ## Overview
 
 The ArduPilot integration allows you to:

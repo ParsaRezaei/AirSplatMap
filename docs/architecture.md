@@ -2,6 +2,13 @@
 
 AirSplatMap is designed as a modular, extensible framework for real-time 3D Gaussian Splatting.
 
+> 📚 **Related Documentation**:
+> - [Getting Started](getting_started.md) - Installation and first run
+> - [Engines](engines.md) - 3DGS engine comparison
+> - [API Reference](api_reference.md) - Python API docs
+
+---
+
 ## High-Level Overview
 
 ```

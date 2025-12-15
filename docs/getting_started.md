@@ -2,6 +2,10 @@
 
 This guide will help you install AirSplatMap and run your first 3D Gaussian Splatting reconstruction.
 
+> 📊 **See it in action**: View benchmark results at [ParsaRezaei.github.io/AirSplatMap](https://ParsaRezaei.github.io/AirSplatMap/)
+
+---
+
 ## Prerequisites
 
 - **OS**: Windows 10/11, Ubuntu 20.04/22.04, or NVIDIA Jetson (JetPack 6.x)
@@ -63,27 +67,30 @@ Verify Jetson Orin support:
 python -c "import torch; print('SM 8.7 supported:', any('87' in a for a in torch.cuda.get_arch_list()))"
 ```
 
+---
+
 ## Quick Start
 
 ### Option 1: Web Dashboard (Recommended)
 
+The web dashboard provides the easiest way to visualize 3D Gaussian Splatting in real-time.
+
 ```bash
 # Start the dashboard
 cd dashboard
-start_dashboard.bat       # Windows
 ./start_dashboard.sh      # Linux/macOS
+# start_dashboard.bat     # Windows
 
 # Open browser
 # http://127.0.0.1:9002
 ```
 
+> 📖 Learn more in the [Dashboard Guide](dashboard.md)
+
 ### Option 2: TUM Dataset Demo
 
 ```bash
-# Download TUM dataset manually from:
-# https://vision.in.tum.de/data/datasets/rgbd-dataset/download
-# Extract to datasets/tum/
-
+# Download TUM dataset first (see datasets section below)
 # Run demo
 python scripts/demos/live_tum_demo.py --sequence fr1_desk --engine gsplat
 ```
@@ -121,56 +128,88 @@ summary = pipeline.run(max_frames=200)
 print(f"Processed {summary['frames']} frames, {summary['gaussians']} Gaussians")
 ```
 
+> 📖 Full API documentation in [API Reference](api_reference.md)
+
+---
+
 ## Download Datasets
 
-### TUM RGB-D
+### TUM RGB-D (Recommended for Testing)
 
-Download manually from https://vision.in.tum.de/data/datasets/rgbd-dataset/download
+The TUM RGB-D dataset is the standard benchmark for RGB-D SLAM. Download using the provided script:
 
 ```bash
-# Extract to datasets/tum/ directory
-mkdir -p datasets/tum
-cd datasets/tum
-# Download and extract sequences like rgbd_dataset_freiburg1_desk.tgz
+# Download minimal set for testing (~1.5GB)
+./scripts/tools/datasets/download_datasets.sh ./datasets tum minimal
+
+# Download standard benchmark set (~6GB)
+./scripts/tools/datasets/download_datasets.sh ./datasets tum
+
+# Download all TUM scenes (~15GB)
+./scripts/tools/datasets/download_datasets.sh ./datasets tum all
 ```
 
-Available sequences:
-- `fr1_desk`, `fr1_desk2`, `fr1_room`
-- `fr2_desk`, `fr2_xyz`
-- `fr3_office`, `fr3_structure`
+Or download manually from [TUM RGB-D Dataset](https://vision.in.tum.de/data/datasets/rgbd-dataset/download).
 
-### Custom Data
+> 📖 Full dataset documentation in [datasets/README.md](../datasets/README.md)
 
-Place your data in the `datasets/` folder:
+### Other Datasets
 
+```bash
+# ICL-NUIM (synthetic)
+./scripts/tools/datasets/download_datasets.sh ./datasets icl
+
+# Replica
+./scripts/tools/datasets/download_datasets.sh ./datasets replica
+
+# 7-Scenes
+./scripts/tools/datasets/download_datasets.sh ./datasets 7scenes
 ```
-datasets/
-└── my_sequence/
-    ├── rgb/
-    │   ├── 0001.png
-    │   ├── 0002.png
-    │   └── ...
-    ├── depth/
-    │   ├── 0001.png
-    │   └── ...
-    ├── rgb.txt
-    ├── depth.txt
-    └── groundtruth.txt  # Optional
+
+---
+
+## Run Benchmarks
+
+Evaluate pose estimation, depth estimation, and 3DGS engines:
+
+```bash
+# Quick benchmark
+python -m benchmarks.run --quick
+
+# Comprehensive benchmark
+python -m benchmarks.run --pipeline --multi-dataset
+
+# View results
+# Open benchmarks/results/<hostname>/benchmark_<timestamp>/report.html
 ```
+
+📊 **View benchmark results online**: [ParsaRezaei.github.io/AirSplatMap](https://ParsaRezaei.github.io/AirSplatMap/)
+
+> 📖 Full benchmarking documentation in [Benchmarks Guide](benchmarks.md)
+
+---
 
 ## Next Steps
 
-- [Architecture](architecture.md) - Understand how it works
-- [Engines](engines.md) - Choose the right 3DGS engine
-- [Dashboard](dashboard.md) - Use the web interface
-- [Benchmarks](benchmarks.md) - Evaluate performance
+| Goal | Guide |
+|------|-------|
+| Understand the system | [Architecture](architecture.md) |
+| Choose the right engine | [Engines Guide](engines.md) |
+| Configure pose estimation | [Pose Estimation](pose_estimation.md) |
+| Configure depth estimation | [Depth Estimation](depth_estimation.md) |
+| Use the web interface | [Dashboard Guide](dashboard.md) |
+| Integrate with drones | [ArduPilot Integration](ardupilot_integration.md) |
+| Run evaluations | [Benchmarks Guide](benchmarks.md) |
+| Use the Python API | [API Reference](api_reference.md) |
+
+---
 
 ## Troubleshooting
 
 ### CUDA Out of Memory
 
 ```python
-# Use gsplat engine (4x less memory)
+# Use gsplat engine (4x less memory than graphdeco)
 engine = get_engine("gsplat")
 
 # Or reduce resolution
@@ -190,3 +229,8 @@ pip install --no-build-isolation -e .
 1. Use USB 3.0 port (blue connector)
 2. Install Intel RealSense Viewer to verify camera
 3. Check `pyrealsense2` installation: `python -c "import pyrealsense2"`
+
+### Need Help?
+
+- 🐛 [Report a bug](https://github.com/ParsaRezaei/AirSplatMap/issues)
+- 📖 Check other [documentation pages](index.md)

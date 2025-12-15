@@ -2,6 +2,13 @@
 
 Place your datasets here for the dashboard and benchmarks to detect them.
 
+> 📖 **Related Documentation**:
+> - [Getting Started](../docs/getting_started.md) - Installation guide
+> - [Benchmarks Guide](../docs/benchmarks.md) - Running evaluations
+> - [Interactive Results](https://ParsaRezaei.github.io/AirSplatMap/) - View benchmark results
+
+---
+
 ## Supported Datasets
 
 All datasets must have:
@@ -15,7 +22,7 @@ All datasets must have:
 
 The standard benchmark dataset for RGB-D SLAM. Real-world indoor scenes captured with Kinect/Xtion sensors.
 
-**Website:** https://cvg.cit.tum.de/data/datasets/rgbd-dataset
+**Website:** [cvg.cit.tum.de/data/datasets/rgbd-dataset](https://cvg.cit.tum.de/data/datasets/rgbd-dataset)
 
 ### Quick Download
 
@@ -238,3 +245,12 @@ All ICL-NUIM sequences work well as they have perfect GT and consistent textures
 ## Live Sources
 
 You can also add live sources (RTSP, webcam, video files) directly from the dashboard UI without downloading datasets.
+
+---
+
+## See Also
+
+- [Getting Started](../docs/getting_started.md) - Installation and first run
+- [Benchmarks Guide](../docs/benchmarks.md) - Running evaluations
+- [Dashboard Guide](../docs/dashboard.md) - Web dashboard usage
+- [Interactive Benchmark Results](https://ParsaRezaei.github.io/AirSplatMap/)

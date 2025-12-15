@@ -2,6 +2,12 @@
 
 Benchmark 3DGS engines on RGB-D datasets.
 
+> 📊 **View Results Online**: [ParsaRezaei.github.io/AirSplatMap](https://ParsaRezaei.github.io/AirSplatMap/)
+>
+> 📖 **Full Documentation**: [docs/engines.md](../../docs/engines.md)
+
+---
+
 ## Metrics
 
 ### Quality
@@ -17,14 +23,17 @@ Benchmark 3DGS engines on RGB-D datasets.
 
 ## Available Engines
 
-- `graphdeco`: Original 3DGS implementation
-- `gsplat`: GSplat optimized implementation
-- `monogs`: MonoGS SLAM engine
-- `splatam`: SplaTAM engine
+| Engine | Speed | Real-time | Description |
+|--------|-------|-----------|-------------|
+| \`gsplat\` | ⭐⭐⭐⭐⭐ | ✅ | GSplat optimized implementation |
+| \`graphdeco\` | ⭐⭐⭐ | ❌ | Original 3DGS implementation |
+| \`monogs\` | ⭐⭐⭐⭐ | ✅ | MonoGS SLAM engine |
+| \`splatam\` | ⭐⭐ | ❌ | SplaTAM RGB-D SLAM |
+| \`gslam\` | ⭐⭐⭐ | ❌ | Gaussian-SLAM with submaps |
 
 ## Usage
 
-```bash
+\`\`\`bash
 # Run all engines
 python benchmarks/gaussian_splatting/benchmark_gs.py
 
@@ -33,4 +42,12 @@ python benchmarks/gaussian_splatting/benchmark_gs.py --engines graphdeco gsplat
 
 # Custom settings
 python benchmarks/gaussian_splatting/benchmark_gs.py --max-frames 100 --iterations 100
-```
+\`\`\`
+
+---
+
+## See Also
+
+- [Engines Guide](../../docs/engines.md) - Full engine documentation
+- [Benchmarks Guide](../../docs/benchmarks.md) - Comprehensive benchmarking
+- [Interactive Results](https://ParsaRezaei.github.io/AirSplatMap/) - View all benchmark results

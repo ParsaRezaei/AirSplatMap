@@ -2,6 +2,10 @@
 
 Real-time 3D Gaussian Splatting visualization dashboard.
 
+> 📖 **Full Documentation**: [docs/dashboard.md](../docs/dashboard.md)
+
+---
+
 ## Quick Start
 
 ```bash
@@ -23,21 +27,33 @@ http://127.0.0.1:9002
 - **Live 3DGS Visualization**: See Gaussian splatting in real-time
 - **Multiple Sources**: TUM datasets, RTSP streams, webcams, video files
 - **Pose Estimation**: ORB, SIFT, LoFTR, SuperPoint, and more
-- **Depth Estimation**: MiDaS, Depth Anything, ZoeDepth
+- **Depth Estimation**: MiDaS, Depth Anything, Depth Pro
 - **3D Point Cloud**: Interactive WebGL visualization
 - **Session History**: Auto-save and restore sessions
 
 ## Files
 
-- `web_dashboard.py` - Python backend (HTTP + WebSocket server)
-- `web_dashboard.html` - Frontend UI
-- `start_dashboard.bat/.sh` - Start scripts
-- `stop_dashboard.bat/.sh` - Stop scripts
+| File | Description |
+|------|-------------|
+| `web_dashboard.py` | Python backend (HTTP + WebSocket server) |
+| `web_dashboard.html` | Frontend UI |
+| `start_dashboard.bat/.sh` | Start scripts |
+| `stop_dashboard.bat/.sh` | Stop scripts |
 
 ## Ports
 
 - HTTP: 9002 (configurable with `--http-port`)
 - WebSocket: 9003 (configurable with `--ws-port`)
+
+## Documentation
+
+| Resource | Link |
+|----------|------|
+| 📖 **Full Dashboard Guide** | [docs/dashboard.md](../docs/dashboard.md) |
+| 🚀 **Getting Started** | [docs/getting_started.md](../docs/getting_started.md) |
+| 📊 **Benchmark Results** | [ParsaRezaei.github.io/AirSplatMap](https://ParsaRezaei.github.io/AirSplatMap/) |
+
+---
 
 ## Adding Live Sources
 
@@ -77,3 +93,10 @@ export AIRSPLAT_WS_PORT=9003
 # Command line
 python dashboard/web_dashboard.py --http-port 9002 --ws-port 9003
 ```
+
+## See Also
+
+- [Full Dashboard Documentation](../docs/dashboard.md)
+- [Getting Started Guide](../docs/getting_started.md)
+- [Architecture Overview](../docs/architecture.md)
+- [API Reference](../docs/api_reference.md)
