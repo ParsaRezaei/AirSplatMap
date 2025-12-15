@@ -156,11 +156,13 @@ def create_gaussian_representation(output_dir):
     for vec, c in [([1.2, 0, 0], COLORS['red']), ([0, 0.8, 0], COLORS['green']), ([0, 0, 0.6], COLORS['blue'])]:
         ax.quiver(0, 0, 0, *vec, color=c, arrow_length_ratio=0.15, linewidth=1.5)
     
-    ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('z')
-    ax.set_xlim(-1.2, 1.2); ax.set_ylim(-1.2, 1.2); ax.set_zlim(-1.2, 1.2)
-    ax.tick_params(labelsize=5)
+    ax.set_xlabel('x', labelpad=-10)
+    ax.set_ylabel('y', labelpad=-10)
+    ax.set_zlabel('z', labelpad=-10)
+    ax.set_xlim(-1.5, 1.5); ax.set_ylim(-1.5, 1.5); ax.set_zlim(-1.5, 1.5)
+    ax.tick_params(labelsize=5, pad=-5)
     ax.view_init(elev=20, azim=45)
-    ax.set_title('3D Gaussian Primitive', fontsize=9, fontweight='bold', pad=0)
+    ax.set_title('3D Gaussian Primitive', fontsize=9, fontweight='bold', pad=-5)
     
     save_fig(fig, output_dir, 'gaussian_representation')
 
