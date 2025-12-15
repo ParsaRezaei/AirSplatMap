@@ -16,8 +16,6 @@
 *.snm
 *.vrb
 
-# Generated PDF files (can be regenerated from source)
-*.pdf
 
 # Editor backup files
 *~

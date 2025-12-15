@@ -83,7 +83,7 @@ def save_fig(fig, output_dir, name):
     """Save figure."""
     os.makedirs(output_dir, exist_ok=True)
     fig.savefig(os.path.join(output_dir, f'{name}.png'), format='png', 
-                dpi=DPI, bbox_inches='tight', facecolor='white')
+                dpi=DPI, bbox_inches='tight', transparent=True)
     plt.close(fig)
     print(f'  Saved: {name}.png')
 
@@ -191,10 +191,10 @@ def create_training_pipeline(output_dir):
                    arrowprops=dict(arrowstyle='->', color=COLORS['dark'], lw=1.2))
     
     # Loop arrow
-    ax.annotate('', xy=(1, 0.55), xytext=(8.2, 0.55),
+    ax.annotate('', xy=(1, 1.45), xytext=(8.2, 1.45),
                arrowprops=dict(arrowstyle='->', color=COLORS['dark'], lw=1,
-                              connectionstyle='arc3,rad=0.35'))
-    ax.text(4.6, 0.2, 'Iterate until convergence', fontsize=10, ha='center', 
+                              connectionstyle='arc3,rad=0.5'))
+    ax.text(4.6, 1.8, 'Iterate until convergence', fontsize=10, ha='center', 
             style='italic', color=COLORS['dark'])
     
     save_fig(fig, output_dir, 'training_pipeline')
