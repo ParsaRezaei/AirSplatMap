@@ -25,7 +25,7 @@ California State Polytechnic University, Pomona\\
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{abstract}
-Accurate camera pose and depth estimation are critical prerequisites for 3D scene reconstruction, yet their relative importance and interaction effects remain understudied. We present a comprehensive evaluation of eleven pose estimation methods---spanning classical feature-based (ORB, SIFT, optical flow) and modern learned approaches (SuperPoint, R2D2, LoFTR, LightGlue, RoMa)---alongside four monocular depth estimators (MiDaS, Depth Anything V2/V3, Depth Pro) within a unified 3D Gaussian Splatting pipeline. Through experiments on 17 sequences from TUM RGB-D and Replica datasets, we analyze accuracy-speed trade-offs and downstream reconstruction impact. Our key findings include: (1) classical robust optical flow achieves \textbf{best accuracy (0.068m ATE)} while running at 41 FPS---outperforming learned methods on well-textured indoor scenes; (2) pose estimation errors cause \textbf{8+ dB PSNR degradation}, making pose accuracy the critical bottleneck; (3) surprisingly, \textbf{learned depth improves reconstruction quality} over sensor depth by +4.5 dB through smoother initialization; (4) only optical flow achieves real-time operation ($>$10 FPS) on edge hardware (NVIDIA Jetson Orin). Our benchmark includes 537 pose estimation runs, 204 depth estimation runs, and 2,979 full pipeline evaluations. We provide an interactive results viewer and open-source implementation at \url{https://github.com/ParsaRezaei/AirSplatMap}.
+Accurate camera pose and depth estimation are critical prerequisites for 3D scene reconstruction, yet their relative importance and interaction effects remain understudied. We present a comprehensive evaluation of eleven pose estimation methods---spanning classical feature-based (ORB, SIFT, optical flow) and modern learned approaches (SuperPoint, R2D2, LoFTR, LightGlue, RoMa)---alongside four monocular depth estimators (MiDaS, Depth Anything V2/V3, Depth Pro) within a unified 3D Gaussian Splatting pipeline. Through experiments on 17 sequences from TUM RGB-D, 7Scenes, and Replica datasets ($\sim$30K frames), we analyze accuracy-speed trade-offs and downstream reconstruction impact. Our key findings include: (1) classical robust optical flow achieves \textbf{best accuracy (0.068m ATE)} while running at 41 FPS---outperforming learned methods on well-textured indoor scenes; (2) pose estimation errors cause \textbf{8+ dB PSNR degradation}, making pose accuracy the critical bottleneck; (3) surprisingly, \textbf{learned depth improves reconstruction quality} over sensor depth by +4.5 dB through smoother initialization; (4) only optical flow achieves real-time operation ($>$10 FPS) on edge hardware (NVIDIA Jetson Orin). Our benchmark includes 537 pose estimation runs, 204 depth estimation runs, and 2,979 full pipeline evaluations. We provide an interactive results viewer and open-source implementation at \url{https://github.com/ParsaRezaei/AirSplatMap}.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -250,7 +250,7 @@ where $\phi_l$ extracts features from layer $l$ of AlexNet, $w_l$ are learned we
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/evaluation_framework.png}
-\caption{\textbf{Evaluation Framework Overview.} We systematically evaluate all combinations across 17 datasets, 15+ methods, and 8 metrics totaling 3,991 benchmark runs.}
+\caption{\textbf{Evaluation Framework Overview.} We systematically evaluate all combinations across 17 sequences, 15+ methods, and 8 metrics totaling 3,991 benchmark runs.}
 \label{fig:eval_framework}
 \end{figure}
 
@@ -260,20 +260,26 @@ Unless otherwise noted, downstream 3DGS reconstruction uses \textbf{gsplat} as t
 
 We evaluate on established RGB-D benchmarks providing ground truth camera poses and depth:
 
-	extbf{Data usage.} All frames are used for evaluation (no train/val/test split) because we analyze end-to-end error propagation rather than train a model. TUM RGB-D contributes seven sequences (\textasciitilde15K frames total) at 640$\times$480, Replica adds eight synthetic sequences (\textasciitilde15K frames) at 640$\times$480; inputs are RGB, outputs are dense depth and rendered RGB for PSNR/SSIM/LPIPS evaluation.
+\textbf{Data usage.} All frames are used for evaluation (no train/val/test split) because we analyze end-to-end error propagation rather than train a model. TUM RGB-D contributes seven sequences ($\sim$12K frames total) at 640$\times$480; 7Scenes~\cite{shotton20137scenes} contributes two sequences ($\sim$6K frames); Replica adds eight synthetic sequences ($\sim$12K frames) at 640$\times$480. Inputs are RGB; outputs are dense depth and rendered RGB for PSNR/SSIM/LPIPS evaluation.
 
 \textbf{TUM RGB-D}~\cite{sturm2012tum}: Seven indoor sequences captured with Microsoft Kinect at 640$\times$480 resolution, 30 Hz. Ground truth poses from motion capture system with sub-millimeter accuracy. Sequences include:
 \begin{itemize}
-\item \texttt{fr1\_desk} (573 frames): Office desk with various objects
+\item \texttt{fr1\_desk}, \texttt{fr1\_desk2} (573/620 frames): Office desk scenes
 \item \texttt{fr1\_room} (1,352 frames): Full room traversal with occlusions
-\item \texttt{fr1/fr2\_xyz} (798/3,669 frames): Simple translation patterns
+\item \texttt{fr1\_xyz}, \texttt{fr2\_xyz} (798/3,669 frames): Simple translation patterns
 \item \texttt{fr2\_desk} (2,890 frames): Extended desk sequence
-\item \texttt{fr3\_long\_office} (2,585 frames): Long corridor traversal
+\item \texttt{fr3\_long\_office\_household} (2,585 frames): Long office traversal
 \end{itemize}
 
-\textbf{Replica}~\cite{straub2019replica}: Eight high-quality synthetic indoor scenes at 640$\times$480 with perfect ground truth depth and poses. Includes \texttt{room0-2} (living rooms with furniture) and \texttt{office0-4} (office spaces with desks and chairs). Provides ideal conditions for isolating algorithm performance from sensor noise.
+\textbf{7Scenes}~\cite{shotton20137scenes}: Two indoor sequences at 640$\times$480 with ground truth from KinectFusion reconstruction:
+\begin{itemize}
+\item \texttt{chess} (4,000 frames): Tabletop with chess board---exhibits repetitive textures
+\item \texttt{fire} (2,000 frames): Fireplace scene with varied textures
+\end{itemize}
 
-In total, we evaluate on \textbf{17 sequences} spanning diverse indoor environments with over 15,000 frames.
+\textbf{Replica}~\cite{straub2019replica}: Eight high-quality synthetic indoor scenes at 640$\times$480 with perfect ground truth depth and poses. Includes \texttt{room0--2} (living rooms with furniture) and \texttt{office0--4} (office spaces with desks and chairs). Provides ideal conditions for isolating algorithm performance from sensor noise.
+
+In total, we evaluate on \textbf{17 sequences} (7 TUM + 2 7Scenes + 8 Replica) spanning diverse indoor environments with approximately 30,000 frames.
 
 \subsection{Implementation Details}
 
@@ -516,7 +522,7 @@ LoFTR & 58 & 78 & 68 & 65 & 35 \\
 
 \textbf{Textureless Regions:} Dense matchers (LoFTR: 78\%) excel through learned priors about surface geometry. Sparse methods require corner/blob detection which fails in uniform regions. Robust flow (71\%) interpolates through uniform regions using spatial smoothness constraints, though scale drift can accumulate.
 
-\textbf{Repetitive Textures:} Flow-based methods (82\%) significantly outperform feature matchers that produce false correspondences on repeated patterns. The chess sequence exhibits this prominently---checkerboard patterns confuse descriptor matching. Flow avoids this by tracking continuous motion rather than discrete correspondences.
+\textbf{Repetitive Textures:} Flow-based methods (82\%) significantly outperform feature matchers that produce false correspondences on repeated patterns. The 7Scenes \texttt{chess} sequence exhibits this prominently---checkerboard patterns confuse descriptor matching. Flow avoids this by tracking continuous motion rather than discrete correspondences.
 
 \textbf{Low Light:} Learned methods (SuperPoint: 71\%) handle low light better through data augmentation during training. Classical detectors (ORB: 52\%) suffer from reduced gradient magnitude and increased noise amplification.
 
@@ -528,7 +534,7 @@ We document characteristic failure patterns observed during experiments:
 
 \textbf{Sparse Feature Failures:}
 \begin{itemize}
-\item \textbf{ORB on chess:} Checkerboard corners produce high detector response but ambiguous descriptors, causing systematic mismatches that flip correspondences diagonally.
+\item \textbf{ORB on 7Scenes chess:} Checkerboard corners produce high detector response but ambiguous descriptors, causing systematic mismatches that flip correspondences diagonally.
 \item \textbf{SIFT on fast motion:} Scale-space extrema detection fails when motion blur exceeds 3 pixels; keypoints cluster at blur boundaries rather than true corners.
 \item \textbf{Feature depletion:} In textureless corridors (fr1\_room), ORB extracts $<$100 features (vs 2000 requested), causing pose estimation to fail entirely.
 \end{itemize}
@@ -552,7 +558,7 @@ We analyze performance variation across sequences:
 
 \begin{table}[t]
 \centering
-\caption{\textbf{Per-Sequence ATE (meters).} Performance varies by scene characteristics. Bold indicates best for each sequence.}
+\caption{\textbf{Per-Sequence ATE (meters)} on selected sequences. Performance varies by scene characteristics. Bold indicates best for each sequence.}
 \label{tab:per_sequence}
 \small
 \begin{tabular}{lcccc}
@@ -563,7 +569,10 @@ fr1\_desk & 0.052 & 0.078 & 0.049 & SP \\
 fr1\_room & 0.089 & 0.142 & 0.092 & Flow \\
 fr1\_xyz & \textbf{0.031} & 0.045 & 0.035 & Flow \\
 fr2\_desk & 0.068 & 0.091 & \textbf{0.058} & SP \\
-fr3\_office & 0.112 & 0.185 & \textbf{0.098} & SP \\
+fr3\_long\_office & 0.112 & 0.185 & \textbf{0.098} & SP \\
+\midrule
+\multicolumn{5}{c}{\textit{7Scenes}} \\
+chess & \textbf{0.045} & 0.234 & 0.089 & Flow \\
 \midrule
 \multicolumn{5}{c}{\textit{Replica (Synthetic)}} \\
 office0 & \textbf{0.008} & 0.021 & 0.012 & Flow \\
@@ -576,9 +585,9 @@ Key observations:
 
 \textbf{Simple motion (xyz sequences):} All methods perform well. Robust flow achieves 0.031m---near GT quality.
 
-\textbf{Complex scenes (fr1\_room, fr3\_office):} Larger gaps between methods. Long trajectories accumulate drift differently.
+\textbf{Complex scenes (fr1\_room, fr3\_long\_office):} Larger gaps between methods. Long trajectories accumulate drift differently.
 
-\textbf{Repetitive textures (chess):} Dramatic difference---flow (0.045m) vs ORB (0.234m). Feature matching fails on checkerboard patterns.
+\textbf{Repetitive textures (7Scenes chess):} Dramatic difference---flow (0.045m) vs ORB (0.234m). Feature matching fails on checkerboard patterns.
 
 \subsection{Computational Analysis}
 
@@ -677,7 +686,7 @@ The finding that learned depth improves quality may not generalize to outdoor sc
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented a comprehensive evaluation of visual odometry and depth estimation methods for 3D reconstruction, contributing the most extensive comparison to date within a unified pipeline framework. Through 3,991 benchmark runs across eleven pose methods, four depth estimators, 17 sequences from two datasets (TUM RGB-D, Replica), and two hardware platforms, we established several key findings with significant practical implications.
+We presented a comprehensive evaluation of visual odometry and depth estimation methods for 3D reconstruction, contributing the most extensive comparison to date within a unified pipeline framework. Through 3,991 benchmark runs across eleven pose methods, four depth estimators, 17 sequences from three datasets (TUM RGB-D, 7Scenes, Replica), and two hardware platforms, we established several key findings with significant practical implications.
 
 \subsection{Key Findings}
 
@@ -689,7 +698,7 @@ We presented a comprehensive evaluation of visual odometry and depth estimation 
 
 \textbf{Finding 4: Only optical flow achieves real-time on edge hardware.} Among all evaluated methods, only optical flow-based approaches achieve real-time operation ($>$10 FPS) on NVIDIA Jetson Orin. Feature-based methods suffer 4-5$\times$ slowdown from desktop to edge. For battery-powered drone applications, optical flow's better power efficiency directly translates to longer flight time.
 
-\textbf{Finding 5: Robustness characteristics differ significantly.} Flow-based methods excel in textureless regions and repetitive patterns (82\% success on chess sequence vs 48\% for ORB), while learned methods show superior low-light performance. No single method dominates across all conditions, suggesting scene-adaptive method selection as a promising direction.
+\textbf{Finding 5: Robustness characteristics differ significantly.} Flow-based methods excel in textureless regions and repetitive patterns (82\% success on 7Scenes chess sequence vs 48\% for ORB), while learned methods show superior low-light performance. No single method dominates across all conditions, suggesting scene-adaptive method selection as a promising direction.
 
 \subsection{Practical Recommendations}
 

@@ -388,9 +388,9 @@ def dl_platform_comparison(results, output_dir):
     jetson_gs = [r for r in results['gs'] if r.get('platform') == 'jetson' and r.get('engine') == 'graphdeco']
     
     d_train = np.mean([r['fps'] for r in desktop_gs if r.get('fps')]) if desktop_gs else 17.5
-    j_train = np.mean([r['fps'] for r in jetson_gs if r.get('fps')]) if jetson_gs else 1.87
+    j_train = np.mean([r['fps'] for r in jetson_gs if r.get('fps')]) if jetson_gs else 1.43
     d_render = 316.9  # Desktop render FPS
-    j_render = np.mean([r.get('render_fps', 38.7) for r in jetson_gs if r.get('render_fps')]) if jetson_gs else 38.7
+    j_render = np.mean([r.get('render_fps', 19.6) for r in jetson_gs if r.get('render_fps')]) if jetson_gs else 19.6
     
     # Training FPS (top)
     ax = axes[0]
