@@ -417,7 +417,7 @@ def dl_platform_comparison(results, output_dir):
     
     bars = ax.bar(x, render_fps, color=colors, edgecolor=COLORS['dark'], linewidth=0.5)
     ax.axhline(y=30, color=COLORS['red'], linestyle='--', linewidth=1.5, alpha=0.7)
-    ax.text(len(platforms)-0.3, 35, 'Real-time (30 FPS)', fontsize=6, color=COLORS['red'], ha='right')
+    ax.text(len(platforms)+.25, 35, 'Real-time', fontsize=6, color=COLORS['red'], ha='right')
     ax.set_xticks(x)
     ax.set_xticklabels(platforms, fontsize=7)
     ax.set_ylabel('Rendering FPS ↑', fontsize=8)

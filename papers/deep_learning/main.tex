@@ -255,7 +255,7 @@ In total, our benchmark comprises: 537 pose estimation runs (11 methods $\times$
 
 We evaluate on two established RGB-D benchmarks providing ground truth camera poses and depth maps:
 
-	extbf{Data usage.} All frames are used for evaluation (no train/val/test split) because the pipeline is not trained end-to-end. TUM RGB-D contributes seven indoor sequences (\textasciitilde15K frames total) at 640$\times$480; Replica adds eight synthetic indoor sequences (\textasciitilde15K frames) at 640$\times$480. Inputs are RGB frames; outputs for evaluation are rendered RGB reconstructions plus dense depth and pose traces used to compute PSNR/SSIM/LPIPS and pose/depth metrics.
+	\textbf{Data usage.} All frames are used for evaluation (no train/val/test split) because the pipeline is not trained end-to-end. TUM RGB-D contributes seven indoor sequences (\textasciitilde15K frames total) at 640$\times$480; Replica adds eight synthetic indoor sequences (\textasciitilde15K frames) at 640$\times$480. Inputs are RGB frames; outputs for evaluation are rendered RGB reconstructions plus dense depth and pose traces used to compute PSNR/SSIM/LPIPS and pose/depth metrics.
 
 \textbf{TUM RGB-D}~\cite{sturm2012tum}: Seven indoor sequences captured with Microsoft Kinect at 640$\times$480 resolution, 30 Hz. Ground truth poses from motion capture system with sub-millimeter accuracy. Sequences span:
 \begin{itemize}
