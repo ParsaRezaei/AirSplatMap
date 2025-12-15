@@ -156,11 +156,13 @@ def create_gaussian_representation(output_dir):
     for vec, c in [([1.2, 0, 0], COLORS['red']), ([0, 0.8, 0], COLORS['green']), ([0, 0, 0.6], COLORS['blue'])]:
         ax.quiver(0, 0, 0, *vec, color=c, arrow_length_ratio=0.15, linewidth=1.5)
     
-    ax.set_xlabel('x'); ax.set_ylabel('y'); ax.set_zlabel('z')
-    ax.set_xlim(-1.2, 1.2); ax.set_ylim(-1.2, 1.2); ax.set_zlim(-1.2, 1.2)
-    ax.tick_params(labelsize=5)
+    ax.set_xlabel('x', labelpad=-10)
+    ax.set_ylabel('y', labelpad=-10)
+    ax.set_zlabel('z', labelpad=-10)
+    ax.set_xlim(-1.5, 1.5); ax.set_ylim(-1.5, 1.5); ax.set_zlim(-1.5, 1.5)
+    ax.tick_params(labelsize=5, pad=-5)
     ax.view_init(elev=20, azim=45)
-    ax.set_title('3D Gaussian Primitive', fontsize=9, fontweight='bold', pad=0)
+    ax.set_title('3D Gaussian Primitive', fontsize=9, fontweight='bold', pad=-5)
     
     save_fig(fig, output_dir, 'gaussian_representation')
 
@@ -386,9 +388,9 @@ def dl_platform_comparison(results, output_dir):
     jetson_gs = [r for r in results['gs'] if r.get('platform') == 'jetson' and r.get('engine') == 'graphdeco']
     
     d_train = np.mean([r['fps'] for r in desktop_gs if r.get('fps')]) if desktop_gs else 17.5
-    j_train = np.mean([r['fps'] for r in jetson_gs if r.get('fps')]) if jetson_gs else 1.87
+    j_train = np.mean([r['fps'] for r in jetson_gs if r.get('fps')]) if jetson_gs else 1.43
     d_render = 316.9  # Desktop render FPS
-    j_render = np.mean([r.get('render_fps', 38.7) for r in jetson_gs if r.get('render_fps')]) if jetson_gs else 38.7
+    j_render = np.mean([r.get('render_fps', 19.6) for r in jetson_gs if r.get('render_fps')]) if jetson_gs else 19.6
     
     # Training FPS (top)
     ax = axes[0]
@@ -415,7 +417,7 @@ def dl_platform_comparison(results, output_dir):
     
     bars = ax.bar(x, render_fps, color=colors, edgecolor=COLORS['dark'], linewidth=0.5)
     ax.axhline(y=30, color=COLORS['red'], linestyle='--', linewidth=1.5, alpha=0.7)
-    ax.text(len(platforms)-0.3, 35, 'Real-time (30 FPS)', fontsize=6, color=COLORS['red'], ha='right')
+    ax.text(len(platforms)+.25, 35, 'Real-time', fontsize=6, color=COLORS['red'], ha='right')
     ax.set_xticks(x)
     ax.set_xticklabels(platforms, fontsize=7)
     ax.set_ylabel('Rendering FPS ↑', fontsize=8)

@@ -574,7 +574,7 @@
     <nav class="sidebar">
         <div class="sidebar-header">
             <h1>🚀 <span>AirSplatMap</span></h1>
-            <p>Benchmark Report • 2025-12-13 16:30</p>
+            <p>Benchmark Report • 2025-12-14 22:02</p>
         </div>
         
         <div class="nav-section">
@@ -585,33 +585,33 @@
             </div>
         </div>
         
-        <div class="nav-section">
+        <div class="nav-section" id="nav-benchmarks" style="display: block;">
             <div class="nav-section-title">Benchmarks</div>
-            <div class="nav-item" onclick="showPage('pose')">
+            <div class="nav-item" onclick="showPage('pose')" id="nav-pose" style="display: none;">
                 <span class="icon">📍</span>
                 <span>Pose Estimation</span>
             </div>
-            <div class="nav-item" onclick="showPage('depth')">
+            <div class="nav-item" onclick="showPage('depth')" id="nav-depth" style="display: block;">
                 <span class="icon">📏</span>
                 <span>Depth Estimation</span>
             </div>
-            <div class="nav-item" onclick="showPage('gs')">
+            <div class="nav-item" onclick="showPage('gs')" id="nav-gs" style="display: none;">
                 <span class="icon">✨</span>
                 <span>Gaussian Splatting</span>
             </div>
         </div>
         
-        <div class="nav-section">
+        <div class="nav-section" id="nav-analysis" style="display: none;">
             <div class="nav-section-title">Analysis</div>
-            <div class="nav-item" onclick="showPage('pipeline')">
+            <div class="nav-item" onclick="showPage('pipeline')" id="nav-pipeline" style="display: none;">
                 <span class="icon">🔗</span>
                 <span>Pipeline Results</span>
             </div>
-            <div class="nav-item" onclick="showPage('comparison')">
+            <div class="nav-item" onclick="showPage('comparison')" id="nav-comparison" style="display: block;">
                 <span class="icon">⚖️</span>
                 <span>Method Comparison</span>
             </div>
-            <div class="nav-item" onclick="showPage('trajectory')">
+            <div class="nav-item" onclick="showPage('trajectory')" id="nav-trajectory" style="display: none;">
                 <span class="icon">🗺️</span>
                 <span>3D Trajectories</span>
             </div>
@@ -628,52 +628,21 @@
             </p>
             
             <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value">0</div>
-                    <div class="stat-label">Pose Tests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">2</div>
-                    <div class="stat-label">Depth Tests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">0</div>
-                    <div class="stat-label">GS Tests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">0.0GB</div>
-                    <div class="stat-label">Peak GPU Memory</div>
-                </div>
+                
+                <div class="stat-card"><div class="stat-value">2</div><div class="stat-label">Depth Tests</div></div>
+                
+                
+                
             </div>
             
             <div class="chart-grid">
-                <div class="chart-container">
-                    <div class="chart-title">Pose Estimation Accuracy (ATE RMSE)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewPoseChart"></canvas>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <div class="chart-title">Depth Estimation Accuracy (AbsRel)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewDepthChart"></canvas>
-                    </div>
-                </div>
+                
+                <div class="chart-container"><div class="chart-title">Depth Estimation Accuracy (AbsRel)</div><div class="chart-wrapper"><canvas id="overviewDepthChart"></canvas></div></div>
             </div>
             
             <div class="chart-grid">
-                <div class="chart-container">
-                    <div class="chart-title">Gaussian Splatting Quality (PSNR)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewGSChart"></canvas>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <div class="chart-title">Processing Speed (FPS)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewSpeedChart"></canvas>
-                    </div>
-                </div>
+                
+                <div class="chart-container"><div class="chart-title">Processing Speed (FPS)</div><div class="chart-wrapper"><canvas id="overviewSpeedChart"></canvas></div></div>
             </div>
         </div>
         
@@ -998,7 +967,7 @@
                 <div class="filter-group">
                     <div class="filter-label">Dataset</div>
                     <select id="trajDatasetFilter" onchange="updateTrajectoryPlot()">
-                        <option value="rgbd_dataset_freiburg1_desk2">rgbd_dataset_freiburg1_desk2</option>
+                        <option value="">No pose data available</option>
                     </select>
                 </div>
                 <div class="filter-group">
@@ -1051,7 +1020,7 @@
     
     <script>
         // Data
-        const data = {"datasets": ["rgbd_dataset_freiburg1_desk2"], "datasets_with_trajectories": ["rgbd_dataset_freiburg1_desk2"], "pose": {"all": [], "aggregated": {}, "by_dataset": {}}, "depth": {"all": [{"method": "midas", "dataset": "rgbd_dataset_freiburg1_desk2", "num_frames": 17, "total_time": 8.58, "fps": 1.98, "abs_rel": 0.1697, "sq_rel": 0.0634, "rmse": 0.2803, "rmse_log": 0.2051, "delta1": 0.7248, "delta2": 0.9549, "delta3": 0.9897, "is_metric": false, "silog": 0.2044, "edge_f1": 0.0399, "raw_abs_rel": 0.0, "raw_rmse": 0.0, "raw_delta1": 0.0, "scale": 2064293.5409, "shift": 0.7911, "valid_pixels": 234119, "avg_latency_ms": 477.23, "min_latency_ms": 58.48, "max_latency_ms": 7109.02, "p95_latency_ms": 1483.66, "p99_latency_ms": 5983.95}, {"method": "depth_anything_v2", "dataset": "rgbd_dataset_freiburg1_desk2", "num_frames": 17, "total_time": 10.86, "fps": 1.57, "abs_rel": 0.5762, "sq_rel": 0.7088, "rmse": 0.9227, "rmse_log": 0.6841, "delta1": 0.3048, "delta2": 0.4847, "delta3": 0.6445, "is_metric": false, "silog": 0.6762, "edge_f1": 0.1028, "raw_abs_rel": 0.0, "raw_rmse": 0.0, "raw_delta1": 0.0, "scale": 0.5219, "shift": 0.0, "valid_pixels": 234515, "avg_latency_ms": 604.94, "min_latency_ms": 164.84, "max_latency_ms": 7589.48, "p95_latency_ms": 1658.24, "p99_latency_ms": 6403.23}], "aggregated": {"midas": {"count": 1, "total_time_mean": 8.58, "total_time_std": 0.0, "fps_mean": 1.98, "fps_std": 0.0, "abs_rel_mean": 0.1697, "abs_rel_std": 0.0, "sq_rel_mean": 0.0634, "sq_rel_std": 0.0, "rmse_mean": 0.2803, "rmse_std": 0.0, "rmse_log_mean": 0.2051, "rmse_log_std": 0.0, "delta1_mean": 0.7248, "delta1_std": 0.0, "delta2_mean": 0.9549, "delta2_std": 0.0, "delta3_mean": 0.9897, "delta3_std": 0.0, "is_metric_mean": 0.0, "is_metric_std": 0.0, "silog_mean": 0.2044, "silog_std": 0.0, "edge_f1_mean": 0.0399, "edge_f1_std": 0.0, "raw_abs_rel_mean": 0.0, "raw_abs_rel_std": 0.0, "raw_rmse_mean": 0.0, "raw_rmse_std": 0.0, "raw_delta1_mean": 0.0, "raw_delta1_std": 0.0, "scale_mean": 2064293.5409, "scale_std": 0.0, "shift_mean": 0.7911, "shift_std": 0.0, "valid_pixels_mean": 234119.0, "valid_pixels_std": 0.0, "avg_latency_ms_mean": 477.23, "avg_latency_ms_std": 0.0, "min_latency_ms_mean": 58.48, "min_latency_ms_std": 0.0, "max_latency_ms_mean": 7109.02, "max_latency_ms_std": 0.0, "p95_latency_ms_mean": 1483.66, "p95_latency_ms_std": 0.0, "p99_latency_ms_mean": 5983.95, "p99_latency_ms_std": 0.0}, "depth_anything_v2": {"count": 1, "total_time_mean": 10.86, "total_time_std": 0.0, "fps_mean": 1.57, "fps_std": 0.0, "abs_rel_mean": 0.5762, "abs_rel_std": 0.0, "sq_rel_mean": 0.7088, "sq_rel_std": 0.0, "rmse_mean": 0.9227, "rmse_std": 0.0, "rmse_log_mean": 0.6841, "rmse_log_std": 0.0, "delta1_mean": 0.3048, "delta1_std": 0.0, "delta2_mean": 0.4847, "delta2_std": 0.0, "delta3_mean": 0.6445, "delta3_std": 0.0, "is_metric_mean": 0.0, "is_metric_std": 0.0, "silog_mean": 0.6762, "silog_std": 0.0, "edge_f1_mean": 0.1028, "edge_f1_std": 0.0, "raw_abs_rel_mean": 0.0, "raw_abs_rel_std": 0.0, "raw_rmse_mean": 0.0, "raw_rmse_std": 0.0, "raw_delta1_mean": 0.0, "raw_delta1_std": 0.0, "scale_mean": 0.5219, "scale_std": 0.0, "shift_mean": 0.0, "shift_std": 0.0, "valid_pixels_mean": 234515.0, "valid_pixels_std": 0.0, "avg_latency_ms_mean": 604.94, "avg_latency_ms_std": 0.0, "min_latency_ms_mean": 164.84, "min_latency_ms_std": 0.0, "max_latency_ms_mean": 7589.48, "max_latency_ms_std": 0.0, "p95_latency_ms_mean": 1658.24, "p95_latency_ms_std": 0.0, "p99_latency_ms_mean": 6403.23, "p99_latency_ms_std": 0.0}}, "by_dataset": {"rgbd_dataset_freiburg1_desk2": [{"method": "midas", "dataset": "rgbd_dataset_freiburg1_desk2", "num_frames": 17, "total_time": 8.58, "fps": 1.98, "abs_rel": 0.1697, "sq_rel": 0.0634, "rmse": 0.2803, "rmse_log": 0.2051, "delta1": 0.7248, "delta2": 0.9549, "delta3": 0.9897, "is_metric": false, "silog": 0.2044, "edge_f1": 0.0399, "raw_abs_rel": 0.0, "raw_rmse": 0.0, "raw_delta1": 0.0, "scale": 2064293.5409, "shift": 0.7911, "valid_pixels": 234119, "avg_latency_ms": 477.23, "min_latency_ms": 58.48, "max_latency_ms": 7109.02, "p95_latency_ms": 1483.66, "p99_latency_ms": 5983.95}, {"method": "depth_anything_v2", "dataset": "rgbd_dataset_freiburg1_desk2", "num_frames": 17, "total_time": 10.86, "fps": 1.57, "abs_rel": 0.5762, "sq_rel": 0.7088, "rmse": 0.9227, "rmse_log": 0.6841, "delta1": 0.3048, "delta2": 0.4847, "delta3": 0.6445, "is_metric": false, "silog": 0.6762, "edge_f1": 0.1028, "raw_abs_rel": 0.0, "raw_rmse": 0.0, "raw_delta1": 0.0, "scale": 0.5219, "shift": 0.0, "valid_pixels": 234515, "avg_latency_ms": 604.94, "min_latency_ms": 164.84, "max_latency_ms": 7589.48, "p95_latency_ms": 1658.24, "p99_latency_ms": 6403.23}]}}, "gs": {"all": [], "aggregated": {}, "by_dataset": {}}, "pipeline": [], "hardware": {"overall": {"duration_seconds": 36.63, "num_samples": 71, "cpu": {"system_percent_mean": 9.3, "system_percent_max": 23.0}, "ram": {"system_used_gb_mean": 9.38, "system_used_gb_max": 10.22, "system_percent_mean": 37.0}, "process": {"cpu_percent_mean": 88.8, "cpu_percent_max": 331.1, "ram_gb_mean": 1.45, "ram_gb_max": 2.16, "gpu_memory_gb_mean": 0.0, "gpu_memory_gb_max": 0.0}, "gpu": {"utilization_mean": 0.0, "utilization_max": 0.0, "memory_used_gb_mean": 0.0, "memory_used_gb_max": 0.0, "memory_percent_mean": 0.0, "memory_percent_max": 0.0, "temperature_c_mean": 0.0, "temperature_c_max": 0.0, "power_w_mean": 0.0, "power_w_max": 0.0}, "energy_wh": 0.0}, "phases": {"depth_rgbd_dataset_freiburg1_desk2": {"duration_seconds": 36.63, "num_samples": 71, "cpu": {"system_percent_mean": 9.3, "system_percent_max": 23.0}, "ram": {"system_used_gb_mean": 9.38, "system_used_gb_max": 10.22, "system_percent_mean": 37.0}, "process": {"cpu_percent_mean": 88.8, "cpu_percent_max": 331.1, "ram_gb_mean": 1.45, "ram_gb_max": 2.16, "gpu_memory_gb_mean": 0.0, "gpu_memory_gb_max": 0.0}, "gpu": {"utilization_mean": 0.0, "utilization_max": 0.0, "memory_used_gb_mean": 0.0, "memory_used_gb_max": 0.0, "memory_percent_mean": 0.0, "memory_percent_max": 0.0, "temperature_c_mean": 0.0, "temperature_c_max": 0.0, "power_w_mean": 0.0, "power_w_max": 0.0}, "energy_wh": 0.0}}, "monitoring": {"sample_interval_s": 0.5, "total_samples": 71, "psutil_available": true, "nvml_available": false}}, "trajectories": {"rgbd_dataset_freiburg1_desk2": {"x": [0.6714004999999998, 0.6810004999999999, 0.6946005, 0.7086005, 0.7231004999999999, 0.7349005, 0.7392004999999999, 0.7356004999999999, 0.7265004999999998, 0.7214004999999999, 0.7216004999999999, 0.7267005, 0.7314004999999999, 0.7289005, 0.7171004999999999, 0.6963004999999998, 0.6644005, 0.6371004999999998, 0.6237004999999998, 0.6220005, 0.6319004999999998, 0.6480004999999998, 0.6657004999999998, 0.6896004999999998, 0.7268005, 0.7670005, 0.8180004999999999, 0.8535004999999998, 0.8786004999999999, 0.8928004999999999, 0.8994004999999998, 0.9021005, 0.9067004999999999, 0.9080004999999998, 0.8883004999999999, 0.8714004999999998, 0.8410004999999998, 0.8078004999999999, 0.7759004999999999, 0.7479004999999999, 0.7201004999999998, 0.6942004999999998, 0.6849004999999999, 0.6818004999999998, 0.6758004999999998, 0.6646004999999999, 0.6449004999999999, 0.6145004999999999, 0.5727004999999998, 0.5271005, 0.4785004999999998, 0.4290004999999999, 0.36470049999999987, 0.29450049999999983, 0.23060049999999988, 0.17430049999999986, 0.12320049999999982, 0.07290049999999981, 0.036500499999999825, 0.00010049999999983683, -0.05269950000000012, -0.13299950000000016, -0.23629950000000016, -0.3399995000000001, -0.44009950000000014, -0.5289995000000002, -0.6146995000000002, -0.7072995000000002, -0.7893995000000001, -0.8618995000000002, -0.9277995000000001, -0.9950995000000001, -1.0769995, -1.1540995, -1.2193995000000002, -1.2648995000000003, -1.2924995000000001, -1.3023995000000002, -1.3043995000000002, -1.3118995, -1.3245995000000002, -1.3457995, -1.3737995, -1.3998995, -1.4308995000000002, -1.4677995000000001, -1.5029995, -1.5284995000000001, -1.5361995000000002, -1.5299995000000002, -1.5203995000000001, -1.5097995000000002, -1.4973995000000002, -1.4900995000000001, -1.4907995, -1.4939995000000001, -1.5003995, -1.5111995, -1.5226995, -1.5287995, -1.5231995, -1.5068995000000003, -1.4855995000000002, -1.4616995000000002, -1.4395995000000001, -1.4213995000000001, -1.4107995, -1.4081995000000003, -1.4105995, -1.4118995, -1.4042995, -1.3807995000000002, -1.3428995000000001, -1.2943995000000001, -1.2507995000000003, -1.2024995, -1.1472995000000001, -1.0814995, -0.9979995000000002, -0.9098995000000001, -0.8265995000000002, -0.7527995000000002, -0.6764995000000001, -0.5874995000000002, -0.49609950000000014, -0.40119950000000015, -0.30049950000000014, -0.19649950000000016, -0.08369950000000015, 0.015800499999999884, 0.11120049999999981, 0.19940049999999987, 0.2810004999999999, 0.36200049999999984, 0.42960049999999983, 0.4917004999999999, 0.5449004999999998, 0.5929004999999998, 0.6424004999999999, 0.6889004999999999, 0.7376004999999999, 0.7889004999999998, 0.8372004999999998, 0.8794004999999998, 0.8961005, 0.8929004999999999, 0.8786004999999999, 0.8599005, 0.8354004999999998, 0.8101004999999999, 0.7904004999999998, 0.7714004999999999, 0.7522004999999998, 0.7377004999999999, 0.7285004999999998, 0.7257004999999999, 0.7246004999999998, 0.7208005, 0.7112004999999999, 0.6965005, 0.6850004999999999, 0.6793004999999999, 0.6776004999999998, 0.6779004999999998, 0.6797004999999998, 0.6878004999999998, 0.7019004999999998, 0.7231004999999999, 0.7445004999999998, 0.7536004999999999, 0.7440004999999998, 0.7206004999999998, 0.6923004999999998, 0.6598004999999998, 0.6110004999999998, 0.5573004999999998, 0.5049005, 0.45690049999999993, 0.4070004999999999, 0.3532004999999999, 0.30650049999999984, 0.2668004999999999, 0.23110049999999982, 0.20970049999999985, 0.20880049999999983, 0.2222004999999999, 0.24230049999999992, 0.25720049999999983, 0.26710049999999985, 0.2734004999999998, 0.2734004999999998, 0.2699004999999999, 0.26820049999999984, 0.27020049999999984, 0.2726004999999999, 0.27300049999999987, 0.2728004999999999, 0.27330049999999984, 0.27510049999999986, 0.2769004999999999], "y": [-0.14738299999999993, -0.14918299999999993, -0.14758299999999994, -0.14168299999999992, -0.12458299999999993, -0.09328299999999992, -0.04878299999999994, -0.003982999999999931, 0.04431700000000008, 0.09211700000000006, 0.13391700000000006, 0.17971700000000007, 0.22931700000000005, 0.2894170000000001, 0.35221700000000006, 0.40781700000000004, 0.4698170000000001, 0.527817, 0.5787170000000001, 0.618517, 0.654317, 0.690817, 0.719417, 0.749317, 0.7804170000000001, 0.7982170000000002, 0.7970170000000001, 0.793617, 0.786017, 0.7663170000000001, 0.739417, 0.706717, 0.684817, 0.674917, 0.692817, 0.689217, 0.6781170000000001, 0.6573170000000002, 0.626317, 0.588217, 0.546117, 0.4931170000000001, 0.4446170000000001, 0.393917, 0.33901700000000007, 0.27421700000000004, 0.19121700000000008, 0.1074170000000001, 0.024917000000000078, -0.04378299999999993, -0.09258299999999993, -0.12418299999999993, -0.15058299999999994, -0.18238299999999993, -0.22058299999999992, -0.2588829999999999, -0.29728299999999996, -0.33938299999999993, -0.3794829999999999, -0.4313829999999999, -0.4847829999999999, -0.516983, -0.5298829999999999, -0.5303829999999999, -0.521083, -0.49948299999999995, -0.47298299999999993, -0.45408299999999996, -0.4437829999999999, -0.43668299999999993, -0.42898299999999995, -0.4206829999999999, -0.40628299999999995, -0.37708299999999995, -0.33458299999999996, -0.28548299999999993, -0.23678299999999994, -0.18558299999999994, -0.14248299999999994, -0.11478299999999994, -0.10408299999999993, -0.09758299999999993, -0.08838299999999993, -0.07618299999999993, -0.049682999999999936, 0.0001170000000000615, 0.055517000000000066, 0.10221700000000006, 0.13791700000000007, 0.1644170000000001, 0.18481700000000006, 0.19951700000000006, 0.2082170000000001, 0.20791700000000007, 0.19801700000000005, 0.1886170000000001, 0.18291700000000005, 0.1775170000000001, 0.17191700000000004, 0.16331700000000005, 0.15541700000000008, 0.14431700000000008, 0.12781700000000007, 0.10551700000000008, 0.07881700000000008, 0.04741700000000007, 0.015617000000000075, -0.012782999999999933, -0.04508299999999993, -0.08218299999999994, -0.13408299999999992, -0.19698299999999994, -0.2665829999999999, -0.3399829999999999, -0.4000829999999999, -0.44778299999999993, -0.48438299999999995, -0.510983, -0.534283, -0.5479829999999999, -0.553083, -0.561083, -0.5721829999999999, -0.5922829999999999, -0.6201829999999999, -0.649483, -0.668283, -0.6727829999999999, -0.6571829999999999, -0.628083, -0.595683, -0.560983, -0.5203829999999999, -0.4625829999999999, -0.3994829999999999, -0.3311829999999999, -0.26678299999999994, -0.21468299999999993, -0.16618299999999994, -0.12898299999999993, -0.09218299999999993, -0.055482999999999935, -0.027082999999999927, -0.002182999999999935, 0.020517000000000063, 0.036617000000000066, 0.050317000000000056, 0.05801700000000007, 0.06351700000000007, 0.06271700000000008, 0.06371700000000008, 0.07471700000000006, 0.09321700000000008, 0.12121700000000007, 0.1674170000000001, 0.22651700000000008, 0.29171700000000006, 0.35731700000000005, 0.4245170000000001, 0.49961700000000003, 0.5684170000000002, 0.6228170000000002, 0.648217, 0.6454170000000001, 0.6133170000000001, 0.5728170000000001, 0.5267170000000001, 0.4698170000000001, 0.39481700000000003, 0.2960170000000001, 0.19831700000000008, 0.10571700000000006, 0.027617000000000058, -0.03388299999999993, -0.08788299999999993, -0.12768299999999994, -0.15558299999999994, -0.17558299999999993, -0.19538299999999992, -0.21228299999999994, -0.22738299999999995, -0.24188299999999993, -0.2568829999999999, -0.2745829999999999, -0.2908829999999999, -0.2968829999999999, -0.2991829999999999, -0.3011829999999999, -0.30628299999999997, -0.3067829999999999, -0.30238299999999996, -0.2978829999999999, -0.2935829999999999, -0.2928829999999999, -0.29458299999999993, -0.2951829999999999, -0.2920829999999999, -0.2877829999999999, -0.2847829999999999, -0.28238299999999994], "z": [0.10507899999999992, 0.14477899999999977, 0.19447899999999985, 0.2371789999999998, 0.26997899999999975, 0.28037899999999993, 0.26077899999999987, 0.2171789999999998, 0.16417899999999985, 0.10877899999999974, 0.05677899999999991, 0.002178999999999931, -0.044621000000000244, -0.08462100000000006, -0.11882100000000007, -0.14742100000000025, -0.16722100000000006, -0.17112100000000008, -0.15962100000000023, -0.13902100000000006, -0.1185210000000001, -0.09902100000000025, -0.07892100000000024, -0.05722100000000019, -0.03512100000000018, -0.017021000000000175, -0.01642100000000024, -0.01752100000000012, -0.014921000000000184, 0.002378999999999909, 0.022778999999999883, 0.037778999999999785, 0.04407899999999976, 0.038978999999999875, -0.022421000000000246, -0.034721000000000224, -0.04402100000000009, -0.0459210000000001, -0.04402100000000009, -0.03722100000000017, -0.02392100000000008, -0.01202100000000006, -0.01872100000000021, -0.04142100000000015, -0.07192100000000012, -0.10282100000000005, -0.13402100000000017, -0.15522100000000005, -0.16302100000000008, -0.15812100000000018, -0.1560210000000002, -0.1568210000000001, -0.1508210000000001, -0.1356210000000002, -0.09682100000000027, -0.04032100000000005, 0.015978999999999743, 0.08007899999999979, 0.14877899999999977, 0.20557899999999973, 0.2342789999999999, 0.22787899999999994, 0.18807899999999989, 0.1415789999999999, 0.09877899999999995, 0.06507899999999989, 0.043278999999999845, 0.02617899999999973, 0.009178999999999826, -0.016321000000000252, -0.053221000000000185, -0.09312100000000023, -0.12682100000000007, -0.1337210000000002, -0.13242100000000012, -0.13702100000000006, -0.14302100000000006, -0.14942100000000025, -0.15262100000000012, -0.1347210000000001, -0.09182100000000015, -0.03762100000000013, 0.00977899999999976, 0.03577899999999978, 0.04737899999999984, 0.05237899999999973, 0.06037899999999974, 0.0770789999999999, 0.09357899999999986, 0.10717899999999991, 0.11487899999999973, 0.11177899999999985, 0.09997899999999982, 0.09277899999999994, 0.09157899999999985, 0.09097899999999992, 0.0920789999999998, 0.09497899999999992, 0.10227899999999979, 0.10487899999999994, 0.09337899999999988, 0.07577899999999982, 0.05517899999999987, 0.028078999999999743, 0.005678999999999768, -0.011321000000000137, -0.02512100000000017, -0.038821000000000216, -0.05782100000000012, -0.07472100000000026, -0.08302100000000023, -0.08482100000000026, -0.07712100000000022, -0.06042100000000006, -0.04282100000000022, -0.02512100000000017, -0.004021000000000052, 0.012878999999999863, 0.022778999999999883, 0.031278999999999835, 0.05267899999999992, 0.07947899999999986, 0.09697899999999993, 0.09237899999999977, 0.06447899999999973, 0.029878999999999767, 0.004078999999999944, -0.016021000000000063, -0.041121000000000185, -0.06492100000000023, -0.08192100000000013, -0.08282100000000026, -0.06802100000000011, -0.05852100000000027, -0.06582100000000013, -0.07642100000000007, -0.0753210000000002, -0.06332100000000018, -0.04582100000000011, -0.025821000000000094, -0.008621000000000212, 0.001178999999999819, 0.0061789999999999345, 0.012078999999999951, 0.013378999999999808, 0.007778999999999758, 0.004978999999999845, 0.007178999999999824, 0.014478999999999909, 0.019378999999999813, 0.02387899999999976, 0.01977899999999977, 0.0057789999999997566, -0.011121000000000159, -0.027121000000000173, -0.03282100000000021, -0.03522100000000017, -0.0419210000000001, -0.054521000000000264, -0.07052100000000006, -0.08642100000000008, -0.09302100000000024, -0.08612100000000011, -0.06842100000000007, -0.03392100000000009, 0.013678999999999775, 0.0718789999999998, 0.13707899999999995, 0.19327899999999976, 0.2362789999999999, 0.25687899999999986, 0.26217899999999994, 0.25217899999999993, 0.23547899999999977, 0.21647899999999987, 0.20437899999999987, 0.20037899999999986, 0.1948789999999998, 0.1887789999999998, 0.1898789999999999, 0.18667899999999982, 0.16997899999999988, 0.13267899999999977, 0.08497899999999992, 0.032178999999999736, -0.011821000000000081, -0.057521000000000155, -0.10412100000000013, -0.14852100000000013, -0.19142100000000006, -0.2192210000000001, -0.23422100000000023, -0.24022100000000024, -0.2355210000000001, -0.22502100000000014, -0.2184210000000002, -0.21652100000000019, -0.2185210000000002, -0.21862100000000018, -0.21792100000000025], "num_points": 200}}, "estimated_trajectories": {}};
+        const data = {"datasets": ["rgbd_dataset_freiburg1_desk2"], "datasets_with_trajectories": [], "pose": {"all": [], "aggregated": {}, "by_dataset": {}}, "depth": {"all": [{"method": "midas", "dataset": "rgbd_dataset_freiburg1_desk2", "num_frames": 17, "total_time": 8.58, "fps": 1.98, "abs_rel": 0.1697, "sq_rel": 0.0634, "rmse": 0.2803, "rmse_log": 0.2051, "delta1": 0.7248, "delta2": 0.9549, "delta3": 0.9897, "is_metric": false, "silog": 0.2044, "edge_f1": 0.0399, "raw_abs_rel": 0.0, "raw_rmse": 0.0, "raw_delta1": 0.0, "scale": 2064293.5409, "shift": 0.7911, "valid_pixels": 234119, "avg_latency_ms": 477.23, "min_latency_ms": 58.48, "max_latency_ms": 7109.02, "p95_latency_ms": 1483.66, "p99_latency_ms": 5983.95}, {"method": "depth_anything_v2", "dataset": "rgbd_dataset_freiburg1_desk2", "num_frames": 17, "total_time": 10.86, "fps": 1.57, "abs_rel": 0.5762, "sq_rel": 0.7088, "rmse": 0.9227, "rmse_log": 0.6841, "delta1": 0.3048, "delta2": 0.4847, "delta3": 0.6445, "is_metric": false, "silog": 0.6762, "edge_f1": 0.1028, "raw_abs_rel": 0.0, "raw_rmse": 0.0, "raw_delta1": 0.0, "scale": 0.5219, "shift": 0.0, "valid_pixels": 234515, "avg_latency_ms": 604.94, "min_latency_ms": 164.84, "max_latency_ms": 7589.48, "p95_latency_ms": 1658.24, "p99_latency_ms": 6403.23}], "aggregated": {"midas": {"count": 1, "total_time_mean": 8.58, "total_time_std": 0.0, "fps_mean": 1.98, "fps_std": 0.0, "abs_rel_mean": 0.1697, "abs_rel_std": 0.0, "sq_rel_mean": 0.0634, "sq_rel_std": 0.0, "rmse_mean": 0.2803, "rmse_std": 0.0, "rmse_log_mean": 0.2051, "rmse_log_std": 0.0, "delta1_mean": 0.7248, "delta1_std": 0.0, "delta2_mean": 0.9549, "delta2_std": 0.0, "delta3_mean": 0.9897, "delta3_std": 0.0, "is_metric_mean": 0.0, "is_metric_std": 0.0, "silog_mean": 0.2044, "silog_std": 0.0, "edge_f1_mean": 0.0399, "edge_f1_std": 0.0, "raw_abs_rel_mean": 0.0, "raw_abs_rel_std": 0.0, "raw_rmse_mean": 0.0, "raw_rmse_std": 0.0, "raw_delta1_mean": 0.0, "raw_delta1_std": 0.0, "scale_mean": 2064293.5409, "scale_std": 0.0, "shift_mean": 0.7911, "shift_std": 0.0, "valid_pixels_mean": 234119.0, "valid_pixels_std": 0.0, "avg_latency_ms_mean": 477.23, "avg_latency_ms_std": 0.0, "min_latency_ms_mean": 58.48, "min_latency_ms_std": 0.0, "max_latency_ms_mean": 7109.02, "max_latency_ms_std": 0.0, "p95_latency_ms_mean": 1483.66, "p95_latency_ms_std": 0.0, "p99_latency_ms_mean": 5983.95, "p99_latency_ms_std": 0.0}, "depth_anything_v2": {"count": 1, "total_time_mean": 10.86, "total_time_std": 0.0, "fps_mean": 1.57, "fps_std": 0.0, "abs_rel_mean": 0.5762, "abs_rel_std": 0.0, "sq_rel_mean": 0.7088, "sq_rel_std": 0.0, "rmse_mean": 0.9227, "rmse_std": 0.0, "rmse_log_mean": 0.6841, "rmse_log_std": 0.0, "delta1_mean": 0.3048, "delta1_std": 0.0, "delta2_mean": 0.4847, "delta2_std": 0.0, "delta3_mean": 0.6445, "delta3_std": 0.0, "is_metric_mean": 0.0, "is_metric_std": 0.0, "silog_mean": 0.6762, "silog_std": 0.0, "edge_f1_mean": 0.1028, "edge_f1_std": 0.0, "raw_abs_rel_mean": 0.0, "raw_abs_rel_std": 0.0, "raw_rmse_mean": 0.0, "raw_rmse_std": 0.0, "raw_delta1_mean": 0.0, "raw_delta1_std": 0.0, "scale_mean": 0.5219, "scale_std": 0.0, "shift_mean": 0.0, "shift_std": 0.0, "valid_pixels_mean": 234515.0, "valid_pixels_std": 0.0, "avg_latency_ms_mean": 604.94, "avg_latency_ms_std": 0.0, "min_latency_ms_mean": 164.84, "min_latency_ms_std": 0.0, "max_latency_ms_mean": 7589.48, "max_latency_ms_std": 0.0, "p95_latency_ms_mean": 1658.24, "p95_latency_ms_std": 0.0, "p99_latency_ms_mean": 6403.23, "p99_latency_ms_std": 0.0}}, "by_dataset": {"rgbd_dataset_freiburg1_desk2": [{"method": "midas", "dataset": "rgbd_dataset_freiburg1_desk2", "num_frames": 17, "total_time": 8.58, "fps": 1.98, "abs_rel": 0.1697, "sq_rel": 0.0634, "rmse": 0.2803, "rmse_log": 0.2051, "delta1": 0.7248, "delta2": 0.9549, "delta3": 0.9897, "is_metric": false, "silog": 0.2044, "edge_f1": 0.0399, "raw_abs_rel": 0.0, "raw_rmse": 0.0, "raw_delta1": 0.0, "scale": 2064293.5409, "shift": 0.7911, "valid_pixels": 234119, "avg_latency_ms": 477.23, "min_latency_ms": 58.48, "max_latency_ms": 7109.02, "p95_latency_ms": 1483.66, "p99_latency_ms": 5983.95}, {"method": "depth_anything_v2", "dataset": "rgbd_dataset_freiburg1_desk2", "num_frames": 17, "total_time": 10.86, "fps": 1.57, "abs_rel": 0.5762, "sq_rel": 0.7088, "rmse": 0.9227, "rmse_log": 0.6841, "delta1": 0.3048, "delta2": 0.4847, "delta3": 0.6445, "is_metric": false, "silog": 0.6762, "edge_f1": 0.1028, "raw_abs_rel": 0.0, "raw_rmse": 0.0, "raw_delta1": 0.0, "scale": 0.5219, "shift": 0.0, "valid_pixels": 234515, "avg_latency_ms": 604.94, "min_latency_ms": 164.84, "max_latency_ms": 7589.48, "p95_latency_ms": 1658.24, "p99_latency_ms": 6403.23}]}}, "gs": {"all": [], "aggregated": {}, "by_dataset": {}}, "pipeline": [], "hardware": {"overall": {"duration_seconds": 36.63, "num_samples": 71, "cpu": {"system_percent_mean": 9.3, "system_percent_max": 23.0}, "ram": {"system_used_gb_mean": 9.38, "system_used_gb_max": 10.22, "system_percent_mean": 37.0}, "process": {"cpu_percent_mean": 88.8, "cpu_percent_max": 331.1, "ram_gb_mean": 1.45, "ram_gb_max": 2.16, "gpu_memory_gb_mean": 0.0, "gpu_memory_gb_max": 0.0}, "gpu": {"utilization_mean": 0.0, "utilization_max": 0.0, "memory_used_gb_mean": 0.0, "memory_used_gb_max": 0.0, "memory_percent_mean": 0.0, "memory_percent_max": 0.0, "temperature_c_mean": 0.0, "temperature_c_max": 0.0, "power_w_mean": 0.0, "power_w_max": 0.0}, "energy_wh": 0.0}, "phases": {"depth_rgbd_dataset_freiburg1_desk2": {"duration_seconds": 36.63, "num_samples": 71, "cpu": {"system_percent_mean": 9.3, "system_percent_max": 23.0}, "ram": {"system_used_gb_mean": 9.38, "system_used_gb_max": 10.22, "system_percent_mean": 37.0}, "process": {"cpu_percent_mean": 88.8, "cpu_percent_max": 331.1, "ram_gb_mean": 1.45, "ram_gb_max": 2.16, "gpu_memory_gb_mean": 0.0, "gpu_memory_gb_max": 0.0}, "gpu": {"utilization_mean": 0.0, "utilization_max": 0.0, "memory_used_gb_mean": 0.0, "memory_used_gb_max": 0.0, "memory_percent_mean": 0.0, "memory_percent_max": 0.0, "temperature_c_mean": 0.0, "temperature_c_max": 0.0, "power_w_mean": 0.0, "power_w_max": 0.0}, "energy_wh": 0.0}}, "monitoring": {"sample_interval_s": 0.5, "total_samples": 71, "psutil_available": true, "nvml_available": false}}, "trajectories": {}, "estimated_trajectories": {}, "has_pose": false, "has_depth": true, "has_gs": false, "has_pipeline": false, "has_trajectory": false};
         
         // Chart instances
         const charts = {};
@@ -1123,50 +1092,59 @@
         
         // Overview Charts
         function initOverviewCharts() {
-            // Pose ATE
+            // Pose ATE - only if we have pose data
             const poseAgg = getAggregatedData(data.pose.all, 'method');
             const poseMethods = Object.keys(poseAgg);
             const poseATE = poseMethods.map(m => mean(poseAgg[m].map(r => r.ate_rmse || 0)));
             
-            if (charts.overviewPose) charts.overviewPose.destroy();
-            charts.overviewPose = new Chart(document.getElementById('overviewPoseChart'), {
-                type: 'bar',
-                data: {
-                    labels: poseMethods,
-                    datasets: [{ label: 'ATE RMSE', data: poseATE, backgroundColor: colors, borderRadius: 6 }]
-                },
-                options: getChartOptions('ATE RMSE (m)')
-            });
+            const poseChartEl = document.getElementById('overviewPoseChart');
+            if (poseChartEl && data.has_pose) {
+                if (charts.overviewPose) charts.overviewPose.destroy();
+                charts.overviewPose = new Chart(poseChartEl, {
+                    type: 'bar',
+                    data: {
+                        labels: poseMethods,
+                        datasets: [{ label: 'ATE RMSE', data: poseATE, backgroundColor: colors, borderRadius: 6 }]
+                    },
+                    options: getChartOptions('ATE RMSE (m)')
+                });
+            }
             
-            // Depth AbsRel
+            // Depth AbsRel - only if we have depth data
             const depthAgg = getAggregatedData(data.depth.all, 'method');
             const depthMethods = Object.keys(depthAgg);
             const depthAbsRel = depthMethods.map(m => mean(depthAgg[m].map(r => r.abs_rel || 0)));
             
-            if (charts.overviewDepth) charts.overviewDepth.destroy();
-            charts.overviewDepth = new Chart(document.getElementById('overviewDepthChart'), {
-                type: 'bar',
-                data: {
-                    labels: depthMethods,
-                    datasets: [{ label: 'AbsRel', data: depthAbsRel, backgroundColor: colors.slice(2), borderRadius: 6 }]
-                },
-                options: getChartOptions('Absolute Relative Error')
-            });
+            const depthChartEl = document.getElementById('overviewDepthChart');
+            if (depthChartEl && data.has_depth) {
+                if (charts.overviewDepth) charts.overviewDepth.destroy();
+                charts.overviewDepth = new Chart(depthChartEl, {
+                    type: 'bar',
+                    data: {
+                        labels: depthMethods,
+                        datasets: [{ label: 'AbsRel', data: depthAbsRel, backgroundColor: colors.slice(2), borderRadius: 6 }]
+                    },
+                    options: getChartOptions('Absolute Relative Error')
+                });
+            }
             
-            // GS PSNR
+            // GS PSNR - only if we have GS data
             const gsAgg = getAggregatedData(data.gs.all, 'engine');
             const gsEngines = Object.keys(gsAgg);
             const gsPSNR = gsEngines.map(e => mean(gsAgg[e].map(r => r.psnr || 0)));
             
-            if (charts.overviewGS) charts.overviewGS.destroy();
-            charts.overviewGS = new Chart(document.getElementById('overviewGSChart'), {
-                type: 'bar',
-                data: {
-                    labels: gsEngines,
-                    datasets: [{ label: 'PSNR', data: gsPSNR, backgroundColor: colors.slice(4), borderRadius: 6 }]
-                },
-                options: getChartOptions('PSNR (dB)')
-            });
+            const gsChartEl = document.getElementById('overviewGSChart');
+            if (gsChartEl && data.has_gs) {
+                if (charts.overviewGS) charts.overviewGS.destroy();
+                charts.overviewGS = new Chart(gsChartEl, {
+                    type: 'bar',
+                    data: {
+                        labels: gsEngines,
+                        datasets: [{ label: 'PSNR', data: gsPSNR, backgroundColor: colors.slice(4), borderRadius: 6 }]
+                    },
+                    options: getChartOptions('PSNR (dB)')
+                });
+            }
             
             // Speed comparison - show all methods FPS
             const allLabels = [];
@@ -1201,9 +1179,10 @@
                 }
             });
             
+            const speedChartEl = document.getElementById('overviewSpeedChart');
             if (charts.overviewSpeed) charts.overviewSpeed.destroy();
-            if (allFPS.length > 0) {
-                charts.overviewSpeed = new Chart(document.getElementById('overviewSpeedChart'), {
+            if (speedChartEl && allFPS.length > 0) {
+                charts.overviewSpeed = new Chart(speedChartEl, {
                     type: 'bar',
                     data: {
                         labels: allLabels,
@@ -1238,13 +1217,6 @@
                         }
                     }
                 });
-            } else {
-                // No FPS data - show message
-                const ctx = document.getElementById('overviewSpeedChart').getContext('2d');
-                ctx.fillStyle = '#64748b';
-                ctx.font = '14px Inter';
-                ctx.textAlign = 'center';
-                ctx.fillText('No FPS data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
             }
         }
         
@@ -1706,10 +1678,28 @@
         function initTrajectoryPage() {
             const poses = data.pose.all;
             const datasetsWithTraj = data.datasets_with_trajectories || [];
+            const estimatedTrajs = data.estimated_trajectories || {};
             
-            if (!poses.length || !datasetsWithTraj.length) {
+            // Check if we have any trajectory data (GT or estimated)
+            const hasAnyTrajectoryData = datasetsWithTraj.length > 0 || Object.keys(estimatedTrajs).length > 0;
+            
+            if (!poses.length) {
                 document.getElementById('trajectoryPlot').innerHTML = 
-                    '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available</p></div>';
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>No pose estimation results available</p></div>';
+                return;
+            }
+            
+            if (!hasAnyTrajectoryData) {
+                // We have pose metrics but no actual trajectory data
+                document.getElementById('trajectoryPlot').innerHTML = 
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>Trajectory visualization requires ground truth files or cached pose data.<br><br>To enable this feature:<br>• Place TUM datasets in <code>datasets/tum/</code><br>• Or run benchmarks with trajectory caching enabled</p></div>';
+                
+                // Still show some useful stats
+                const methods = [...new Set(poses.map(p => p.method))];
+                const datasets = [...new Set(poses.map(p => p.dataset))];
+                document.getElementById('trajFrames').textContent = poses.reduce((sum, p) => sum + (p.num_frames || 0), 0);
+                document.getElementById('trajATE').textContent = Math.min(...poses.map(p => p.ate_rmse || Infinity)).toFixed(4);
+                document.getElementById('trajMethods').textContent = methods.length;
                 return;
             }
             

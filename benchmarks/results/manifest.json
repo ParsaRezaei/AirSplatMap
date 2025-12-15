@@ -1,52 +1,4 @@
 {
-  "pastup": {
-    "benchmarks": [
-      "benchmark_20251205_215836",
-      "benchmark_20251205_213736",
-      "benchmark_20251205_201220",
-      "benchmark_20251205_165445",
-      "benchmark_20251205_062953"
-    ],
-    "latest": "benchmark_20251205_215836",
-    "count": 5,
-    "metadata": {
-      "benchmark_20251205_215836": {
-        "has_report": true,
-        "timestamp": "2025-12-05T21:58:36",
-        "display_name": "2025-12-05 21:58",
-        "has_results_json": true,
-        "has_plots": true
-      },
-      "benchmark_20251205_213736": {
-        "has_report": true,
-        "timestamp": "2025-12-05T21:37:36",
-        "display_name": "2025-12-05 21:37",
-        "has_results_json": true,
-        "has_plots": true
-      },
-      "benchmark_20251205_201220": {
-        "has_report": true,
-        "timestamp": "2025-12-05T20:12:20",
-        "display_name": "2025-12-05 20:12",
-        "has_results_json": true,
-        "has_plots": true
-      },
-      "benchmark_20251205_165445": {
-        "has_report": true,
-        "timestamp": "2025-12-05T16:54:45",
-        "display_name": "2025-12-05 16:54",
-        "has_results_json": true,
-        "has_plots": true
-      },
-      "benchmark_20251205_062953": {
-        "has_report": true,
-        "timestamp": "2025-12-05T06:29:53",
-        "display_name": "2025-12-05 06:29",
-        "has_results_json": true,
-        "has_plots": true
-      }
-    }
-  },
   "jetson": {
     "benchmarks": [
       "benchmark_20251213_113045",
@@ -138,6 +90,54 @@
         "has_report": true,
         "timestamp": "2025-12-12T02:26:34",
         "display_name": "2025-12-12 02:26",
+        "has_results_json": true,
+        "has_plots": true
+      }
+    }
+  },
+  "pastup": {
+    "benchmarks": [
+      "benchmark_20251205_215836",
+      "benchmark_20251205_213736",
+      "benchmark_20251205_201220",
+      "benchmark_20251205_165445",
+      "benchmark_20251205_062953"
+    ],
+    "latest": "benchmark_20251205_215836",
+    "count": 5,
+    "metadata": {
+      "benchmark_20251205_215836": {
+        "has_report": true,
+        "timestamp": "2025-12-05T21:58:36",
+        "display_name": "2025-12-05 21:58",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251205_213736": {
+        "has_report": true,
+        "timestamp": "2025-12-05T21:37:36",
+        "display_name": "2025-12-05 21:37",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251205_201220": {
+        "has_report": true,
+        "timestamp": "2025-12-05T20:12:20",
+        "display_name": "2025-12-05 20:12",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251205_165445": {
+        "has_report": true,
+        "timestamp": "2025-12-05T16:54:45",
+        "display_name": "2025-12-05 16:54",
+        "has_results_json": true,
+        "has_plots": true
+      },
+      "benchmark_20251205_062953": {
+        "has_report": true,
+        "timestamp": "2025-12-05T06:29:53",
+        "display_name": "2025-12-05 06:29",
         "has_results_json": true,
         "has_plots": true
       }

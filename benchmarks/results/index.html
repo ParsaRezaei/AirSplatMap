@@ -29,162 +29,181 @@
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
             background: var(--bg-primary);
             color: var(--text-primary);
-            min-height: 100vh;
+            height: 100vh;
             display: flex;
+            flex-direction: column;
             overflow: hidden;
         }
 
-        /* Off-canvas sidebar */
-        .sidebar {
-            width: 280px;
+        /* Top Navigation Bar */
+        .navbar {
             background: var(--bg-secondary);
-            border-right: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            flex-shrink: 0;
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            transform: translateX(-100%);
-            transition: transform 0.25s ease-out;
-            z-index: 100;
-            box-shadow: 0 0 30px var(--shadow);
-        }
-
-        .sidebar.open {
-            transform: translateX(0);
-        }
-
-        .sidebar-header {
-            padding: 24px;
             border-bottom: 1px solid var(--border);
+            padding: 0 20px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-shrink: 0;
+            z-index: 100;
         }
 
-        .sidebar-header h1 {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: var(--accent-light);
+        .navbar-brand {
             display: flex;
             align-items: center;
             gap: 10px;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent-light);
+            flex-shrink: 0;
         }
 
-        .sidebar-header p {
-            font-size: 0.75rem;
+        .navbar-brand .subtitle {
             color: var(--text-muted);
-            margin-top: 8px;
+            font-weight: 400;
+            font-size: 0.85rem;
+            margin-left: 4px;
         }
 
-        .device-list {
-            flex: 1;
-            overflow-y: auto;
-            padding: 16px;
+        /* Dropdown Container */
+        .dropdown {
+            position: relative;
         }
 
-        .device-section {
-            margin-bottom: 12px;
-        }
-
-        .device-header {
+        .dropdown-toggle {
             display: flex;
             align-items: center;
-            padding: 12px 16px;
+            gap: 10px;
+            padding: 8px 14px;
             background: var(--bg-card);
             border: 1px solid var(--border);
             border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.15s;
-            user-select: none;
+            min-width: 260px;
         }
 
-        .device-header:hover {
+        .dropdown-toggle:hover {
             background: var(--bg-hover);
             border-color: var(--accent);
         }
 
-        .device-header.active {
-            background: var(--accent);
+        .dropdown-toggle.active {
             border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
         }
 
-        .device-icon {
-            width: 36px;
-            height: 36px;
-            background: rgba(99, 102, 241, 0.15);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 12px;
+        .dropdown-toggle .chevron {
+            transition: transform 0.2s;
+            color: var(--text-muted);
+        }
+
+        .dropdown-toggle.active .chevron {
+            transform: rotate(180deg);
+        }
+
+        .dropdown-icon {
             font-size: 1.1rem;
         }
 
-        .device-name {
-            font-weight: 600;
+        .dropdown-text {
             flex: 1;
-            color: var(--text-primary);
+            text-align: left;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
-        .device-count {
-            font-size: 0.7rem;
-            font-weight: 600;
-            background: var(--accent);
-            color: white;
-            padding: 3px 8px;
-            border-radius: 10px;
-        }
-
-        .chevron {
-            margin-left: 8px;
+        .dropdown-text .placeholder {
             color: var(--text-muted);
-            transition: transform 0.2s;
         }
 
-        .device-section.expanded .chevron {
-            transform: rotate(90deg);
-        }
-
-        .benchmark-list {
+        /* Dropdown Menu */
+        .dropdown-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            min-width: 320px;
+            max-height: 70vh;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
             display: none;
-            padding-left: 20px;
-            margin-top: 8px;
+            z-index: 1000;
         }
 
-        .device-section.expanded .benchmark-list {
+        .dropdown-menu.show {
             display: block;
+            animation: dropdownFade 0.15s ease;
         }
 
-        .benchmark-item {
-            padding: 10px 14px;
-            margin: 4px 0;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            transition: all 0.15s;
+        @keyframes dropdownFade {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .dropdown-scroll {
+            max-height: calc(70vh - 20px);
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .device-group {
+            margin-bottom: 4px;
+        }
+
+        .device-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .device-group-header {
             display: flex;
             align-items: center;
-            gap: 8px;
-            border-left: 2px solid transparent;
+            gap: 10px;
+            padding: 10px 12px;
+            font-weight: 600;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
-        .benchmark-item:hover {
+        .device-group-header .icon {
+            font-size: 1rem;
+        }
+
+        .benchmark-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px 10px 38px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.1s;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .benchmark-option:hover {
             background: var(--bg-hover);
             color: var(--text-primary);
         }
 
-        .benchmark-item.active {
+        .benchmark-option.active {
             background: var(--accent);
             color: white;
-            border-left-color: transparent;
         }
 
-        .benchmark-item.latest {
-            border-left-color: var(--success);
+        .benchmark-option .date {
+            flex: 1;
         }
 
-        .latest-badge {
+        .benchmark-option .latest-badge {
             font-size: 0.6rem;
             background: rgba(34, 197, 94, 0.15);
             color: var(--success);
@@ -194,48 +213,20 @@
             font-weight: 600;
         }
 
-        /* Main Content */
-        .main-content {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-            background: var(--bg-primary);
-            margin-left: 0;
-            width: 100%;
+        .benchmark-option.active .latest-badge {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
         }
 
-        .toolbar {
-            padding: 12px 16px;
-            background: var(--bg-secondary);
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .toolbar-breadcrumb {
-            font-size: 0.9rem;
-            color: var(--text-muted);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .toolbar-breadcrumb span {
-            color: var(--text-primary);
-            font-weight: 600;
-        }
-
-        .toolbar-actions {
+        /* Navbar Actions */
+        .navbar-actions {
             margin-left: auto;
             display: flex;
             gap: 8px;
-            flex-shrink: 0;
         }
 
         .btn {
-            padding: 8px 16px;
+            padding: 8px 14px;
             border-radius: 6px;
             border: 1px solid var(--border);
             background: var(--bg-card);
@@ -255,34 +246,21 @@
             border-color: var(--accent);
         }
 
-        .btn-primary {
-            background: var(--accent);
-            border-color: var(--accent);
-            color: white;
+        .btn svg {
+            width: 16px;
+            height: 16px;
         }
 
-        .btn-primary:hover {
-            background: var(--accent-light);
-        }
-
-        .mobile-menu-btn {
-            padding: 8px 10px;
-            border-radius: 6px;
+        /* Main Content */
+        .main-content {
+            flex: 1;
             display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
+            flex-direction: column;
+            overflow: hidden;
         }
 
         .iframe-container {
             flex: 1;
-            padding: 0;
-            overflow: hidden;
-        }
-
-        .iframe-wrapper {
-            width: 100%;
-            height: 100%;
             overflow: hidden;
         }
 
@@ -307,7 +285,7 @@
         .empty-state svg {
             width: 80px;
             height: 80px;
-            margin-bottom: 20px;
+            margin-bottom: 24px;
             opacity: 0.3;
         }
 
@@ -322,55 +300,42 @@
             text-align: center;
             max-width: 400px;
             color: var(--text-secondary);
+            line-height: 1.6;
         }
 
         /* Loading State */
-        .loading {
+        .loading-indicator {
             display: flex;
             align-items: center;
-            justify-content: center;
-            padding: 40px;
             color: var(--text-muted);
+            font-size: 0.85rem;
+            padding: 12px;
         }
 
         .spinner {
-            width: 24px;
-            height: 24px;
-            border: 3px solid var(--border);
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--border);
             border-top-color: var(--accent);
             border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin-right: 12px;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
         }
 
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
 
-        /* Error State */
-        .error-message {
-            background: rgba(239, 68, 68, 0.1);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            color: var(--danger);
-            padding: 16px 20px;
-            border-radius: 8px;
-            margin: 20px;
+        /* No benchmarks state in dropdown */
+        .no-benchmarks {
+            text-align: center;
+            padding: 30px 20px;
+            color: var(--text-muted);
         }
 
-        /* Backdrop for sidebar */
-        .backdrop {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.45);
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s ease-out;
-            z-index: 90;
-        }
-
-        .backdrop.open {
-            opacity: 1;
-            pointer-events: auto;
+        .no-benchmarks .icon {
+            font-size: 2rem;
+            margin-bottom: 10px;
         }
 
         /* Scrollbar styling */
@@ -392,91 +357,115 @@
             background: var(--text-muted);
         }
 
-        /* Responsive tweaks */
-        @media (max-width: 768px) {
-            .toolbar {
-                padding-inline: 12px;
+        /* Responsive */
+        @media (max-width: 640px) {
+            .navbar {
+                padding: 0 12px;
+                gap: 10px;
             }
 
-            .toolbar-actions {
-                gap: 4px;
+            .navbar-brand .subtitle {
+                display: none;
+            }
+
+            .dropdown-toggle {
+                min-width: 180px;
+                padding: 8px 10px;
+            }
+
+            .dropdown-menu {
+                min-width: 280px;
+                left: 0;
+                right: auto;
+            }
+
+            .btn .btn-text {
+                display: none;
             }
 
             .btn {
-                padding-inline: 10px;
+                padding: 8px 10px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .navbar-brand span:not(.subtitle) {
+                display: none;
             }
 
-            .sidebar {
-                width: 260px;
+            .dropdown-toggle {
+                min-width: 160px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- Off-canvas sidebar -->
-    <aside class="sidebar" aria-label="Benchmark navigation">
-        <div class="sidebar-header">
-            <h1>🚀 <span>AirSplatMap</span></h1>
-            <p>Benchmark Results</p>
+    <!-- Top Navigation Bar -->
+    <nav class="navbar">
+        <div class="navbar-brand">
+            🚀 <span>AirSplatMap</span>
+            <span class="subtitle">Benchmarks</span>
         </div>
-        <div class="device-list" id="deviceList">
-            <div class="loading">
-                <div class="spinner"></div>
-                Loading benchmarks...
-            </div>
-        </div>
-    </aside>
 
-    <!-- Backdrop -->
-    <div class="backdrop" id="backdrop" onclick="closeSidebar()"></div>
-
-    <main class="main-content">
-        <div class="toolbar" id="toolbar">
-            <button class="btn mobile-menu-btn" onclick="toggleSidebar()" aria-label="Toggle benchmark navigation">
-                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                          d="M4 6h16M4 12h16M4 18h16"/>
+        <div class="dropdown" id="benchmarkDropdown">
+            <button class="dropdown-toggle" onclick="toggleDropdown()">
+                <span class="dropdown-icon">📊</span>
+                <span class="dropdown-text" id="dropdownText">
+                    <span class="placeholder">Select benchmark...</span>
+                </span>
+                <svg class="chevron" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                 </svg>
             </button>
-            <div class="toolbar-breadcrumb" id="breadcrumb"></div>
-            <div class="toolbar-actions">
-                <button class="btn" onclick="openInNewTab()" title="Open in new tab">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-                    </svg>
-                    Open
-                </button>
-                <button class="btn" onclick="refreshIframe()" title="Refresh">
-                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-                    </svg>
-                    Refresh
-                </button>
+            <div class="dropdown-menu" id="dropdownMenu">
+                <div class="dropdown-scroll" id="dropdownContent">
+                    <div class="loading-indicator">
+                        <div class="spinner"></div>
+                        Loading benchmarks...
+                    </div>
+                </div>
             </div>
         </div>
-        
+
+        <div class="navbar-actions">
+            <button class="btn" onclick="openInNewTab()" title="Open in new tab" id="openBtn" style="display: none;">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                </svg>
+                <span class="btn-text">Open</span>
+            </button>
+            <button class="btn" onclick="refreshIframe()" title="Refresh" id="refreshBtn" style="display: none;">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <span class="btn-text">Refresh</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content">
         <div class="empty-state" id="emptyState">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                       d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
             </svg>
             <h2>Select a Benchmark</h2>
-            <p>Choose a device and benchmark from the menu to view the detailed results report.</p>
+            <p>Choose a benchmark from the dropdown above to view the detailed results report.</p>
         </div>
 
         <div class="iframe-container" id="iframeContainer" style="display: none;">
-            <div class="iframe-wrapper">
-                <iframe id="reportFrame" title="Benchmark Report"></iframe>
-            </div>
+            <iframe id="reportFrame" title="Benchmark Report"></iframe>
         </div>
     </main>
 
     <script>
-        // Configuration - this will be populated by the manifest
+        // State
         let benchmarkData = {};
         let currentReport = null;
+        let dropdownOpen = false;
 
         // Device icons mapping
         const deviceIcons = {
@@ -487,22 +476,6 @@
             'server': '🖧',
             'default': '📊'
         };
-
-        function toggleSidebar() {
-            const sidebar = document.querySelector('.sidebar');
-            const backdrop = document.getElementById('backdrop');
-            const isOpen = !sidebar.classList.contains('open');
-
-            sidebar.classList.toggle('open', isOpen);
-            backdrop.classList.toggle('open', isOpen);
-        }
-
-        function closeSidebar() {
-            const sidebar = document.querySelector('.sidebar');
-            const backdrop = document.getElementById('backdrop');
-            sidebar.classList.remove('open');
-            backdrop.classList.remove('open');
-        }
 
         // Initialize
         document.addEventListener('DOMContentLoaded', async () => {
@@ -516,10 +489,38 @@
             if (device && benchmark) {
                 selectBenchmark(device, benchmark);
             }
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', (e) => {
+                const dropdown = document.getElementById('benchmarkDropdown');
+                if (!dropdown.contains(e.target) && dropdownOpen) {
+                    closeDropdown();
+                }
+            });
         });
 
+        function toggleDropdown() {
+            if (dropdownOpen) {
+                closeDropdown();
+            } else {
+                openDropdown();
+            }
+        }
+
+        function openDropdown() {
+            dropdownOpen = true;
+            document.querySelector('.dropdown-toggle').classList.add('active');
+            document.getElementById('dropdownMenu').classList.add('show');
+        }
+
+        function closeDropdown() {
+            dropdownOpen = false;
+            document.querySelector('.dropdown-toggle').classList.remove('active');
+            document.getElementById('dropdownMenu').classList.remove('show');
+        }
+
         async function loadBenchmarks() {
-            const deviceListEl = document.getElementById('deviceList');
+            const dropdownContent = document.getElementById('dropdownContent');
             
             try {
                 // Try to load manifest file first
@@ -531,13 +532,14 @@
                     benchmarkData = await discoverBenchmarks();
                 }
                 
-                renderDeviceList();
+                renderDropdownContent();
             } catch (error) {
                 console.error('Error loading benchmarks:', error);
-                deviceListEl.innerHTML = `
-                    <div class="error-message">
-                        <strong>Error loading benchmarks</strong><br>
-                        Make sure manifest.json exists or run the generate script.
+                dropdownContent.innerHTML = `
+                    <div class="no-benchmarks">
+                        <div class="icon">⚠️</div>
+                        <p>Error loading benchmarks</p>
+                        <p style="font-size: 0.75rem; margin-top: 4px;">Run generate_manifest.py</p>
                     </div>
                 `;
             }
@@ -562,93 +564,80 @@
             return devices;
         }
 
-        function renderDeviceList() {
-            const deviceListEl = document.getElementById('deviceList');
+        function renderDropdownContent() {
+            const dropdownContent = document.getElementById('dropdownContent');
             
             if (Object.keys(benchmarkData).length === 0) {
-                deviceListEl.innerHTML = `
-                    <div style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
-                        <div style="font-size: 2rem; margin-bottom: 12px;">📭</div>
-                        <p style="font-weight: 500; color: var(--text-secondary);">No benchmarks found</p>
-                        <p style="font-size: 0.75rem; margin-top: 8px;">Run generate_manifest.py to discover benchmarks.</p>
+                dropdownContent.innerHTML = `
+                    <div class="no-benchmarks">
+                        <div class="icon">📭</div>
+                        <p>No benchmarks found</p>
+                        <p style="font-size: 0.75rem; margin-top: 4px;">Run generate_manifest.py</p>
                     </div>
                 `;
                 return;
             }
 
-            deviceListEl.innerHTML = '';
+            let html = '';
             
             for (const [device, data] of Object.entries(benchmarkData)) {
-                const section = document.createElement('div');
-                section.className = 'device-section';
-                section.dataset.device = device;
-                
                 const icon = deviceIcons[device.toLowerCase()] || deviceIcons.default;
                 const benchmarks = data.benchmarks || [];
                 const latestBenchmark = data.latest || benchmarks[0];
                 
-                section.innerHTML = `
-                    <div class="device-header" onclick="toggleDevice('${device}')">
-                        <div class="device-icon">${icon}</div>
-                        <span class="device-name">${device}</span>
-                        <span class="device-count">${benchmarks.length}</span>
-                        <span class="chevron">▶</span>
-                    </div>
-                    <div class="benchmark-list">
+                html += `
+                    <div class="device-group">
+                        <div class="device-group-header">
+                            <span class="icon">${icon}</span>
+                            ${device}
+                            <span style="margin-left: auto; font-size: 0.7rem; background: var(--bg-hover); padding: 2px 6px; border-radius: 4px;">${benchmarks.length}</span>
+                        </div>
                         ${benchmarks.map(b => `
-                            <div class="benchmark-item ${b === latestBenchmark ? 'latest' : ''}" 
+                            <div class="benchmark-option" 
                                  onclick="selectBenchmark('${device}', '${b}')"
                                  data-device="${device}" 
                                  data-benchmark="${b}">
-                                <span>${formatBenchmarkName(b)}</span>
+                                <span class="date">${formatBenchmarkName(b)}</span>
                                 ${b === latestBenchmark ? '<span class="latest-badge">Latest</span>' : ''}
                             </div>
                         `).join('')}
                     </div>
                 `;
-                
-                deviceListEl.appendChild(section);
             }
-            
-            const firstSection = deviceListEl.querySelector('.device-section');
-            if (firstSection) {
-                firstSection.classList.add('expanded');
-            }
-        }
 
-        function toggleDevice(device) {
-            const section = document.querySelector(`.device-section[data-device="${device}"]`);
-            section.classList.toggle('expanded');
+            dropdownContent.innerHTML = html;
         }
 
         function selectBenchmark(device, benchmark) {
-            document.querySelectorAll('.benchmark-item').forEach(el => el.classList.remove('active'));
-            const item = document.querySelector(`.benchmark-item[data-device="${device}"][data-benchmark="${benchmark}"]`);
-            if (item) {
-                item.classList.add('active');
-                const section = item.closest('.device-section');
-                if (section) {
-                    section.classList.add('expanded');
-                }
+            // Update active state in dropdown
+            document.querySelectorAll('.benchmark-option').forEach(el => el.classList.remove('active'));
+            const option = document.querySelector(`.benchmark-option[data-device="${device}"][data-benchmark="${benchmark}"]`);
+            if (option) {
+                option.classList.add('active');
             }
 
-            // Close sidebar after selection
-            closeSidebar();
+            // Close dropdown
+            closeDropdown();
 
+            // Update dropdown text
+            const icon = deviceIcons[device.toLowerCase()] || deviceIcons.default;
+            document.getElementById('dropdownText').innerHTML = `${device} / ${formatBenchmarkName(benchmark)}`;
+            document.querySelector('.dropdown-icon').textContent = icon;
+
+            // Update URL
             const url = new URL(window.location);
             url.searchParams.set('device', device);
             url.searchParams.set('benchmark', benchmark);
             window.history.pushState({}, '', url);
 
+            // Load report
             const reportUrl = `${device}/${benchmark}/report.html`;
             currentReport = reportUrl;
             
             document.getElementById('emptyState').style.display = 'none';
             document.getElementById('iframeContainer').style.display = 'block';
-            
-            document.getElementById('breadcrumb').innerHTML = `
-                ${device} <span>/ ${formatBenchmarkName(benchmark)}</span>
-            `;
+            document.getElementById('openBtn').style.display = 'flex';
+            document.getElementById('refreshBtn').style.display = 'flex';
             
             document.getElementById('reportFrame').src = reportUrl;
         }
@@ -673,6 +662,7 @@
             iframe.src = iframe.src;
         }
 
+        // Handle browser back/forward
         window.addEventListener('popstate', () => {
             const params = new URLSearchParams(window.location.search);
             const device = params.get('device');

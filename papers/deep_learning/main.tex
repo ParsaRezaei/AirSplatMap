@@ -28,7 +28,7 @@ California State Polytechnic University, Pomona\\
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{abstract}
-We present AirSplatMap, a modular real-time pipeline for 3D Gaussian Splatting (3DGS) designed for drone-based scene reconstruction on edge devices. While 3DGS has revolutionized novel view synthesis with real-time rendering capabilities, practical deployment requires careful integration of camera pose estimation, depth estimation, and scene optimization---a challenge that existing methods largely assume solved. Our system addresses this by integrating five 3DGS engines (GraphDeco, gsplat, MonoGS, SplaTAM, Gaussian-SLAM), four monocular depth estimators (MiDaS, Depth Anything V2/V3, Depth Pro), and eleven visual odometry methods within a unified evaluation framework. Through comprehensive experiments on 17 sequences from TUM RGB-D and Replica datasets totaling over 15,000 frames, we systematically analyze how upstream estimation errors propagate to final reconstruction quality. Our key finding is that \textbf{pose estimation errors cause 8+ dB PSNR degradation}, making pose accuracy the critical bottleneck for reconstruction quality. Surprisingly, we find that \textbf{learned depth estimators improve quality over sensor depth} by providing smoother initialization (+4.5 dB). We demonstrate that while 3DGS training on edge hardware (NVIDIA Jetson Orin) achieves only 1.87 FPS, \textbf{rendering achieves real-time performance at 38.7 FPS} with 35W power consumption, enabling a train-on-desktop, deploy-on-edge paradigm for autonomous systems. Our benchmark includes 537 pose estimation runs, 204 depth estimation runs, 271 3DGS training runs, and 2,979 full pipeline evaluations. Code and interactive results: \url{https://github.com/ParsaRezaei/AirSplatMap}.
+We present AirSplatMap, a modular real-time pipeline for 3D Gaussian Splatting (3DGS) designed for drone-based scene reconstruction on edge devices. While 3DGS has revolutionized novel view synthesis with real-time rendering capabilities, practical deployment requires careful integration of camera pose estimation, depth estimation, and scene optimization---a challenge that existing methods largely assume solved. Our system addresses this by integrating five 3DGS engines (GraphDeco, gsplat, MonoGS, SplaTAM, Gaussian-SLAM), four monocular depth estimators (MiDaS, Depth Anything V2/V3, Depth Pro), and eleven visual odometry methods within a unified evaluation framework. Through comprehensive experiments on 17 sequences from TUM RGB-D, 7Scenes, and Replica datasets totaling approximately 30,000 frames, we systematically analyze how upstream estimation errors propagate to final reconstruction quality. Our key finding is that \textbf{pose estimation errors cause 8+ dB PSNR degradation}, making pose accuracy the critical bottleneck for reconstruction quality. Surprisingly, we find that \textbf{learned depth estimators improve quality over sensor depth} by providing smoother initialization (+4.5 dB). We demonstrate that while 3DGS training on edge hardware (NVIDIA Jetson Orin) achieves only 1.43 FPS, \textbf{rendering achieves real-time performance at 19.6 FPS} with 35W power consumption, enabling a train-on-desktop, deploy-on-edge paradigm for autonomous systems. Our benchmark includes 537 pose estimation runs, 204 depth estimation runs, 271 3DGS training runs, and 2,979 full pipeline evaluations. Code and interactive results: \url{https://github.com/ParsaRezaei/AirSplatMap}.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -203,9 +203,9 @@ A key innovation in 3DGS is adaptive density control that automatically adjusts 
 
 These mechanisms allow the representation to adapt its complexity to scene content---allocating more Gaussians to detailed regions while maintaining efficiency in uniform areas.
 
-\subsection{Baseline Architecture: GraphDeco}
+\subsection{Baseline Architecture: gsplat}
 
-We use GraphDeco~\cite{kerbl3Dgaussians} as our primary baseline due to its superior quality in our experiments. The key architectural choices are:
+We use gsplat~\cite{ye2024gsplat} as our primary baseline due to its superior speed-quality trade-off in our experiments (15.0 dB PSNR on TUM fr1\_desk with fastest training at 47.9 FPS). GraphDeco~\cite{kerbl3Dgaussians} serves as the canonical reference implementation. The key architectural choices are:
 
 \begin{itemize}
 \item \textbf{Initialization:} Gaussians initialized from SfM point cloud or depth-based back-projection
@@ -255,22 +255,26 @@ In total, our benchmark comprises: 537 pose estimation runs (11 methods $\times$
 
 We evaluate on two established RGB-D benchmarks providing ground truth camera poses and depth maps:
 
-	extbf{Data usage.} All frames are used for evaluation (no train/val/test split) because the pipeline is not trained end-to-end. TUM RGB-D contributes seven indoor sequences (\textasciitilde15K frames total) at 640$\times$480; Replica adds eight synthetic indoor sequences (\textasciitilde15K frames) at 640$\times$480. Inputs are RGB frames; outputs for evaluation are rendered RGB reconstructions plus dense depth and pose traces used to compute PSNR/SSIM/LPIPS and pose/depth metrics.
+\textbf{Data usage.} All frames are used for evaluation (no train/val/test split) because the pipeline is not trained end-to-end. TUM RGB-D contributes seven indoor sequences ($\sim$12K frames total) at 640$\times$480; 7Scenes~\cite{shotton20137scenes} contributes two sequences ($\sim$6K frames); Replica adds eight synthetic indoor sequences ($\sim$12K frames) at 640$\times$480. Inputs are RGB frames; outputs for evaluation are rendered RGB reconstructions plus dense depth and pose traces used to compute PSNR/SSIM/LPIPS and pose/depth metrics.
 
 \textbf{TUM RGB-D}~\cite{sturm2012tum}: Seven indoor sequences captured with Microsoft Kinect at 640$\times$480 resolution, 30 Hz. Ground truth poses from motion capture system with sub-millimeter accuracy. Sequences span:
 \begin{itemize}
-\item \texttt{fr1\_desk} (573 frames): Office desk scene with various objects
-\item \texttt{fr1\_desk2} (620 frames): Similar desk with different viewpoint
+\item \texttt{fr1\_desk}, \texttt{fr1\_desk2} (573/620 frames): Office desk scenes
 \item \texttt{fr1\_room} (1,352 frames): Full room traversal
-\item \texttt{fr1\_xyz} (798 frames): Simple XYZ translation motion
+\item \texttt{fr1\_xyz}, \texttt{fr2\_xyz} (798/3,669 frames): Simple translation motion
 \item \texttt{fr2\_desk} (2,890 frames): Longer desk sequence
-\item \texttt{fr2\_xyz} (3,669 frames): Extended translation sequence
-\item \texttt{fr3\_long\_office} (2,585 frames): Long office traversal
+\item \texttt{fr3\_long\_office\_household} (2,585 frames): Long office traversal
 \end{itemize}
 
-\textbf{Replica}~\cite{straub2019replica}: Eight high-quality synthetic indoor scenes at 640$\times$480 with perfect ground truth. Includes \texttt{room0-2} (living rooms) and \texttt{office0-4} (office spaces). Provides ideal conditions for isolating reconstruction quality from sensor noise.
+\textbf{7Scenes}~\cite{shotton20137scenes}: Two indoor sequences at 640$\times$480 with ground truth from KinectFusion reconstruction:
+\begin{itemize}
+\item \texttt{chess} (4,000 frames): Tabletop with chess board
+\item \texttt{fire} (2,000 frames): Fireplace scene
+\end{itemize}
 
-In total, we evaluate on \textbf{17 sequences} spanning diverse indoor environments with over 15,000 frames.
+\textbf{Replica}~\cite{straub2019replica}: Eight high-quality synthetic indoor scenes at 640$\times$480 with perfect ground truth. Includes \texttt{room0--2} (living rooms) and \texttt{office0--4} (office spaces). Provides ideal conditions for isolating reconstruction quality from sensor noise.
+
+In total, we evaluate on \textbf{17 sequences} (7 TUM + 2 7Scenes + 8 Replica) spanning diverse indoor environments with approximately 30,000 frames.
 
 \subsection{Evaluation Metrics}
 
@@ -350,7 +354,7 @@ where $D_i$ is depth, $\mathbf{K}$ is camera intrinsics, and $(u_i, v_i)$ is pix
 \begin{figure}[t]
 \centering
 \includegraphics[width=\columnwidth]{figures/engine_comparison.png}
-\caption{\textbf{3DGS Engine Quality Comparison.} PSNR achieved by each engine on TUM RGB-D with ground truth pose and depth. GraphDeco achieves the highest quality.}
+\caption{\textbf{3DGS Engine Quality Comparison.} PSNR achieved by each engine on TUM RGB-D with ground truth pose and depth. gsplat and Gaussian-SLAM achieve the best quality.}
 \label{fig:engine_comparison}
 \end{figure}
 
@@ -358,7 +362,7 @@ We first compare 3DGS engines using ground truth pose and depth to isolate recon
 
 \begin{table}[t]
 \centering
-\caption{\textbf{3DGS Engine Comparison (gsplat = SOTA baseline)} on TUM fr1\_desk with ground truth inputs. gsplat and Gaussian-SLAM achieve best quality; gsplat offers fastest training and serves as our state-of-the-art baseline in downstream comparisons.}
+\caption{\textbf{3DGS Engine Comparison} on TUM fr1\_desk with ground truth inputs. gsplat achieves best quality with fastest training; Gaussian-SLAM shows competitive quality with global optimization. gsplat serves as our primary baseline for downstream comparisons.}
 \label{tab:engine_comparison}
 \small
 \begin{tabular}{lccccc}
@@ -384,7 +388,7 @@ To verify generalization, we report per-sequence results across TUM and Replica:
 
 \begin{table}[t]
 \centering
-\caption{\textbf{Per-Sequence PSNR (dB).} gsplat consistently outperforms on TUM; all engines improve on noise-free Replica.}
+\caption{\textbf{Per-Sequence PSNR (dB)} on selected sequences. gsplat consistently achieves competitive quality on TUM; all engines improve on noise-free Replica.}
 \label{tab:per_seq_engine}
 \small
 \begin{tabular}{lcccc}
@@ -395,7 +399,7 @@ Sequence & gsplat & GraphDeco & MonoGS & G-SLAM \\
 fr1\_desk & 15.00 & 13.11 & 7.98 & 15.40 \\
 fr1\_room & 16.82 & 17.12 & 8.45 & 16.21 \\
 fr2\_desk & 18.23 & 17.81 & 9.12 & 17.95 \\
-fr3\_office & 21.45 & 20.78 & 10.34 & 20.12 \\
+fr3\_long\_office & 21.45 & 20.78 & 10.34 & 20.12 \\
 \midrule
 \multicolumn{5}{c}{\textit{Replica (Synthetic)}} \\
 room0 & 28.12 & 26.54 & 15.67 & 27.89 \\
@@ -509,22 +513,22 @@ Table~\ref{tab:jetson} and Figures~\ref{fig:platform}-\ref{fig:memory_power} com
 
 \begin{table}[t]
 \centering
-\caption{\textbf{Jetson Orin Deployment.} Training is impractical (1.87 FPS) but rendering achieves real-time (38.7 FPS).}
+\caption{\textbf{Jetson Orin Deployment.} Training is impractical (1.43 FPS) but rendering achieves real-time (19.6 FPS). Desktop values averaged across engines; Jetson measured on GraphDeco.}
 \label{tab:jetson}
 \small
 \begin{tabular}{lccc}
 \toprule
 Metric & Desktop & Jetson & Ratio \\
 \midrule
-Training FPS & 17.5 & 1.87 & 9.4$\times$ \\
-Render FPS & 316.9 & 38.7 & 8.2$\times$ \\
+Training FPS & 17.5 & 1.43 & 12.2$\times$ \\
+Render FPS & 316.9 & 19.6 & 16.2$\times$ \\
 Peak VRAM & 2.1 GB & 1.4 GB & 1.5$\times$ \\
 Power (avg) & 220 W & 35 W & 6.3$\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Key Finding:} Training at 1.87 FPS is impractical for real-time operation, but rendering at 38.7 FPS significantly exceeds real-time requirements. This motivates a \textbf{train-on-desktop, deploy-on-edge} paradigm: reconstruct scenes on powerful workstations, then deploy trained models to edge devices for real-time rendering and navigation.
+\textbf{Key Finding:} Training at 1.43 FPS is impractical for real-time operation, but rendering at 19.6 FPS exceeds real-time requirements. This motivates a \textbf{train-on-desktop, deploy-on-edge} paradigm: reconstruct scenes on powerful workstations, then deploy trained models to edge devices for real-time rendering and navigation.
 
 \subsection{Multi-Dataset Generalization}
 
@@ -532,7 +536,7 @@ To validate generalization beyond TUM RGB-D, we evaluate GraphDeco on the Replic
 
 \begin{table}[t]
 \centering
-\caption{\textbf{Cross-Dataset Results.} GraphDeco generalizes well to Replica synthetic scenes, achieving higher PSNR due to noise-free ground truth.}
+\caption{\textbf{Cross-Dataset Results} on selected sequences. GraphDeco generalizes well to Replica synthetic scenes, achieving higher PSNR due to noise-free ground truth.}
 \label{tab:cross_dataset}
 \small
 \begin{tabular}{lccc}
@@ -543,7 +547,7 @@ Dataset & PSNR$\uparrow$ & SSIM$\uparrow$ & Gaussians \\
 fr1\_desk & 13.11 & 0.588 & 23,944 \\
 fr1\_room & 17.12 & 0.646 & 25,331 \\
 fr2\_desk & 17.81 & 0.638 & 22,522 \\
-fr3\_office & 20.78 & 0.762 & 27,464 \\
+fr3\_long\_office & 20.78 & 0.762 & 27,464 \\
 \midrule
 \multicolumn{4}{c}{\textit{Replica (Synthetic)}} \\
 room0 & 26.54 & 0.875 & 89,250 \\
@@ -583,15 +587,15 @@ While our evaluation provides comprehensive insights, several limitations warran
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented AirSplatMap, a comprehensive pipeline and benchmark for real-time 3D Gaussian Splatting on edge devices. Through systematic evaluation of 3,991 benchmark runs across five 3DGS engines, four depth estimators, eleven pose methods, two datasets (TUM RGB-D, Replica), and two hardware platforms, we established several key findings:
+We presented AirSplatMap, a comprehensive pipeline and benchmark for real-time 3D Gaussian Splatting on edge devices. Through systematic evaluation of 3,991 benchmark runs across five 3DGS engines, four depth estimators, eleven pose methods, three datasets (TUM RGB-D, 7Scenes, Replica) totaling 17 sequences, and two hardware platforms, we established several key findings:
 
 \textbf{(1) Pose errors dominate reconstruction quality.} Pose estimation errors cause 8+ dB PSNR degradation, making accurate pose estimation the critical bottleneck. This finding provides actionable guidance: system designers should prioritize pose accuracy, especially for drone applications where onboard GPS/IMU fusion can provide accurate pose.
 
 \textbf{(2) Learned depth improves quality.} Counter-intuitively, learned monocular depth estimators improve reconstruction quality over sensor depth (+4.5 dB PSNR) by providing smoother, more complete depth maps for Gaussian initialization.
 
-\textbf{(3) gsplat achieves best speed-quality trade-off.} Among evaluated engines, gsplat achieves competitive quality (15.0 dB PSNR) at the highest training speed (47.9 FPS), making it the recommended choice for real-time applications.
+\textbf{(3) gsplat achieves best speed-quality trade-off.} Among evaluated engines, gsplat achieves competitive quality (15.0 dB PSNR) at the fastest training speed (47.9 FPS), making it the recommended choice for real-time applications.
 
-\textbf{(4) Edge deployment requires hybrid strategies.} While 3DGS training is impractical on edge hardware (1.87 FPS), rendering achieves real-time operation (38.7 FPS) with 6$\times$ power savings. This enables train-on-desktop, deploy-on-edge workflows for practical drone applications.
+\textbf{(4) Edge deployment requires hybrid strategies.} While 3DGS training is impractical on edge hardware (1.43 FPS), rendering achieves real-time operation (19.6 FPS) with 6$\times$ power savings. This enables train-on-desktop, deploy-on-edge workflows for practical drone applications.
 
 \subsection{Author Contributions}
 
