@@ -1329,11 +1329,12 @@
         const newN = newPts.length / 3;
         lastPts = newPts; lastCols = newCols;
 
+        // Swap Y and Z axes
         const pos = new Float32Array(newN * 3);
         for (let i = 0; i < newN; i++) {
-          pos[i * 3] = newPts[i * 3];
-          pos[i * 3 + 1] = newPts[i * 3 + 2];
-          pos[i * 3 + 2] = newPts[i * 3 + 1];
+          pos[i * 3] = newPts[i * 3];          // X
+          pos[i * 3 + 1] = newPts[i * 3 + 2];  // Y = Z
+          pos[i * 3 + 2] = newPts[i * 3 + 1];  // Z = Y
         }
 
         // 3D Points: cumulative with gradual thinning
@@ -1633,9 +1634,12 @@
           const n = pts.length / 3;
           console.log('Decoded points:', n);
 
+          // Swap Y and Z axes
           const pos = new Float32Array(n * 3);
           for (let i = 0; i < n; i++) {
-            pos[i * 3] = pts[i * 3]; pos[i * 3 + 1] = pts[i * 3 + 2]; pos[i * 3 + 2] = pts[i * 3 + 1];
+            pos[i * 3] = pts[i * 3];          // X
+            pos[i * 3 + 1] = pts[i * 3 + 2];  // Y = Z
+            pos[i * 3 + 2] = pts[i * 3 + 1];  // Z = Y
           }
 
           v3d.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));

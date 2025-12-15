@@ -444,7 +444,7 @@ Write-Host "==============================================" -ForegroundColor Cya
 
 $depthProPath = "$scriptDir\submodules\ml-depth-pro"
 
-if (Test-Path "$depthProPath\setup.py") {
+if (Test-Path "$depthProPath\pyproject.toml") {
     Write-Host "Found Depth Pro at: $depthProPath" -ForegroundColor Green
     
     $ErrorActionPreference = "Continue"

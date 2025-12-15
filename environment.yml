@@ -45,10 +45,7 @@ dependencies:
   - scikit-learn>=1.2.0
   
   # ===== OpenCV =====
-  # NOTE: On macOS, OpenCV is installed via pip in setup_env.sh to avoid
-  # protobuf/abseil library conflicts with the conda version.
-  # This conda package is used on Linux/Windows only.
-  # - opencv>=4.8.0  # Commented out - installed via pip in setup_env.sh
+  - opencv>=4.8.0
   
   # ===== Visualization =====
   - seaborn>=0.12.0
@@ -65,11 +62,7 @@ dependencies:
       # Run: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
       
       # ----- RealSense Camera -----
-      # NOTE: pyrealsense2 is NOT available on macOS via pip.
-      # On macOS, install librealsense via Homebrew: brew install librealsense
-      # Then build pyrealsense2 from source if needed.
-      # Uncomment on Linux/Windows:
-      # - pyrealsense2>=2.50.0
+      - pyrealsense2>=2.50.0
       
       # ----- 3D Processing -----
       - open3d>=0.17.0
@@ -77,9 +70,8 @@ dependencies:
       - trimesh>=4.0.0
       
       # ----- 3DGS Engine (gsplat) -----
-      # NOTE: gsplat requires CUDA and is not available on macOS
-      # Uncomment on Linux/Windows with NVIDIA GPU:
-      # - gsplat>=1.0.0
+      # Using 0.1.12 which has prebuilt Windows wheels (1.5.x requires JIT compilation)
+      - gsplat==0.1.12
       
       # ----- Trajectory Evaluation -----
       - evo>=1.20.0
@@ -112,9 +104,7 @@ dependencies:
       
       # ----- Hardware Monitoring -----
       - psutil>=5.9.0
-      # NOTE: nvidia-ml-py only works on systems with NVIDIA GPUs (not macOS)
-      # Uncomment on Linux/Windows with NVIDIA GPU:
-      # - nvidia-ml-py>=12.0.0  # GPU monitoring (replaces deprecated pynvml)
+      - nvidia-ml-py>=12.0.0  # GPU monitoring (replaces deprecated pynvml)
       
       # ----- Deep Learning Core -----
       - timm>=0.9.0

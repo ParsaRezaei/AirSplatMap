@@ -1819,9 +1819,15 @@ def main():
                           and v.get('available', True)]
         
         logger.info(f"Comprehensive mode: {len(args.pose_methods)} pose, {len(args.depth_methods)} depth, {len(args.gs_engines)} GS")
+        
+        # Comprehensive mode ALWAYS runs all benchmark types (pose, depth, gs, pipeline)
+        # This ensures caches are built before pipeline runs
+        args.all = True
+        logger.info("Comprehensive mode: Setting args.all=True to run ALL benchmarks (pose, depth, gs, pipeline)")
     
     # Default to all if nothing specified
     run_all = args.all or not (args.pose or args.depth or args.gs or args.pipeline)
+    logger.info(f"Benchmark selection: run_all={run_all}, args.all={args.all}, pose={args.pose}, depth={args.depth}, gs={args.gs}, pipeline={args.pipeline}")
     
     # Quick mode settings
     # Pose and Depth benchmarks run on ALL frames to build complete cache

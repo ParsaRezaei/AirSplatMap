@@ -395,13 +395,8 @@ class Server:
             if pc is None:return None,None
             pc=np.asarray(pc)
             if len(pc)==0:return None,None
-            # Convert OpenCV (X-right, Y-down, Z-forward) to Three.js (X-right, Y-up, Z-out)
-            # Swap Y and Z, negate new Y (was Z) to flip forward direction
-            pc = pc.copy()
-            new_y = -pc[:, 2]  # OpenCV Z-forward -> Three.js Y (negated)
-            new_z = -pc[:, 1]  # OpenCV Y-down -> Three.js Z (negated to flip)
-            pc[:, 1] = new_y
-            pc[:, 2] = new_z
+            # Pass raw OpenCV coordinates (X-right, Y-down, Z-forward)
+            # JavaScript will handle conversion to Three.js
             idx=None
             if len(pc)>max_pts:
                 idx=np.random.choice(len(pc),max_pts,replace=False)
