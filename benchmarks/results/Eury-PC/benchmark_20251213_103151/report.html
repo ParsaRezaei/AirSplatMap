@@ -574,7 +574,7 @@
     <nav class="sidebar">
         <div class="sidebar-header">
             <h1>🚀 <span>AirSplatMap</span></h1>
-            <p>Benchmark Report • 2025-12-13 16:30</p>
+            <p>Benchmark Report • 2025-12-14 22:02</p>
         </div>
         
         <div class="nav-section">
@@ -585,33 +585,33 @@
             </div>
         </div>
         
-        <div class="nav-section">
+        <div class="nav-section" id="nav-benchmarks" style="display: none;">
             <div class="nav-section-title">Benchmarks</div>
-            <div class="nav-item" onclick="showPage('pose')">
+            <div class="nav-item" onclick="showPage('pose')" id="nav-pose" style="display: none;">
                 <span class="icon">📍</span>
                 <span>Pose Estimation</span>
             </div>
-            <div class="nav-item" onclick="showPage('depth')">
+            <div class="nav-item" onclick="showPage('depth')" id="nav-depth" style="display: none;">
                 <span class="icon">📏</span>
                 <span>Depth Estimation</span>
             </div>
-            <div class="nav-item" onclick="showPage('gs')">
+            <div class="nav-item" onclick="showPage('gs')" id="nav-gs" style="display: none;">
                 <span class="icon">✨</span>
                 <span>Gaussian Splatting</span>
             </div>
         </div>
         
-        <div class="nav-section">
+        <div class="nav-section" id="nav-analysis" style="display: block;">
             <div class="nav-section-title">Analysis</div>
-            <div class="nav-item" onclick="showPage('pipeline')">
+            <div class="nav-item" onclick="showPage('pipeline')" id="nav-pipeline" style="display: block;">
                 <span class="icon">🔗</span>
                 <span>Pipeline Results</span>
             </div>
-            <div class="nav-item" onclick="showPage('comparison')">
+            <div class="nav-item" onclick="showPage('comparison')" id="nav-comparison" style="display: none;">
                 <span class="icon">⚖️</span>
                 <span>Method Comparison</span>
             </div>
-            <div class="nav-item" onclick="showPage('trajectory')">
+            <div class="nav-item" onclick="showPage('trajectory')" id="nav-trajectory" style="display: none;">
                 <span class="icon">🗺️</span>
                 <span>3D Trajectories</span>
             </div>
@@ -628,52 +628,21 @@
             </p>
             
             <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value">0</div>
-                    <div class="stat-label">Pose Tests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">0</div>
-                    <div class="stat-label">Depth Tests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">0</div>
-                    <div class="stat-label">GS Tests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">0.6GB</div>
-                    <div class="stat-label">Peak GPU Memory</div>
-                </div>
+                
+                
+                
+                <div class="stat-card"><div class="stat-value">8</div><div class="stat-label">Pipeline Tests</div></div>
+                <div class="stat-card"><div class="stat-value">0.6GB</div><div class="stat-label">Peak GPU Memory</div></div>
             </div>
             
             <div class="chart-grid">
-                <div class="chart-container">
-                    <div class="chart-title">Pose Estimation Accuracy (ATE RMSE)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewPoseChart"></canvas>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <div class="chart-title">Depth Estimation Accuracy (AbsRel)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewDepthChart"></canvas>
-                    </div>
-                </div>
+                
+                
             </div>
             
             <div class="chart-grid">
-                <div class="chart-container">
-                    <div class="chart-title">Gaussian Splatting Quality (PSNR)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewGSChart"></canvas>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <div class="chart-title">Processing Speed (FPS)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewSpeedChart"></canvas>
-                    </div>
-                </div>
+                
+                
             </div>
         </div>
         
@@ -998,7 +967,7 @@
                 <div class="filter-group">
                     <div class="filter-label">Dataset</div>
                     <select id="trajDatasetFilter" onchange="updateTrajectoryPlot()">
-                        <option value="">No trajectory data available</option>
+                        <option value="">No pose data available</option>
                     </select>
                 </div>
                 <div class="filter-group">
@@ -1051,7 +1020,7 @@
     
     <script>
         // Data
-        const data = {"datasets": ["unknown"], "datasets_with_trajectories": [], "pose": {"all": [], "aggregated": {}, "by_dataset": {}}, "depth": {"all": [], "aggregated": {}, "by_dataset": {}}, "gs": {"all": [], "aggregated": {}, "by_dataset": {}}, "pipeline": [{"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 15.954602254430347, "ssim": 0.5673856616020203, "total_time": 4.883034706115723, "fps": 20.479068042411352, "num_gaussians": 51565, "lpips": 0.6470023632049561, "pose_ate": 0.0, "depth_abs_rel": 0.0}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 13.187098129424783, "ssim": 0.499391108751297, "total_time": 4.444911003112793, "fps": 22.497638294663158, "num_gaussians": 52800, "lpips": 0.7741649985313416, "pose_ate": 0.0, "depth_abs_rel": 0.6065386533737183}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 7.266729843203111, "ssim": 0.2461257867515087, "total_time": 2.925203323364258, "fps": 34.18565786565244, "num_gaussians": 51565, "lpips": 0.8482006311416626, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.0}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 11.483421893558155, "ssim": 0.49055716395378113, "total_time": 3.11181640625, "fps": 32.135571944139336, "num_gaussians": 52800, "lpips": 0.7769685029983521, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.6065386533737183}, {"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 14.79375171606334, "ssim": 0.5469256401062011, "total_time": 4.107134580612183, "fps": 24.34787515170605, "num_gaussians": 51493, "lpips": 0.6824738144874573, "pose_ate": 0.0, "depth_abs_rel": 0.0}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 11.893190449811106, "ssim": 0.4733705997467041, "total_time": 3.968888521194458, "fps": 25.195970979276705, "num_gaussians": 52800, "lpips": 0.8220115065574646, "pose_ate": 0.0, "depth_abs_rel": 0.5415474772453308}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 8.464070689965734, "ssim": 0.3673834815621376, "total_time": 2.8846957683563232, "fps": 34.66570065965022, "num_gaussians": 51493, "lpips": 0.8226158142089843, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.0}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 9.074312262615512, "ssim": 0.3356554456055164, "total_time": 2.684922218322754, "fps": 37.24502680843733, "num_gaussians": 52800, "lpips": 0.8288498520851135, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.5415474772453308}], "hardware": {"overall": {"duration_seconds": 76.86, "num_samples": 144, "cpu": {"system_percent_mean": 44.7, "system_percent_max": 87.6}, "ram": {"system_used_gb_mean": 27.93, "system_used_gb_max": 28.81, "system_percent_mean": 43.7}, "process": {"cpu_percent_mean": 311.7, "cpu_percent_max": 777.0, "ram_gb_mean": 2.32, "ram_gb_max": 3.28, "gpu_memory_gb_mean": 0.15, "gpu_memory_gb_max": 0.6}, "gpu": {"utilization_mean": 24.9, "utilization_max": 65, "memory_used_gb_mean": 0.15, "memory_used_gb_max": 0.6, "memory_percent_mean": 1.4, "memory_percent_max": 5.4, "temperature_c_mean": 36.0, "temperature_c_max": 42, "power_w_mean": 99.4, "power_w_max": 212.8}, "energy_wh": 2.1226}, "phases": {"pipeline_rgbd_dataset_freiburg1_desk": {"duration_seconds": 42.38, "num_samples": 80, "cpu": {"system_percent_mean": 44.5, "system_percent_max": 87.6}, "ram": {"system_used_gb_mean": 27.66, "system_used_gb_max": 28.81, "system_percent_mean": 43.3}, "process": {"cpu_percent_mean": 294.5, "cpu_percent_max": 738.6, "ram_gb_mean": 2.08, "ram_gb_max": 3.28, "gpu_memory_gb_mean": 0.14, "gpu_memory_gb_max": 0.6}, "gpu": {"utilization_mean": 24.7, "utilization_max": 65, "memory_used_gb_mean": 0.14, "memory_used_gb_max": 0.6, "memory_percent_mean": 1.3, "memory_percent_max": 5.4, "temperature_c_mean": 35.4, "temperature_c_max": 41, "power_w_mean": 98.7, "power_w_max": 205.9}, "energy_wh": 1.162}, "pipeline_rgbd_dataset_freiburg1_desk2": {"duration_seconds": 33.31, "num_samples": 63, "cpu": {"system_percent_mean": 45.6, "system_percent_max": 78.9}, "ram": {"system_used_gb_mean": 28.31, "system_used_gb_max": 28.74, "system_percent_mean": 44.3}, "process": {"cpu_percent_mean": 338.5, "cpu_percent_max": 777.0, "ram_gb_mean": 2.65, "ram_gb_max": 3.01, "gpu_memory_gb_mean": 0.16, "gpu_memory_gb_max": 0.52}, "gpu": {"utilization_mean": 25.3, "utilization_max": 62, "memory_used_gb_mean": 0.16, "memory_used_gb_max": 0.52, "memory_percent_mean": 1.5, "memory_percent_max": 4.7, "temperature_c_mean": 36.9, "temperature_c_max": 42, "power_w_mean": 101.2, "power_w_max": 212.8}, "energy_wh": 0.9361}}, "monitoring": {"sample_interval_s": 0.5, "total_samples": 144, "psutil_available": true, "nvml_available": true}}, "trajectories": {}, "estimated_trajectories": {}};
+        const data = {"datasets": ["unknown"], "datasets_with_trajectories": [], "pose": {"all": [], "aggregated": {}, "by_dataset": {}}, "depth": {"all": [], "aggregated": {}, "by_dataset": {}}, "gs": {"all": [], "aggregated": {}, "by_dataset": {}}, "pipeline": [{"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 15.954602254430347, "ssim": 0.5673856616020203, "total_time": 4.883034706115723, "fps": 20.479068042411352, "num_gaussians": 51565, "lpips": 0.6470023632049561, "pose_ate": 0.0, "depth_abs_rel": 0.0}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 13.187098129424783, "ssim": 0.499391108751297, "total_time": 4.444911003112793, "fps": 22.497638294663158, "num_gaussians": 52800, "lpips": 0.7741649985313416, "pose_ate": 0.0, "depth_abs_rel": 0.6065386533737183}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 7.266729843203111, "ssim": 0.2461257867515087, "total_time": 2.925203323364258, "fps": 34.18565786565244, "num_gaussians": 51565, "lpips": 0.8482006311416626, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.0}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 11.483421893558155, "ssim": 0.49055716395378113, "total_time": 3.11181640625, "fps": 32.135571944139336, "num_gaussians": 52800, "lpips": 0.7769685029983521, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.6065386533737183}, {"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 14.79375171606334, "ssim": 0.5469256401062011, "total_time": 4.107134580612183, "fps": 24.34787515170605, "num_gaussians": 51493, "lpips": 0.6824738144874573, "pose_ate": 0.0, "depth_abs_rel": 0.0}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 11.893190449811106, "ssim": 0.4733705997467041, "total_time": 3.968888521194458, "fps": 25.195970979276705, "num_gaussians": 52800, "lpips": 0.8220115065574646, "pose_ate": 0.0, "depth_abs_rel": 0.5415474772453308}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 8.464070689965734, "ssim": 0.3673834815621376, "total_time": 2.8846957683563232, "fps": 34.66570065965022, "num_gaussians": 51493, "lpips": 0.8226158142089843, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.0}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 9.074312262615512, "ssim": 0.3356554456055164, "total_time": 2.684922218322754, "fps": 37.24502680843733, "num_gaussians": 52800, "lpips": 0.8288498520851135, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.5415474772453308}], "hardware": {"overall": {"duration_seconds": 76.86, "num_samples": 144, "cpu": {"system_percent_mean": 44.7, "system_percent_max": 87.6}, "ram": {"system_used_gb_mean": 27.93, "system_used_gb_max": 28.81, "system_percent_mean": 43.7}, "process": {"cpu_percent_mean": 311.7, "cpu_percent_max": 777.0, "ram_gb_mean": 2.32, "ram_gb_max": 3.28, "gpu_memory_gb_mean": 0.15, "gpu_memory_gb_max": 0.6}, "gpu": {"utilization_mean": 24.9, "utilization_max": 65, "memory_used_gb_mean": 0.15, "memory_used_gb_max": 0.6, "memory_percent_mean": 1.4, "memory_percent_max": 5.4, "temperature_c_mean": 36.0, "temperature_c_max": 42, "power_w_mean": 99.4, "power_w_max": 212.8}, "energy_wh": 2.1226}, "phases": {"pipeline_rgbd_dataset_freiburg1_desk": {"duration_seconds": 42.38, "num_samples": 80, "cpu": {"system_percent_mean": 44.5, "system_percent_max": 87.6}, "ram": {"system_used_gb_mean": 27.66, "system_used_gb_max": 28.81, "system_percent_mean": 43.3}, "process": {"cpu_percent_mean": 294.5, "cpu_percent_max": 738.6, "ram_gb_mean": 2.08, "ram_gb_max": 3.28, "gpu_memory_gb_mean": 0.14, "gpu_memory_gb_max": 0.6}, "gpu": {"utilization_mean": 24.7, "utilization_max": 65, "memory_used_gb_mean": 0.14, "memory_used_gb_max": 0.6, "memory_percent_mean": 1.3, "memory_percent_max": 5.4, "temperature_c_mean": 35.4, "temperature_c_max": 41, "power_w_mean": 98.7, "power_w_max": 205.9}, "energy_wh": 1.162}, "pipeline_rgbd_dataset_freiburg1_desk2": {"duration_seconds": 33.31, "num_samples": 63, "cpu": {"system_percent_mean": 45.6, "system_percent_max": 78.9}, "ram": {"system_used_gb_mean": 28.31, "system_used_gb_max": 28.74, "system_percent_mean": 44.3}, "process": {"cpu_percent_mean": 338.5, "cpu_percent_max": 777.0, "ram_gb_mean": 2.65, "ram_gb_max": 3.01, "gpu_memory_gb_mean": 0.16, "gpu_memory_gb_max": 0.52}, "gpu": {"utilization_mean": 25.3, "utilization_max": 62, "memory_used_gb_mean": 0.16, "memory_used_gb_max": 0.52, "memory_percent_mean": 1.5, "memory_percent_max": 4.7, "temperature_c_mean": 36.9, "temperature_c_max": 42, "power_w_mean": 101.2, "power_w_max": 212.8}, "energy_wh": 0.9361}}, "monitoring": {"sample_interval_s": 0.5, "total_samples": 144, "psutil_available": true, "nvml_available": true}}, "trajectories": {}, "estimated_trajectories": {}, "has_pose": false, "has_depth": false, "has_gs": false, "has_pipeline": true, "has_trajectory": false};
         
         // Chart instances
         const charts = {};
@@ -1123,50 +1092,59 @@
         
         // Overview Charts
         function initOverviewCharts() {
-            // Pose ATE
+            // Pose ATE - only if we have pose data
             const poseAgg = getAggregatedData(data.pose.all, 'method');
             const poseMethods = Object.keys(poseAgg);
             const poseATE = poseMethods.map(m => mean(poseAgg[m].map(r => r.ate_rmse || 0)));
             
-            if (charts.overviewPose) charts.overviewPose.destroy();
-            charts.overviewPose = new Chart(document.getElementById('overviewPoseChart'), {
-                type: 'bar',
-                data: {
-                    labels: poseMethods,
-                    datasets: [{ label: 'ATE RMSE', data: poseATE, backgroundColor: colors, borderRadius: 6 }]
-                },
-                options: getChartOptions('ATE RMSE (m)')
-            });
+            const poseChartEl = document.getElementById('overviewPoseChart');
+            if (poseChartEl && data.has_pose) {
+                if (charts.overviewPose) charts.overviewPose.destroy();
+                charts.overviewPose = new Chart(poseChartEl, {
+                    type: 'bar',
+                    data: {
+                        labels: poseMethods,
+                        datasets: [{ label: 'ATE RMSE', data: poseATE, backgroundColor: colors, borderRadius: 6 }]
+                    },
+                    options: getChartOptions('ATE RMSE (m)')
+                });
+            }
             
-            // Depth AbsRel
+            // Depth AbsRel - only if we have depth data
             const depthAgg = getAggregatedData(data.depth.all, 'method');
             const depthMethods = Object.keys(depthAgg);
             const depthAbsRel = depthMethods.map(m => mean(depthAgg[m].map(r => r.abs_rel || 0)));
             
-            if (charts.overviewDepth) charts.overviewDepth.destroy();
-            charts.overviewDepth = new Chart(document.getElementById('overviewDepthChart'), {
-                type: 'bar',
-                data: {
-                    labels: depthMethods,
-                    datasets: [{ label: 'AbsRel', data: depthAbsRel, backgroundColor: colors.slice(2), borderRadius: 6 }]
-                },
-                options: getChartOptions('Absolute Relative Error')
-            });
+            const depthChartEl = document.getElementById('overviewDepthChart');
+            if (depthChartEl && data.has_depth) {
+                if (charts.overviewDepth) charts.overviewDepth.destroy();
+                charts.overviewDepth = new Chart(depthChartEl, {
+                    type: 'bar',
+                    data: {
+                        labels: depthMethods,
+                        datasets: [{ label: 'AbsRel', data: depthAbsRel, backgroundColor: colors.slice(2), borderRadius: 6 }]
+                    },
+                    options: getChartOptions('Absolute Relative Error')
+                });
+            }
             
-            // GS PSNR
+            // GS PSNR - only if we have GS data
             const gsAgg = getAggregatedData(data.gs.all, 'engine');
             const gsEngines = Object.keys(gsAgg);
             const gsPSNR = gsEngines.map(e => mean(gsAgg[e].map(r => r.psnr || 0)));
             
-            if (charts.overviewGS) charts.overviewGS.destroy();
-            charts.overviewGS = new Chart(document.getElementById('overviewGSChart'), {
-                type: 'bar',
-                data: {
-                    labels: gsEngines,
-                    datasets: [{ label: 'PSNR', data: gsPSNR, backgroundColor: colors.slice(4), borderRadius: 6 }]
-                },
-                options: getChartOptions('PSNR (dB)')
-            });
+            const gsChartEl = document.getElementById('overviewGSChart');
+            if (gsChartEl && data.has_gs) {
+                if (charts.overviewGS) charts.overviewGS.destroy();
+                charts.overviewGS = new Chart(gsChartEl, {
+                    type: 'bar',
+                    data: {
+                        labels: gsEngines,
+                        datasets: [{ label: 'PSNR', data: gsPSNR, backgroundColor: colors.slice(4), borderRadius: 6 }]
+                    },
+                    options: getChartOptions('PSNR (dB)')
+                });
+            }
             
             // Speed comparison - show all methods FPS
             const allLabels = [];
@@ -1201,9 +1179,10 @@
                 }
             });
             
+            const speedChartEl = document.getElementById('overviewSpeedChart');
             if (charts.overviewSpeed) charts.overviewSpeed.destroy();
-            if (allFPS.length > 0) {
-                charts.overviewSpeed = new Chart(document.getElementById('overviewSpeedChart'), {
+            if (speedChartEl && allFPS.length > 0) {
+                charts.overviewSpeed = new Chart(speedChartEl, {
                     type: 'bar',
                     data: {
                         labels: allLabels,
@@ -1238,13 +1217,6 @@
                         }
                     }
                 });
-            } else {
-                // No FPS data - show message
-                const ctx = document.getElementById('overviewSpeedChart').getContext('2d');
-                ctx.fillStyle = '#64748b';
-                ctx.font = '14px Inter';
-                ctx.textAlign = 'center';
-                ctx.fillText('No FPS data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
             }
         }
         
@@ -1706,10 +1678,28 @@
         function initTrajectoryPage() {
             const poses = data.pose.all;
             const datasetsWithTraj = data.datasets_with_trajectories || [];
+            const estimatedTrajs = data.estimated_trajectories || {};
             
-            if (!poses.length || !datasetsWithTraj.length) {
+            // Check if we have any trajectory data (GT or estimated)
+            const hasAnyTrajectoryData = datasetsWithTraj.length > 0 || Object.keys(estimatedTrajs).length > 0;
+            
+            if (!poses.length) {
                 document.getElementById('trajectoryPlot').innerHTML = 
-                    '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available</p></div>';
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>No pose estimation results available</p></div>';
+                return;
+            }
+            
+            if (!hasAnyTrajectoryData) {
+                // We have pose metrics but no actual trajectory data
+                document.getElementById('trajectoryPlot').innerHTML = 
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>Trajectory visualization requires ground truth files or cached pose data.<br><br>To enable this feature:<br>• Place TUM datasets in <code>datasets/tum/</code><br>• Or run benchmarks with trajectory caching enabled</p></div>';
+                
+                // Still show some useful stats
+                const methods = [...new Set(poses.map(p => p.method))];
+                const datasets = [...new Set(poses.map(p => p.dataset))];
+                document.getElementById('trajFrames').textContent = poses.reduce((sum, p) => sum + (p.num_frames || 0), 0);
+                document.getElementById('trajATE').textContent = Math.min(...poses.map(p => p.ate_rmse || Infinity)).toFixed(4);
+                document.getElementById('trajMethods').textContent = methods.length;
                 return;
             }
             

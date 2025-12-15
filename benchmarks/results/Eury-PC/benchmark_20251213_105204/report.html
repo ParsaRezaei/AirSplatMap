@@ -574,7 +574,7 @@
     <nav class="sidebar">
         <div class="sidebar-header">
             <h1>🚀 <span>AirSplatMap</span></h1>
-            <p>Benchmark Report • 2025-12-13 16:30</p>
+            <p>Benchmark Report • 2025-12-14 22:02</p>
         </div>
         
         <div class="nav-section">
@@ -585,33 +585,33 @@
             </div>
         </div>
         
-        <div class="nav-section">
+        <div class="nav-section" id="nav-benchmarks" style="display: none;">
             <div class="nav-section-title">Benchmarks</div>
-            <div class="nav-item" onclick="showPage('pose')">
+            <div class="nav-item" onclick="showPage('pose')" id="nav-pose" style="display: none;">
                 <span class="icon">📍</span>
                 <span>Pose Estimation</span>
             </div>
-            <div class="nav-item" onclick="showPage('depth')">
+            <div class="nav-item" onclick="showPage('depth')" id="nav-depth" style="display: none;">
                 <span class="icon">📏</span>
                 <span>Depth Estimation</span>
             </div>
-            <div class="nav-item" onclick="showPage('gs')">
+            <div class="nav-item" onclick="showPage('gs')" id="nav-gs" style="display: none;">
                 <span class="icon">✨</span>
                 <span>Gaussian Splatting</span>
             </div>
         </div>
         
-        <div class="nav-section">
+        <div class="nav-section" id="nav-analysis" style="display: block;">
             <div class="nav-section-title">Analysis</div>
-            <div class="nav-item" onclick="showPage('pipeline')">
+            <div class="nav-item" onclick="showPage('pipeline')" id="nav-pipeline" style="display: block;">
                 <span class="icon">🔗</span>
                 <span>Pipeline Results</span>
             </div>
-            <div class="nav-item" onclick="showPage('comparison')">
+            <div class="nav-item" onclick="showPage('comparison')" id="nav-comparison" style="display: none;">
                 <span class="icon">⚖️</span>
                 <span>Method Comparison</span>
             </div>
-            <div class="nav-item" onclick="showPage('trajectory')">
+            <div class="nav-item" onclick="showPage('trajectory')" id="nav-trajectory" style="display: none;">
                 <span class="icon">🗺️</span>
                 <span>3D Trajectories</span>
             </div>
@@ -628,52 +628,21 @@
             </p>
             
             <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value">0</div>
-                    <div class="stat-label">Pose Tests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">0</div>
-                    <div class="stat-label">Depth Tests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">0</div>
-                    <div class="stat-label">GS Tests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">0.6GB</div>
-                    <div class="stat-label">Peak GPU Memory</div>
-                </div>
+                
+                
+                
+                <div class="stat-card"><div class="stat-value">24</div><div class="stat-label">Pipeline Tests</div></div>
+                <div class="stat-card"><div class="stat-value">0.6GB</div><div class="stat-label">Peak GPU Memory</div></div>
             </div>
             
             <div class="chart-grid">
-                <div class="chart-container">
-                    <div class="chart-title">Pose Estimation Accuracy (ATE RMSE)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewPoseChart"></canvas>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <div class="chart-title">Depth Estimation Accuracy (AbsRel)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewDepthChart"></canvas>
-                    </div>
-                </div>
+                
+                
             </div>
             
             <div class="chart-grid">
-                <div class="chart-container">
-                    <div class="chart-title">Gaussian Splatting Quality (PSNR)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewGSChart"></canvas>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <div class="chart-title">Processing Speed (FPS)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewSpeedChart"></canvas>
-                    </div>
-                </div>
+                
+                
             </div>
         </div>
         
@@ -998,7 +967,7 @@
                 <div class="filter-group">
                     <div class="filter-label">Dataset</div>
                     <select id="trajDatasetFilter" onchange="updateTrajectoryPlot()">
-                        <option value="">No trajectory data available</option>
+                        <option value="">No pose data available</option>
                     </select>
                 </div>
                 <div class="filter-group">
@@ -1051,7 +1020,7 @@
     
     <script>
         // Data
-        const data = {"datasets": ["unknown"], "datasets_with_trajectories": [], "pose": {"all": [], "aggregated": {}, "by_dataset": {}}, "depth": {"all": [], "aggregated": {}, "by_dataset": {}}, "gs": {"all": [], "aggregated": {}, "by_dataset": {}}, "pipeline": [{"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 15.83378353977007, "ssim": 0.5641169846057892, "total_time": 4.751983165740967, "fps": 21.043845592918302, "num_gaussians": 51565, "lpips": 0.6509059071540833, "pose_ate": 0.0, "depth_abs_rel": 0.0}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 13.270389388716719, "ssim": 0.4975753903388977, "total_time": 4.50249981880188, "fps": 22.209884291924325, "num_gaussians": 52800, "lpips": 0.7779209017753601, "pose_ate": 0.0, "depth_abs_rel": 0.6065386533737183}, {"name": "GT_pose_depth_pro_depth", "pose_source": "gt", "depth_source": "depth_pro", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 11.264898397859772, "ssim": 0.4718837559223175, "total_time": 4.721353769302368, "fps": 21.180365820114364, "num_gaussians": 67200, "lpips": 0.8022585034370422, "pose_ate": 0.0, "depth_abs_rel": 1.0829834938049316}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 6.949494535825305, "ssim": 0.23719179406762123, "total_time": 2.807736396789551, "fps": 35.615879081221074, "num_gaussians": 51565, "lpips": 0.8591258525848389, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.0}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 10.8789123816927, "ssim": 0.48249284029006956, "total_time": 3.0629940032958984, "fps": 32.647794900152, "num_gaussians": 52800, "lpips": 0.8076990723609925, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.6065386533737183}, {"name": "orb_pose_depth_pro_depth", "pose_source": "orb", "depth_source": "depth_pro", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 9.321494637977679, "ssim": 0.35797023586928844, "total_time": 2.6975667476654053, "fps": 37.07044509150495, "num_gaussians": 67200, "lpips": 0.7809593081474304, "pose_ate": 0.45737472689509984, "depth_abs_rel": 1.0829834938049316}, {"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 4.067889721439294, "ssim": 0.018480406468734147, "total_time": 1.9231603145599365, "fps": 51.99774519207584, "num_gaussians": 83775, "lpips": 0.9697783708572387, "pose_ate": 0.0, "depth_abs_rel": 0.0, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 4.067889721439294, "ssim": 0.018480406468734147, "total_time": 1.065267562866211, "fps": 93.87312961162527, "num_gaussians": 94692, "lpips": 0.9697783708572387, "pose_ate": 0.0, "depth_abs_rel": 0.6065386533737183, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "GT_pose_depth_pro_depth", "pose_source": "gt", "depth_source": "depth_pro", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 4.067889721439294, "ssim": 0.018480406468734147, "total_time": 1.0149714946746826, "fps": 98.52493446828463, "num_gaussians": 110400, "lpips": 0.9697783708572387, "pose_ate": 0.0, "depth_abs_rel": 1.0829834938049316, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 4.067889721439294, "ssim": 0.018480406468734147, "total_time": 1.0028166770935059, "fps": 99.71912342925233, "num_gaussians": 83775, "lpips": 0.9697783708572387, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.0, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 4.067889721439294, "ssim": 0.018480406468734147, "total_time": 1.0385394096374512, "fps": 96.28907586175231, "num_gaussians": 94692, "lpips": 0.9697783708572387, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.6065386533737183, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "orb_pose_depth_pro_depth", "pose_source": "orb", "depth_source": "depth_pro", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 4.067889721439294, "ssim": 0.018480406468734147, "total_time": 1.2186453342437744, "fps": 82.05832918734687, "num_gaussians": 110400, "lpips": 0.9697783708572387, "pose_ate": 0.45737472689509984, "depth_abs_rel": 1.0829834938049316, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 14.630345055712644, "ssim": 0.5428389847278595, "total_time": 4.065688133239746, "fps": 24.59608231689796, "num_gaussians": 51493, "lpips": 0.6940085530281067, "pose_ate": 0.0, "depth_abs_rel": 0.0}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 11.967563516923429, "ssim": 0.4725518345832825, "total_time": 4.051493167877197, "fps": 24.682258085207526, "num_gaussians": 52800, "lpips": 0.818238639831543, "pose_ate": 0.0, "depth_abs_rel": 0.5415474772453308}, {"name": "GT_pose_depth_pro_depth", "pose_source": "gt", "depth_source": "depth_pro", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 10.925041869834862, "ssim": 0.45393184423446653, "total_time": 4.169356346130371, "fps": 23.98451744063833, "num_gaussians": 67200, "lpips": 0.8084841847419739, "pose_ate": 0.0, "depth_abs_rel": 0.8997707962989807}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 8.463187983673597, "ssim": 0.36703469306230546, "total_time": 2.884092092514038, "fps": 34.672956615900176, "num_gaussians": 51493, "lpips": 0.8245388031005859, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.0}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 9.600943728888005, "ssim": 0.34108454883098605, "total_time": 2.6841232776641846, "fps": 37.256112948367786, "num_gaussians": 52800, "lpips": 0.8144859552383423, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.5415474772453308}, {"name": "orb_pose_depth_pro_depth", "pose_source": "orb", "depth_source": "depth_pro", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 8.76747388618002, "ssim": 0.3302405130118132, "total_time": 2.648824453353882, "fps": 37.752596202961755, "num_gaussians": 67200, "lpips": 0.8110663175582886, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.8997707962989807}, {"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 4.049658115050318, "ssim": 0.02551260683685541, "total_time": 1.2220475673675537, "fps": 81.82987526043094, "num_gaussians": 83858, "lpips": 0.9785478591918946, "pose_ate": 0.0, "depth_abs_rel": 0.0, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 4.049658115050318, "ssim": 0.02551260683685541, "total_time": 0.8975162506103516, "fps": 111.4185954092703, "num_gaussians": 78368, "lpips": 0.9785478591918946, "pose_ate": 0.0, "depth_abs_rel": 0.5415474772453308, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "GT_pose_depth_pro_depth", "pose_source": "gt", "depth_source": "depth_pro", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 4.049658115050318, "ssim": 0.02551260683685541, "total_time": 1.0285332202911377, "fps": 97.22583386435869, "num_gaussians": 110400, "lpips": 0.9785478591918946, "pose_ate": 0.0, "depth_abs_rel": 0.8997707962989807, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 4.049658115050318, "ssim": 0.02551260683685541, "total_time": 1.0626246929168701, "fps": 94.10660289241281, "num_gaussians": 83858, "lpips": 0.9785478591918946, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.0, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 4.049658115050318, "ssim": 0.02551260683685541, "total_time": 0.9730141162872314, "fps": 102.77343188151676, "num_gaussians": 78368, "lpips": 0.9785478591918946, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.5415474772453308, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "orb_pose_depth_pro_depth", "pose_source": "orb", "depth_source": "depth_pro", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 4.049658115050318, "ssim": 0.02551260683685541, "total_time": 1.0298523902893066, "fps": 97.1012942659753, "num_gaussians": 110400, "lpips": 0.9785478591918946, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.8997707962989807, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}], "hardware": {"overall": {"duration_seconds": 157.96, "num_samples": 285, "cpu": {"system_percent_mean": 50.6, "system_percent_max": 100.0}, "ram": {"system_used_gb_mean": 28.99, "system_used_gb_max": 29.94, "system_percent_mean": 45.4}, "process": {"cpu_percent_mean": 384.2, "cpu_percent_max": 1374.2, "ram_gb_mean": 2.58, "ram_gb_max": 3.45, "gpu_memory_gb_mean": 0.16, "gpu_memory_gb_max": 0.58}, "gpu": {"utilization_mean": 20.0, "utilization_max": 68, "memory_used_gb_mean": 0.16, "memory_used_gb_max": 0.58, "memory_percent_mean": 1.4, "memory_percent_max": 5.3, "temperature_c_mean": 37.2, "temperature_c_max": 44, "power_w_mean": 91.4, "power_w_max": 217.5}, "energy_wh": 4.0099}, "phases": {"pipeline_rgbd_dataset_freiburg1_desk": {"duration_seconds": 82.75, "num_samples": 150, "cpu": {"system_percent_mean": 50.4, "system_percent_max": 100.0}, "ram": {"system_used_gb_mean": 28.71, "system_used_gb_max": 29.94, "system_percent_mean": 44.9}, "process": {"cpu_percent_mean": 368.4, "cpu_percent_max": 1213.6, "ram_gb_mean": 2.4, "ram_gb_max": 3.45, "gpu_memory_gb_mean": 0.15, "gpu_memory_gb_max": 0.58}, "gpu": {"utilization_mean": 19.7, "utilization_max": 68, "memory_used_gb_mean": 0.15, "memory_used_gb_max": 0.58, "memory_percent_mean": 1.4, "memory_percent_max": 5.3, "temperature_c_mean": 36.8, "temperature_c_max": 44, "power_w_mean": 91.7, "power_w_max": 211.3}, "energy_wh": 2.1075}, "pipeline_rgbd_dataset_freiburg1_desk2": {"duration_seconds": 74.15, "num_samples": 134, "cpu": {"system_percent_mean": 51.1, "system_percent_max": 100.0}, "ram": {"system_used_gb_mean": 29.3, "system_used_gb_max": 29.78, "system_percent_mean": 45.9}, "process": {"cpu_percent_mean": 404.6, "cpu_percent_max": 1374.2, "ram_gb_mean": 2.8, "ram_gb_max": 3.24, "gpu_memory_gb_mean": 0.16, "gpu_memory_gb_max": 0.56}, "gpu": {"utilization_mean": 20.4, "utilization_max": 60, "memory_used_gb_mean": 0.16, "memory_used_gb_max": 0.56, "memory_percent_mean": 1.5, "memory_percent_max": 5.1, "temperature_c_mean": 37.7, "temperature_c_max": 44, "power_w_mean": 91.4, "power_w_max": 217.5}, "energy_wh": 1.8823}}, "monitoring": {"sample_interval_s": 0.5, "total_samples": 285, "psutil_available": true, "nvml_available": true}}, "trajectories": {}, "estimated_trajectories": {}};
+        const data = {"datasets": ["unknown"], "datasets_with_trajectories": [], "pose": {"all": [], "aggregated": {}, "by_dataset": {}}, "depth": {"all": [], "aggregated": {}, "by_dataset": {}}, "gs": {"all": [], "aggregated": {}, "by_dataset": {}}, "pipeline": [{"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 15.83378353977007, "ssim": 0.5641169846057892, "total_time": 4.751983165740967, "fps": 21.043845592918302, "num_gaussians": 51565, "lpips": 0.6509059071540833, "pose_ate": 0.0, "depth_abs_rel": 0.0}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 13.270389388716719, "ssim": 0.4975753903388977, "total_time": 4.50249981880188, "fps": 22.209884291924325, "num_gaussians": 52800, "lpips": 0.7779209017753601, "pose_ate": 0.0, "depth_abs_rel": 0.6065386533737183}, {"name": "GT_pose_depth_pro_depth", "pose_source": "gt", "depth_source": "depth_pro", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 11.264898397859772, "ssim": 0.4718837559223175, "total_time": 4.721353769302368, "fps": 21.180365820114364, "num_gaussians": 67200, "lpips": 0.8022585034370422, "pose_ate": 0.0, "depth_abs_rel": 1.0829834938049316}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 6.949494535825305, "ssim": 0.23719179406762123, "total_time": 2.807736396789551, "fps": 35.615879081221074, "num_gaussians": 51565, "lpips": 0.8591258525848389, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.0}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 10.8789123816927, "ssim": 0.48249284029006956, "total_time": 3.0629940032958984, "fps": 32.647794900152, "num_gaussians": 52800, "lpips": 0.8076990723609925, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.6065386533737183}, {"name": "orb_pose_depth_pro_depth", "pose_source": "orb", "depth_source": "depth_pro", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 9.321494637977679, "ssim": 0.35797023586928844, "total_time": 2.6975667476654053, "fps": 37.07044509150495, "num_gaussians": 67200, "lpips": 0.7809593081474304, "pose_ate": 0.45737472689509984, "depth_abs_rel": 1.0829834938049316}, {"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 4.067889721439294, "ssim": 0.018480406468734147, "total_time": 1.9231603145599365, "fps": 51.99774519207584, "num_gaussians": 83775, "lpips": 0.9697783708572387, "pose_ate": 0.0, "depth_abs_rel": 0.0, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 4.067889721439294, "ssim": 0.018480406468734147, "total_time": 1.065267562866211, "fps": 93.87312961162527, "num_gaussians": 94692, "lpips": 0.9697783708572387, "pose_ate": 0.0, "depth_abs_rel": 0.6065386533737183, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "GT_pose_depth_pro_depth", "pose_source": "gt", "depth_source": "depth_pro", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 4.067889721439294, "ssim": 0.018480406468734147, "total_time": 1.0149714946746826, "fps": 98.52493446828463, "num_gaussians": 110400, "lpips": 0.9697783708572387, "pose_ate": 0.0, "depth_abs_rel": 1.0829834938049316, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 4.067889721439294, "ssim": 0.018480406468734147, "total_time": 1.0028166770935059, "fps": 99.71912342925233, "num_gaussians": 83775, "lpips": 0.9697783708572387, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.0, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 4.067889721439294, "ssim": 0.018480406468734147, "total_time": 1.0385394096374512, "fps": 96.28907586175231, "num_gaussians": 94692, "lpips": 0.9697783708572387, "pose_ate": 0.45737472689509984, "depth_abs_rel": 0.6065386533737183, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "orb_pose_depth_pro_depth", "pose_source": "orb", "depth_source": "depth_pro", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk", "psnr": 4.067889721439294, "ssim": 0.018480406468734147, "total_time": 1.2186453342437744, "fps": 82.05832918734687, "num_gaussians": 110400, "lpips": 0.9697783708572387, "pose_ate": 0.45737472689509984, "depth_abs_rel": 1.0829834938049316, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 14.630345055712644, "ssim": 0.5428389847278595, "total_time": 4.065688133239746, "fps": 24.59608231689796, "num_gaussians": 51493, "lpips": 0.6940085530281067, "pose_ate": 0.0, "depth_abs_rel": 0.0}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 11.967563516923429, "ssim": 0.4725518345832825, "total_time": 4.051493167877197, "fps": 24.682258085207526, "num_gaussians": 52800, "lpips": 0.818238639831543, "pose_ate": 0.0, "depth_abs_rel": 0.5415474772453308}, {"name": "GT_pose_depth_pro_depth", "pose_source": "gt", "depth_source": "depth_pro", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 10.925041869834862, "ssim": 0.45393184423446653, "total_time": 4.169356346130371, "fps": 23.98451744063833, "num_gaussians": 67200, "lpips": 0.8084841847419739, "pose_ate": 0.0, "depth_abs_rel": 0.8997707962989807}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 8.463187983673597, "ssim": 0.36703469306230546, "total_time": 2.884092092514038, "fps": 34.672956615900176, "num_gaussians": 51493, "lpips": 0.8245388031005859, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.0}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 9.600943728888005, "ssim": 0.34108454883098605, "total_time": 2.6841232776641846, "fps": 37.256112948367786, "num_gaussians": 52800, "lpips": 0.8144859552383423, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.5415474772453308}, {"name": "orb_pose_depth_pro_depth", "pose_source": "orb", "depth_source": "depth_pro", "gs_engine": "graphdeco", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 8.76747388618002, "ssim": 0.3302405130118132, "total_time": 2.648824453353882, "fps": 37.752596202961755, "num_gaussians": 67200, "lpips": 0.8110663175582886, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.8997707962989807}, {"name": "GT_pose_GT_depth", "pose_source": "gt", "depth_source": "gt", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 4.049658115050318, "ssim": 0.02551260683685541, "total_time": 1.2220475673675537, "fps": 81.82987526043094, "num_gaussians": 83858, "lpips": 0.9785478591918946, "pose_ate": 0.0, "depth_abs_rel": 0.0, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "GT_pose_midas_depth", "pose_source": "gt", "depth_source": "midas", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 4.049658115050318, "ssim": 0.02551260683685541, "total_time": 0.8975162506103516, "fps": 111.4185954092703, "num_gaussians": 78368, "lpips": 0.9785478591918946, "pose_ate": 0.0, "depth_abs_rel": 0.5415474772453308, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "GT_pose_depth_pro_depth", "pose_source": "gt", "depth_source": "depth_pro", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 4.049658115050318, "ssim": 0.02551260683685541, "total_time": 1.0285332202911377, "fps": 97.22583386435869, "num_gaussians": 110400, "lpips": 0.9785478591918946, "pose_ate": 0.0, "depth_abs_rel": 0.8997707962989807, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "orb_pose_GT_depth", "pose_source": "orb", "depth_source": "gt", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 4.049658115050318, "ssim": 0.02551260683685541, "total_time": 1.0626246929168701, "fps": 94.10660289241281, "num_gaussians": 83858, "lpips": 0.9785478591918946, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.0, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "orb_pose_midas_depth", "pose_source": "orb", "depth_source": "midas", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 4.049658115050318, "ssim": 0.02551260683685541, "total_time": 0.9730141162872314, "fps": 102.77343188151676, "num_gaussians": 78368, "lpips": 0.9785478591918946, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.5415474772453308, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}, {"name": "orb_pose_depth_pro_depth", "pose_source": "orb", "depth_source": "depth_pro", "gs_engine": "gsplat", "dataset": "rgbd_dataset_freiburg1_desk2", "psnr": 4.049658115050318, "ssim": 0.02551260683685541, "total_time": 1.0298523902893066, "fps": 97.1012942659753, "num_gaussians": 110400, "lpips": 0.9785478591918946, "pose_ate": 0.907928000455817, "depth_abs_rel": 0.8997707962989807, "note": "FALLBACK: gsplat CUDA toolkit not found - results invalid"}], "hardware": {"overall": {"duration_seconds": 157.96, "num_samples": 285, "cpu": {"system_percent_mean": 50.6, "system_percent_max": 100.0}, "ram": {"system_used_gb_mean": 28.99, "system_used_gb_max": 29.94, "system_percent_mean": 45.4}, "process": {"cpu_percent_mean": 384.2, "cpu_percent_max": 1374.2, "ram_gb_mean": 2.58, "ram_gb_max": 3.45, "gpu_memory_gb_mean": 0.16, "gpu_memory_gb_max": 0.58}, "gpu": {"utilization_mean": 20.0, "utilization_max": 68, "memory_used_gb_mean": 0.16, "memory_used_gb_max": 0.58, "memory_percent_mean": 1.4, "memory_percent_max": 5.3, "temperature_c_mean": 37.2, "temperature_c_max": 44, "power_w_mean": 91.4, "power_w_max": 217.5}, "energy_wh": 4.0099}, "phases": {"pipeline_rgbd_dataset_freiburg1_desk": {"duration_seconds": 82.75, "num_samples": 150, "cpu": {"system_percent_mean": 50.4, "system_percent_max": 100.0}, "ram": {"system_used_gb_mean": 28.71, "system_used_gb_max": 29.94, "system_percent_mean": 44.9}, "process": {"cpu_percent_mean": 368.4, "cpu_percent_max": 1213.6, "ram_gb_mean": 2.4, "ram_gb_max": 3.45, "gpu_memory_gb_mean": 0.15, "gpu_memory_gb_max": 0.58}, "gpu": {"utilization_mean": 19.7, "utilization_max": 68, "memory_used_gb_mean": 0.15, "memory_used_gb_max": 0.58, "memory_percent_mean": 1.4, "memory_percent_max": 5.3, "temperature_c_mean": 36.8, "temperature_c_max": 44, "power_w_mean": 91.7, "power_w_max": 211.3}, "energy_wh": 2.1075}, "pipeline_rgbd_dataset_freiburg1_desk2": {"duration_seconds": 74.15, "num_samples": 134, "cpu": {"system_percent_mean": 51.1, "system_percent_max": 100.0}, "ram": {"system_used_gb_mean": 29.3, "system_used_gb_max": 29.78, "system_percent_mean": 45.9}, "process": {"cpu_percent_mean": 404.6, "cpu_percent_max": 1374.2, "ram_gb_mean": 2.8, "ram_gb_max": 3.24, "gpu_memory_gb_mean": 0.16, "gpu_memory_gb_max": 0.56}, "gpu": {"utilization_mean": 20.4, "utilization_max": 60, "memory_used_gb_mean": 0.16, "memory_used_gb_max": 0.56, "memory_percent_mean": 1.5, "memory_percent_max": 5.1, "temperature_c_mean": 37.7, "temperature_c_max": 44, "power_w_mean": 91.4, "power_w_max": 217.5}, "energy_wh": 1.8823}}, "monitoring": {"sample_interval_s": 0.5, "total_samples": 285, "psutil_available": true, "nvml_available": true}}, "trajectories": {}, "estimated_trajectories": {}, "has_pose": false, "has_depth": false, "has_gs": false, "has_pipeline": true, "has_trajectory": false};
         
         // Chart instances
         const charts = {};
@@ -1123,50 +1092,59 @@
         
         // Overview Charts
         function initOverviewCharts() {
-            // Pose ATE
+            // Pose ATE - only if we have pose data
             const poseAgg = getAggregatedData(data.pose.all, 'method');
             const poseMethods = Object.keys(poseAgg);
             const poseATE = poseMethods.map(m => mean(poseAgg[m].map(r => r.ate_rmse || 0)));
             
-            if (charts.overviewPose) charts.overviewPose.destroy();
-            charts.overviewPose = new Chart(document.getElementById('overviewPoseChart'), {
-                type: 'bar',
-                data: {
-                    labels: poseMethods,
-                    datasets: [{ label: 'ATE RMSE', data: poseATE, backgroundColor: colors, borderRadius: 6 }]
-                },
-                options: getChartOptions('ATE RMSE (m)')
-            });
+            const poseChartEl = document.getElementById('overviewPoseChart');
+            if (poseChartEl && data.has_pose) {
+                if (charts.overviewPose) charts.overviewPose.destroy();
+                charts.overviewPose = new Chart(poseChartEl, {
+                    type: 'bar',
+                    data: {
+                        labels: poseMethods,
+                        datasets: [{ label: 'ATE RMSE', data: poseATE, backgroundColor: colors, borderRadius: 6 }]
+                    },
+                    options: getChartOptions('ATE RMSE (m)')
+                });
+            }
             
-            // Depth AbsRel
+            // Depth AbsRel - only if we have depth data
             const depthAgg = getAggregatedData(data.depth.all, 'method');
             const depthMethods = Object.keys(depthAgg);
             const depthAbsRel = depthMethods.map(m => mean(depthAgg[m].map(r => r.abs_rel || 0)));
             
-            if (charts.overviewDepth) charts.overviewDepth.destroy();
-            charts.overviewDepth = new Chart(document.getElementById('overviewDepthChart'), {
-                type: 'bar',
-                data: {
-                    labels: depthMethods,
-                    datasets: [{ label: 'AbsRel', data: depthAbsRel, backgroundColor: colors.slice(2), borderRadius: 6 }]
-                },
-                options: getChartOptions('Absolute Relative Error')
-            });
+            const depthChartEl = document.getElementById('overviewDepthChart');
+            if (depthChartEl && data.has_depth) {
+                if (charts.overviewDepth) charts.overviewDepth.destroy();
+                charts.overviewDepth = new Chart(depthChartEl, {
+                    type: 'bar',
+                    data: {
+                        labels: depthMethods,
+                        datasets: [{ label: 'AbsRel', data: depthAbsRel, backgroundColor: colors.slice(2), borderRadius: 6 }]
+                    },
+                    options: getChartOptions('Absolute Relative Error')
+                });
+            }
             
-            // GS PSNR
+            // GS PSNR - only if we have GS data
             const gsAgg = getAggregatedData(data.gs.all, 'engine');
             const gsEngines = Object.keys(gsAgg);
             const gsPSNR = gsEngines.map(e => mean(gsAgg[e].map(r => r.psnr || 0)));
             
-            if (charts.overviewGS) charts.overviewGS.destroy();
-            charts.overviewGS = new Chart(document.getElementById('overviewGSChart'), {
-                type: 'bar',
-                data: {
-                    labels: gsEngines,
-                    datasets: [{ label: 'PSNR', data: gsPSNR, backgroundColor: colors.slice(4), borderRadius: 6 }]
-                },
-                options: getChartOptions('PSNR (dB)')
-            });
+            const gsChartEl = document.getElementById('overviewGSChart');
+            if (gsChartEl && data.has_gs) {
+                if (charts.overviewGS) charts.overviewGS.destroy();
+                charts.overviewGS = new Chart(gsChartEl, {
+                    type: 'bar',
+                    data: {
+                        labels: gsEngines,
+                        datasets: [{ label: 'PSNR', data: gsPSNR, backgroundColor: colors.slice(4), borderRadius: 6 }]
+                    },
+                    options: getChartOptions('PSNR (dB)')
+                });
+            }
             
             // Speed comparison - show all methods FPS
             const allLabels = [];
@@ -1201,9 +1179,10 @@
                 }
             });
             
+            const speedChartEl = document.getElementById('overviewSpeedChart');
             if (charts.overviewSpeed) charts.overviewSpeed.destroy();
-            if (allFPS.length > 0) {
-                charts.overviewSpeed = new Chart(document.getElementById('overviewSpeedChart'), {
+            if (speedChartEl && allFPS.length > 0) {
+                charts.overviewSpeed = new Chart(speedChartEl, {
                     type: 'bar',
                     data: {
                         labels: allLabels,
@@ -1238,13 +1217,6 @@
                         }
                     }
                 });
-            } else {
-                // No FPS data - show message
-                const ctx = document.getElementById('overviewSpeedChart').getContext('2d');
-                ctx.fillStyle = '#64748b';
-                ctx.font = '14px Inter';
-                ctx.textAlign = 'center';
-                ctx.fillText('No FPS data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
             }
         }
         
@@ -1706,10 +1678,28 @@
         function initTrajectoryPage() {
             const poses = data.pose.all;
             const datasetsWithTraj = data.datasets_with_trajectories || [];
+            const estimatedTrajs = data.estimated_trajectories || {};
             
-            if (!poses.length || !datasetsWithTraj.length) {
+            // Check if we have any trajectory data (GT or estimated)
+            const hasAnyTrajectoryData = datasetsWithTraj.length > 0 || Object.keys(estimatedTrajs).length > 0;
+            
+            if (!poses.length) {
                 document.getElementById('trajectoryPlot').innerHTML = 
-                    '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available</p></div>';
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>No pose estimation results available</p></div>';
+                return;
+            }
+            
+            if (!hasAnyTrajectoryData) {
+                // We have pose metrics but no actual trajectory data
+                document.getElementById('trajectoryPlot').innerHTML = 
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>Trajectory visualization requires ground truth files or cached pose data.<br><br>To enable this feature:<br>• Place TUM datasets in <code>datasets/tum/</code><br>• Or run benchmarks with trajectory caching enabled</p></div>';
+                
+                // Still show some useful stats
+                const methods = [...new Set(poses.map(p => p.method))];
+                const datasets = [...new Set(poses.map(p => p.dataset))];
+                document.getElementById('trajFrames').textContent = poses.reduce((sum, p) => sum + (p.num_frames || 0), 0);
+                document.getElementById('trajATE').textContent = Math.min(...poses.map(p => p.ate_rmse || Infinity)).toFixed(4);
+                document.getElementById('trajMethods').textContent = methods.length;
                 return;
             }
             

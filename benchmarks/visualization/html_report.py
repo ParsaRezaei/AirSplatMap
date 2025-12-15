@@ -317,6 +317,12 @@ def generate_html_report(
         'hardware': hardware_stats,
         'trajectories': trajectories,
         'estimated_trajectories': estimated_trajectories,  # NEW: actual estimated poses
+        # Flags for which sections have data
+        'has_pose': len(pose_results) > 0,
+        'has_depth': len(depth_results) > 0,
+        'has_gs': len(gs_results) > 0,
+        'has_pipeline': len(pipeline_results) > 0,
+        'has_trajectory': len(datasets_with_trajectories) > 0,
     }
     
     json_data = json.dumps(data, cls=NumpyEncoder)
@@ -330,6 +336,13 @@ def generate_html_report(
     # Validate - reject obviously bad values (overflow errors from pynvml)
     if gpu_mem_max > 100:  # No GPU has >100GB memory
         gpu_mem_max = 0
+    
+    # Determine which sections have data
+    has_pose_data = len(pose_results) > 0
+    has_depth_data = len(depth_results) > 0
+    has_gs_data = len(gs_results) > 0
+    has_pipeline_data = len(pipeline_results) > 0
+    has_trajectory_data = len(datasets_with_trajectories) > 0
     
     # Generate HTML
     html = f'''<!DOCTYPE html>
@@ -919,33 +932,33 @@ def generate_html_report(
             </div>
         </div>
         
-        <div class="nav-section">
+        <div class="nav-section" id="nav-benchmarks" style="display: {'block' if (has_pose_data or has_depth_data or has_gs_data) else 'none'};">
             <div class="nav-section-title">Benchmarks</div>
-            <div class="nav-item" onclick="showPage('pose')">
+            <div class="nav-item" onclick="showPage('pose')" id="nav-pose" style="display: {'block' if has_pose_data else 'none'};">
                 <span class="icon">📍</span>
                 <span>Pose Estimation</span>
             </div>
-            <div class="nav-item" onclick="showPage('depth')">
+            <div class="nav-item" onclick="showPage('depth')" id="nav-depth" style="display: {'block' if has_depth_data else 'none'};">
                 <span class="icon">📏</span>
                 <span>Depth Estimation</span>
             </div>
-            <div class="nav-item" onclick="showPage('gs')">
+            <div class="nav-item" onclick="showPage('gs')" id="nav-gs" style="display: {'block' if has_gs_data else 'none'};">
                 <span class="icon">✨</span>
                 <span>Gaussian Splatting</span>
             </div>
         </div>
         
-        <div class="nav-section">
+        <div class="nav-section" id="nav-analysis" style="display: {'block' if (has_pipeline_data or has_pose_data) else 'none'};">
             <div class="nav-section-title">Analysis</div>
-            <div class="nav-item" onclick="showPage('pipeline')">
+            <div class="nav-item" onclick="showPage('pipeline')" id="nav-pipeline" style="display: {'block' if has_pipeline_data else 'none'};">
                 <span class="icon">🔗</span>
                 <span>Pipeline Results</span>
             </div>
-            <div class="nav-item" onclick="showPage('comparison')">
+            <div class="nav-item" onclick="showPage('comparison')" id="nav-comparison" style="display: {'block' if (has_pose_data or has_depth_data or has_gs_data) else 'none'};">
                 <span class="icon">⚖️</span>
                 <span>Method Comparison</span>
             </div>
-            <div class="nav-item" onclick="showPage('trajectory')">
+            <div class="nav-item" onclick="showPage('trajectory')" id="nav-trajectory" style="display: {'block' if has_pose_data else 'none'};">
                 <span class="icon">🗺️</span>
                 <span>3D Trajectories</span>
             </div>
@@ -962,52 +975,21 @@ def generate_html_report(
             </p>
             
             <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value">{len(pose_results)}</div>
-                    <div class="stat-label">Pose Tests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{len(depth_results)}</div>
-                    <div class="stat-label">Depth Tests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{len(gs_results)}</div>
-                    <div class="stat-label">GS Tests</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">{gpu_mem_max:.1f}GB</div>
-                    <div class="stat-label">Peak GPU Memory</div>
-                </div>
+                {'<div class="stat-card"><div class="stat-value">' + str(len(pose_results)) + '</div><div class="stat-label">Pose Tests</div></div>' if has_pose_data else ''}
+                {'<div class="stat-card"><div class="stat-value">' + str(len(depth_results)) + '</div><div class="stat-label">Depth Tests</div></div>' if has_depth_data else ''}
+                {'<div class="stat-card"><div class="stat-value">' + str(len(gs_results)) + '</div><div class="stat-label">GS Tests</div></div>' if has_gs_data else ''}
+                {'<div class="stat-card"><div class="stat-value">' + str(len(pipeline_results)) + '</div><div class="stat-label">Pipeline Tests</div></div>' if has_pipeline_data else ''}
+                {'<div class="stat-card"><div class="stat-value">' + f"{gpu_mem_max:.1f}" + 'GB</div><div class="stat-label">Peak GPU Memory</div></div>' if gpu_mem_max > 0 else ''}
             </div>
             
             <div class="chart-grid">
-                <div class="chart-container">
-                    <div class="chart-title">Pose Estimation Accuracy (ATE RMSE)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewPoseChart"></canvas>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <div class="chart-title">Depth Estimation Accuracy (AbsRel)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewDepthChart"></canvas>
-                    </div>
-                </div>
+                {'<div class="chart-container"><div class="chart-title">Pose Estimation Accuracy (ATE RMSE)</div><div class="chart-wrapper"><canvas id="overviewPoseChart"></canvas></div></div>' if has_pose_data else ''}
+                {'<div class="chart-container"><div class="chart-title">Depth Estimation Accuracy (AbsRel)</div><div class="chart-wrapper"><canvas id="overviewDepthChart"></canvas></div></div>' if has_depth_data else ''}
             </div>
             
             <div class="chart-grid">
-                <div class="chart-container">
-                    <div class="chart-title">Gaussian Splatting Quality (PSNR)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewGSChart"></canvas>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <div class="chart-title">Processing Speed (FPS)</div>
-                    <div class="chart-wrapper">
-                        <canvas id="overviewSpeedChart"></canvas>
-                    </div>
-                </div>
+                {'<div class="chart-container"><div class="chart-title">Gaussian Splatting Quality (PSNR)</div><div class="chart-wrapper"><canvas id="overviewGSChart"></canvas></div></div>' if has_gs_data else ''}
+                {'<div class="chart-container"><div class="chart-title">Processing Speed (FPS)</div><div class="chart-wrapper"><canvas id="overviewSpeedChart"></canvas></div></div>' if (has_pose_data or has_depth_data or has_gs_data) else ''}
             </div>
         </div>
         
@@ -1332,7 +1314,7 @@ def generate_html_report(
                 <div class="filter-group">
                     <div class="filter-label">Dataset</div>
                     <select id="trajDatasetFilter" onchange="updateTrajectoryPlot()">
-                        {_generate_options(datasets_with_trajectories) if datasets_with_trajectories else '<option value="">No trajectory data available</option>'}
+                        {_generate_options(sorted(set(r.get('dataset') for r in pose_results if r.get('dataset')))) if pose_results else '<option value="">No pose data available</option>'}
                     </select>
                 </div>
                 <div class="filter-group">
@@ -1457,50 +1439,59 @@ def generate_html_report(
         
         // Overview Charts
         function initOverviewCharts() {{
-            // Pose ATE
+            // Pose ATE - only if we have pose data
             const poseAgg = getAggregatedData(data.pose.all, 'method');
             const poseMethods = Object.keys(poseAgg);
             const poseATE = poseMethods.map(m => mean(poseAgg[m].map(r => r.ate_rmse || 0)));
             
-            if (charts.overviewPose) charts.overviewPose.destroy();
-            charts.overviewPose = new Chart(document.getElementById('overviewPoseChart'), {{
-                type: 'bar',
-                data: {{
-                    labels: poseMethods,
-                    datasets: [{{ label: 'ATE RMSE', data: poseATE, backgroundColor: colors, borderRadius: 6 }}]
-                }},
-                options: getChartOptions('ATE RMSE (m)')
-            }});
+            const poseChartEl = document.getElementById('overviewPoseChart');
+            if (poseChartEl && data.has_pose) {{
+                if (charts.overviewPose) charts.overviewPose.destroy();
+                charts.overviewPose = new Chart(poseChartEl, {{
+                    type: 'bar',
+                    data: {{
+                        labels: poseMethods,
+                        datasets: [{{ label: 'ATE RMSE', data: poseATE, backgroundColor: colors, borderRadius: 6 }}]
+                    }},
+                    options: getChartOptions('ATE RMSE (m)')
+                }});
+            }}
             
-            // Depth AbsRel
+            // Depth AbsRel - only if we have depth data
             const depthAgg = getAggregatedData(data.depth.all, 'method');
             const depthMethods = Object.keys(depthAgg);
             const depthAbsRel = depthMethods.map(m => mean(depthAgg[m].map(r => r.abs_rel || 0)));
             
-            if (charts.overviewDepth) charts.overviewDepth.destroy();
-            charts.overviewDepth = new Chart(document.getElementById('overviewDepthChart'), {{
-                type: 'bar',
-                data: {{
-                    labels: depthMethods,
-                    datasets: [{{ label: 'AbsRel', data: depthAbsRel, backgroundColor: colors.slice(2), borderRadius: 6 }}]
-                }},
-                options: getChartOptions('Absolute Relative Error')
-            }});
+            const depthChartEl = document.getElementById('overviewDepthChart');
+            if (depthChartEl && data.has_depth) {{
+                if (charts.overviewDepth) charts.overviewDepth.destroy();
+                charts.overviewDepth = new Chart(depthChartEl, {{
+                    type: 'bar',
+                    data: {{
+                        labels: depthMethods,
+                        datasets: [{{ label: 'AbsRel', data: depthAbsRel, backgroundColor: colors.slice(2), borderRadius: 6 }}]
+                    }},
+                    options: getChartOptions('Absolute Relative Error')
+                }});
+            }}
             
-            // GS PSNR
+            // GS PSNR - only if we have GS data
             const gsAgg = getAggregatedData(data.gs.all, 'engine');
             const gsEngines = Object.keys(gsAgg);
             const gsPSNR = gsEngines.map(e => mean(gsAgg[e].map(r => r.psnr || 0)));
             
-            if (charts.overviewGS) charts.overviewGS.destroy();
-            charts.overviewGS = new Chart(document.getElementById('overviewGSChart'), {{
-                type: 'bar',
-                data: {{
-                    labels: gsEngines,
-                    datasets: [{{ label: 'PSNR', data: gsPSNR, backgroundColor: colors.slice(4), borderRadius: 6 }}]
-                }},
-                options: getChartOptions('PSNR (dB)')
-            }});
+            const gsChartEl = document.getElementById('overviewGSChart');
+            if (gsChartEl && data.has_gs) {{
+                if (charts.overviewGS) charts.overviewGS.destroy();
+                charts.overviewGS = new Chart(gsChartEl, {{
+                    type: 'bar',
+                    data: {{
+                        labels: gsEngines,
+                        datasets: [{{ label: 'PSNR', data: gsPSNR, backgroundColor: colors.slice(4), borderRadius: 6 }}]
+                    }},
+                    options: getChartOptions('PSNR (dB)')
+                }});
+            }}
             
             // Speed comparison - show all methods FPS
             const allLabels = [];
@@ -1535,9 +1526,10 @@ def generate_html_report(
                 }}
             }});
             
+            const speedChartEl = document.getElementById('overviewSpeedChart');
             if (charts.overviewSpeed) charts.overviewSpeed.destroy();
-            if (allFPS.length > 0) {{
-                charts.overviewSpeed = new Chart(document.getElementById('overviewSpeedChart'), {{
+            if (speedChartEl && allFPS.length > 0) {{
+                charts.overviewSpeed = new Chart(speedChartEl, {{
                     type: 'bar',
                     data: {{
                         labels: allLabels,
@@ -1572,13 +1564,6 @@ def generate_html_report(
                         }}
                     }}
                 }});
-            }} else {{
-                // No FPS data - show message
-                const ctx = document.getElementById('overviewSpeedChart').getContext('2d');
-                ctx.fillStyle = '#64748b';
-                ctx.font = '14px Inter';
-                ctx.textAlign = 'center';
-                ctx.fillText('No FPS data available', ctx.canvas.width / 2, ctx.canvas.height / 2);
             }}
         }}
         
@@ -2040,10 +2025,28 @@ def generate_html_report(
         function initTrajectoryPage() {{
             const poses = data.pose.all;
             const datasetsWithTraj = data.datasets_with_trajectories || [];
+            const estimatedTrajs = data.estimated_trajectories || {{}};
             
-            if (!poses.length || !datasetsWithTraj.length) {{
+            // Check if we have any trajectory data (GT or estimated)
+            const hasAnyTrajectoryData = datasetsWithTraj.length > 0 || Object.keys(estimatedTrajs).length > 0;
+            
+            if (!poses.length) {{
                 document.getElementById('trajectoryPlot').innerHTML = 
-                    '<div class="empty-state"><div class="icon">🗺️</div><p>No trajectory data available</p></div>';
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>No pose estimation results available</p></div>';
+                return;
+            }}
+            
+            if (!hasAnyTrajectoryData) {{
+                // We have pose metrics but no actual trajectory data
+                document.getElementById('trajectoryPlot').innerHTML = 
+                    '<div class="empty-state"><div class="icon">🗺️</div><p>Trajectory visualization requires ground truth files or cached pose data.<br><br>To enable this feature:<br>• Place TUM datasets in <code>datasets/tum/</code><br>• Or run benchmarks with trajectory caching enabled</p></div>';
+                
+                // Still show some useful stats
+                const methods = [...new Set(poses.map(p => p.method))];
+                const datasets = [...new Set(poses.map(p => p.dataset))];
+                document.getElementById('trajFrames').textContent = poses.reduce((sum, p) => sum + (p.num_frames || 0), 0);
+                document.getElementById('trajATE').textContent = Math.min(...poses.map(p => p.ate_rmse || Infinity)).toFixed(4);
+                document.getElementById('trajMethods').textContent = methods.length;
                 return;
             }}
             
